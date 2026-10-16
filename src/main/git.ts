@@ -25,8 +25,8 @@ export function git(cwd: string, args: string[], opts: RunOptions = {}): Promise
   return new Promise((resolve, reject) => {
     const child = execFile(
       'git',
-      // User configs may change diff prefixes (mnemonicPrefix, noprefix): the parsers need a/ b/.
-      ['-c', 'core.quotePath=false', '-c', 'diff.mnemonicPrefix=false', '-c', 'diff.noprefix=false', ...args],
+      // User configs may change diff prefixes (mnemonicPrefix, noprefix): the parsers need a/ b/. showSignature would prepend gpg output to log records.
+      ['-c', 'core.quotePath=false', '-c', 'diff.mnemonicPrefix=false', '-c', 'diff.noprefix=false', '-c', 'log.showSignature=false', ...args],
       { cwd, env: { ...process.env, ...BASE_ENV, ...opts.env }, maxBuffer: 256 * 1024 * 1024, encoding: 'utf8' },
       (err, stdout, stderr) => {
         if (!err) return resolve(stdout)

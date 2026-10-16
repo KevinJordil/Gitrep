@@ -53,7 +53,7 @@ export function RepoView({ path, active, onBranch }: Props) {
   const refreshAll = useCallback(async () => {
     await refreshStatus(true)
     try {
-      const [l, b] = await Promise.all([api.log(path), api.branches(path)])
+      const [l, b] = await Promise.all([api.log(path, { only: null, hidden: [] }), api.branches(path)])
       setLog(l)
       setBranches(b)
     } catch (e) {

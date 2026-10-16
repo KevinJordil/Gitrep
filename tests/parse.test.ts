@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBranches, parseLog, parseNumstat, parseStatus } from '../src/main/parse'
+import { parseBranches, parseCommitFiles, parseLog, parseNumstat, parseStatus, parseTags } from '../src/main/parse'
 
 const nul = (...parts: string[]) => parts.join('\0') + '\0'
 
@@ -65,17 +65,36 @@ describe('parseLog', () => {
 describe('parseBranches', () => {
   it('parses local and remote refs, skips remote HEAD symrefs', () => {
     const out = [
-      ['refs/heads/feature/x', ' ', 'origin/feature/x', '[ahead 2, behind 1]'],
-      ['refs/heads/main', '*', 'origin/main', ''],
-      ['refs/remotes/origin/HEAD', ' ', '', ''],
-      ['refs/remotes/origin/main', ' ', '', '']
+      ['refs/heads/feature/x', ' ', 'origin/feature/x', '[ahead 2, behind 1]', 'f1'],
+      ['refs/heads/main', '*', 'origin/main', '', 'm1'],
+      ['refs/remotes/origin/HEAD', ' ', '', '', 'm1'],
+      ['refs/remotes/origin/main', ' ', '', '', 'm1']
     ]
       .map((f) => f.join('\x1f'))
       .join('\n')
     expect(parseBranches(out + '\n')).toEqual([
-      { name: 'feature/x', remote: false, current: false, upstream: 'origin/feature/x', ahead: 2, behind: 1 },
-      { name: 'main', remote: false, current: true, upstream: 'origin/main', ahead: 0, behind: 0 },
-      { name: 'origin/main', remote: true, current: false, upstream: null, ahead: 0, behind: 0 }
+      { name: 'feature/x', remote: false, current: false, upstream: 'origin/feature/x', ahead: 2, behind: 1, sha: 'f1' },
+      { name: 'main', remote: false, current: true, upstream: 'origin/main', ahead: 0, behind: 0, sha: 'm1' },
+      { name: 'origin/main', remote: true, current: false, upstream: null, ahead: 0, behind: 0, sha: 'm1' }
+    ])
+  })
+})
+
+describe('parseTags', () => {
+  it('uses the peeled commit of annotated tags', () => {
+    expect(parseTags('v2\x1ftagobj\x1fcommit2\nv1\x1fcommit1\x1f\n')).toEqual([
+      { name: 'v2', sha: 'commit2' },
+      { name: 'v1', sha: 'commit1' }
+    ])
+  })
+})
+
+describe('parseCommitFiles', () => {
+  it('joins raw statuses with numstat counts, binary as 0', () => {
+    const out = [':100644 100644 aaa bbb M', 'src/a b.c', ':000000 100644 000 ccc A', 'img.png', '3\t1\tsrc/a b.c', '-\t-\timg.png', ''].join('\0')
+    expect(parseCommitFiles(out)).toEqual([
+      { path: 'src/a b.c', status: 'M', add: 3, del: 1 },
+      { path: 'img.png', status: 'A', add: 0, del: 0 }
     ])
   })
 })

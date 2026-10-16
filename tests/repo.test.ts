@@ -82,10 +82,40 @@ describe('getLog and getBranches', () => {
     await write(repo, 'a', '1\n')
     await commitAll(repo, 'first')
     await git(repo, ['branch', 'feature/x'])
+    const sha = (await git(repo, ['rev-parse', 'HEAD'])).trim()
     expect(await getBranches(repo)).toEqual([
-      { name: 'feature/x', remote: false, current: false, upstream: null, ahead: 0, behind: 0 },
-      { name: 'main', remote: false, current: true, upstream: null, ahead: 0, behind: 0 }
+      { name: 'feature/x', remote: false, current: false, upstream: null, ahead: 0, behind: 0, sha },
+      { name: 'main', remote: false, current: true, upstream: null, ahead: 0, behind: 0, sha }
     ])
+  })
+
+  async function branchy() {
+    const repo = await makeRepo()
+    await write(repo, 'a', '1\n')
+    await commitAll(repo, 'base')
+    await git(repo, ['switch', '-q', '-c', 'feature'])
+    await write(repo, 'f', '1\n')
+    await commitAll(repo, 'on feature')
+    await git(repo, ['switch', '-q', 'main'])
+    await write(repo, 'a', '2\n')
+    await commitAll(repo, 'on main')
+    await write(repo, 'a', '3\n')
+    await git(repo, ['stash', 'push', '-q', '-m', 'parked'])
+    return repo
+  }
+
+  it('lists every branch in topological order, without stash commits', async () => {
+    const repo = await branchy()
+    const log = await getLog(repo)
+    expect(log.map((c) => c.subject).sort()).toEqual(['base', 'on feature', 'on main'])
+    expect(log[log.length - 1].subject).toBe('base') // parents after children
+  })
+
+  it('isolates one branch or hides some, ignoring unknown names', async () => {
+    const repo = await branchy()
+    expect((await getLog(repo, { only: 'feature', hidden: [] })).map((c) => c.subject)).toEqual(['on feature', 'base'])
+    expect((await getLog(repo, { only: null, hidden: ['feature', 'gone'] })).map((c) => c.subject)).toEqual(['on main', 'base'])
+    expect((await getLog(repo, { only: 'gone', hidden: [] })).map((c) => c.subject).sort()).toEqual(['base', 'on feature', 'on main'])
   })
 })
 

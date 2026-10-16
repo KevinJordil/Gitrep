@@ -1,4 +1,19 @@
-import type { Branch, Commit, Config, DiffSide, FileChange, FileDiff, GeneratedMessage, LineAction, RepoEntry, RepoStatus, RepoSummary } from './types'
+import type {
+  Branch,
+  Commit,
+  CommitDetails,
+  Config,
+  DiffSide,
+  FileChange,
+  FileDiff,
+  GeneratedMessage,
+  GraphScope,
+  LineAction,
+  RepoEntry,
+  RepoStatus,
+  RepoSummary,
+  Tag
+} from './types'
 
 export interface Api {
   getConfig(): Promise<Config>
@@ -7,8 +22,12 @@ export interface Api {
   setOpenTabs(paths: string[]): Promise<void>
   summaries(): Promise<RepoSummary[]>
   status(repo: string): Promise<RepoStatus>
-  log(repo: string): Promise<Commit[]>
+  log(repo: string, scope: GraphScope): Promise<Commit[]>
   branches(repo: string): Promise<Branch[]>
+  tags(repo: string): Promise<Tag[]>
+  commitDetails(repo: string, sha: string): Promise<CommitDetails>
+  commitDiff(repo: string, sha: string, path: string): Promise<FileDiff | null>
+  copyText(text: string): Promise<void>
   diff(repo: string, path: string, side: DiffSide): Promise<FileDiff | null>
   stage(repo: string, paths: string[]): Promise<void>
   unstage(repo: string, paths: string[]): Promise<void>
@@ -39,6 +58,10 @@ export const API_METHODS = [
   'status',
   'log',
   'branches',
+  'tags',
+  'commitDetails',
+  'commitDiff',
+  'copyText',
   'diff',
   'stage',
   'unstage',

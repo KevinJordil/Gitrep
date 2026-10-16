@@ -1,13 +1,14 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
 import { spawn } from 'node:child_process'
 import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { API_METHODS, type Api, type IpcResult } from '../shared/api'
-import type { Config, RepoEntry } from '../shared/types'
+import type { Config, GraphScope, RepoEntry } from '../shared/types'
 import { generateCommitMessage } from './claude'
 import { addRepo, loadConfig, removeRepo, saveConfig } from './config'
 import { git } from './git'
+import * as history from './history'
 import * as repo from './repo'
 import { smoke } from './smoke'
 
@@ -142,8 +143,12 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   summaries: async () =>
     (await repo.mapLimit(config.repos, 6, (r) => repo.summary(r.path))).map((s) => ({ ...s, fetchError: fetchErrors.get(s.path) ?? null })),
   status: forRepo(repo.getStatus),
-  log: forRepo((p) => repo.getLog(p)),
+  log: forRepo((p, scope: GraphScope) => repo.getLog(p, { only: scope?.only ?? null, hidden: Array.isArray(scope?.hidden) ? scope.hidden : [] })),
   branches: forRepo(repo.getBranches),
+  tags: forRepo(history.getTags),
+  commitDetails: forRepo(history.getCommitDetails),
+  commitDiff: forRepo(history.getCommitDiff),
+  copyText: async (text) => clipboard.writeText(String(text)),
   diff: forRepo(repo.getDiff),
   stage: forRepo(repo.stage),
   unstage: forRepo(repo.unstage),

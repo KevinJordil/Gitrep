@@ -1,13 +1,13 @@
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
-import type { Branch, Commit, DiffSide, FileChange, FileDiff, LineAction, RepoOperation, RepoStatus, RepoSummary } from '../shared/types'
+import { GRAPH_LIMIT, type Branch, type Commit, type DiffSide, type FileChange, type FileDiff, type GraphScope, type LineAction, type RepoOperation, type RepoStatus, type RepoSummary } from '../shared/types'
 import { buildPatch, parseDiff } from './diff'
 import { git, serialized } from './git'
 import { BRANCH_FORMAT, LOG_FORMAT, parseBranches, parseLog, parseNumstat, parseStatus } from './parse'
 
 // Background reads must not take index.lock (would collide with the user's own git commands).
-const RO = ['--no-optional-locks']
+export const RO = ['--no-optional-locks']
 const gitDirs = new Map<string, string>()
 
 export async function gitDir(repo: string): Promise<string> {
@@ -47,9 +47,25 @@ export async function getStatus(repo: string): Promise<RepoStatus> {
   return { ...s, operation: op }
 }
 
-export async function getLog(repo: string, limit = 300): Promise<Commit[]> {
+export const ALL_REFS: GraphScope = { only: null, hidden: [] }
+
+export async function getLog(repo: string, scope: GraphScope = ALL_REFS, limit = GRAPH_LIMIT): Promise<Commit[]> {
   if (!(await hasHead(repo))) return []
-  return parseLog(await git(repo, [...RO, 'log', 'HEAD', `-n${limit}`, `--format=${LOG_FORMAT}`]))
+  const refs = await graphRefs(repo, scope)
+  return parseLog(await git(repo, [...RO, 'log', '--topo-order', `-n${limit}`, `--format=${LOG_FORMAT}`, ...refs, '--']))
+}
+
+// Stashes are not drawn (they have their own sidebar list). Unknown branch names (deleted since) are ignored.
+async function graphRefs(repo: string, scope: GraphScope): Promise<string[]> {
+  const all = ['--branches', '--remotes', '--tags', 'HEAD']
+  if (!scope.only && !scope.hidden.length) return all
+  const branches = await getBranches(repo)
+  const only = branches.find((b) => b.name === scope.only)
+  if (only) return [(only.remote ? 'refs/remotes/' : 'refs/heads/') + only.name]
+  const hidden = branches.filter((b) => scope.hidden.includes(b.name))
+  // --exclude applies to the next --branches/--remotes only, with names relative to refs/heads/ or refs/remotes/.
+  const exclude = (remote: boolean) => hidden.filter((b) => b.remote === remote).map((b) => `--exclude=${b.name}`)
+  return [...exclude(false), '--branches', ...exclude(true), '--remotes', '--tags', 'HEAD']
 }
 
 export async function getBranches(repo: string): Promise<Branch[]> {

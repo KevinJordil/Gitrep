@@ -39,6 +39,26 @@ export interface Branch {
   upstream: string | null
   ahead: number
   behind: number
+  sha: string // tip commit
+}
+
+// Most commits the graph loads (`git log -n`).
+export const GRAPH_LIMIT = 2000
+
+export interface Tag {
+  name: string
+  sha: string // the tagged commit (annotated tags are peeled)
+}
+
+export interface CommitDetails extends Commit {
+  body: string // message without the subject line
+  files: FileChange[] // against the first parent
+}
+
+// Which refs the graph draws: one branch only, or every branch, remote and tag except the hidden branches.
+export interface GraphScope {
+  only: string | null
+  hidden: string[]
 }
 
 export interface DiffLine {

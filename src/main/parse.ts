@@ -1,4 +1,4 @@
-import type { Branch, Commit, FileChange, FileStatus, RepoStatus } from '../shared/types'
+import type { Branch, Commit, FileChange, FileStatus, RepoStatus, Tag } from '../shared/types'
 
 // Parses `git status --porcelain=v2 --branch -z`.
 export function parseStatus(out: string): Omit<RepoStatus, 'operation'> {
@@ -64,7 +64,7 @@ export function parseLog(out: string): Commit[] {
     })
 }
 
-export const BRANCH_FORMAT = '%(refname)%1f%(HEAD)%1f%(upstream:short)%1f%(upstream:track)'
+export const BRANCH_FORMAT = '%(refname)%1f%(HEAD)%1f%(upstream:short)%1f%(upstream:track)%1f%(objectname)'
 
 // Parses `git for-each-ref --format=BRANCH_FORMAT refs/heads refs/remotes`.
 export function parseBranches(out: string): Branch[] {
@@ -72,12 +72,39 @@ export function parseBranches(out: string): Branch[] {
     .split('\n')
     .filter(Boolean)
     .flatMap((line) => {
-      const [ref, head, upstream, track] = line.split('\x1f')
+      const [ref, head, upstream, track, sha] = line.split('\x1f')
       const remote = ref.startsWith('refs/remotes/')
       const name = ref.replace(/^refs\/(heads|remotes)\//, '')
       if (remote && name.endsWith('/HEAD')) return []
       const ahead = /ahead (\d+)/.exec(track ?? '')?.[1]
       const behind = /behind (\d+)/.exec(track ?? '')?.[1]
-      return [{ name, remote, current: head === '*', upstream: upstream || null, ahead: ahead ? Number(ahead) : 0, behind: behind ? Number(behind) : 0 }]
+      return [{ name, remote, current: head === '*', upstream: upstream || null, ahead: ahead ? Number(ahead) : 0, behind: behind ? Number(behind) : 0, sha }]
     })
+}
+
+export const TAG_FORMAT = '%(refname:strip=2)%1f%(objectname)%1f%(*objectname)'
+
+// Parses `git for-each-ref --format=TAG_FORMAT refs/tags`; annotated tags point at their peeled commit.
+export function parseTags(out: string): Tag[] {
+  return out
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [name, object, peeled] = line.split('\x1f')
+      return { name, sha: peeled || object }
+    })
+}
+
+// Parses `git diff-tree -r -z --raw --numstat --no-renames`: raw entries (":meta STATUS", path) then numstat entries.
+export function parseCommitFiles(out: string): FileChange[] {
+  const files: FileChange[] = []
+  const numstat: string[] = []
+  const parts = out.split('\0')
+  for (let i = 0; i < parts.length; i++) {
+    if (!parts[i]) continue
+    if (parts[i].startsWith(':')) files.push({ path: parts[++i], status: parts[i - 1].slice(-1) as FileStatus })
+    else numstat.push(parts[i])
+  }
+  const counts = parseNumstat(numstat.join('\0'))
+  return files.map((f) => ({ ...f, ...counts[f.path] }))
 }
