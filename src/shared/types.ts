@@ -150,6 +150,16 @@ export interface MergePreview {
   conflicts: string[] // predicted by a dry-run merge
 }
 
+export interface MergeAdvice {
+  choice: 'merge' | 'rebase' | null
+  text: string
+}
+
+export interface Explanation {
+  text: string
+  excluded: string[] // sensitive files left out of what Claude saw
+}
+
 export interface GeneratedMessage {
   message: string
   excluded: string[]

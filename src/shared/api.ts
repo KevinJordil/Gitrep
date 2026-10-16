@@ -4,11 +4,13 @@ import type {
   CommitDetails,
   Config,
   DiffSide,
+  Explanation,
   FileChange,
   FileDiff,
   GeneratedMessage,
   GraphScope,
   LineAction,
+  MergeAdvice,
   MergePreview,
   MergeRequest,
   OpOutcome,
@@ -41,6 +43,10 @@ export interface Api {
   commit(repo: string, message: string, amend: boolean): Promise<void>
   lastMessage(repo: string): Promise<string>
   generateMessage(repo: string): Promise<GeneratedMessage>
+  explainCommit(repo: string, sha: string): Promise<Explanation>
+  stashMessage(repo: string): Promise<string>
+  adviseMerge(repo: string, source: string, target: string): Promise<MergeAdvice>
+  mergeMessage(repo: string, source: string, target: string): Promise<string>
   fetch(repo: string): Promise<void>
   fetchAll(): Promise<void>
   pull(repo: string): Promise<void>
@@ -91,6 +97,10 @@ export const API_METHODS = [
   'commit',
   'lastMessage',
   'generateMessage',
+  'explainCommit',
+  'stashMessage',
+  'adviseMerge',
+  'mergeMessage',
   'fetch',
   'fetchAll',
   'pull',

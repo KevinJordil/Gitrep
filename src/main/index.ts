@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { API_METHODS, type Api, type IpcResult } from '../shared/api'
 import type { Config, GraphScope, MergeRequest, RepoEntry } from '../shared/types'
-import { generateCommitMessage } from './claude'
+import * as claude from './claude'
 import { addRepo, loadConfig, removeRepo, saveConfig } from './config'
 import { git } from './git'
 import * as history from './history'
@@ -33,6 +33,7 @@ function setConfig(next: Config): void {
 }
 
 const isRegistered = (path: string) => config.repos.some((r) => r.path === path)
+const claudeOptions = (): claude.ClaudeOptions => ({ model: config.settings.claudeModel, claudePath: config.settings.claudePath || undefined })
 const lastLine = (e: unknown) => (e instanceof Error ? e.message : String(e)).trim().split('\n').pop() ?? ''
 
 // Every handler whose first argument is a repo path only accepts registered repos.
@@ -158,7 +159,11 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   applyLines: forRepo(repo.applyLines),
   commit: forRepo(repo.commit),
   lastMessage: forRepo(repo.lastMessage),
-  generateMessage: forRepo((p) => generateCommitMessage(p, { model: config.settings.claudeModel, claudePath: config.settings.claudePath || undefined })),
+  generateMessage: forRepo((p) => claude.generateCommitMessage(p, claudeOptions())),
+  explainCommit: forRepo((p, sha: string) => claude.explainCommit(p, sha, claudeOptions())),
+  stashMessage: forRepo((p) => claude.generateStashMessage(p, claudeOptions())),
+  adviseMerge: forRepo((p, source: string, target: string) => claude.adviseMerge(p, source, target, claudeOptions())),
+  mergeMessage: forRepo((p, source: string, target: string) => claude.generateMergeMessage(p, source, target, claudeOptions())),
   fetch: forRepo(fetchOne),
   fetchAll,
   pull: forRepo(repo.pull),

@@ -1,9 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { cleanMessage, filterDiff, filterNumstat, generateCommitMessage, MAX_DIFF_CHARS, resolveClaude } from '../src/main/claude'
+import { adviseMerge, cleanMessage, explainCommit, filterDiff, filterNumstat, generateCommitMessage, generateMergeMessage, generateStashMessage, MAX_DIFF_CHARS, resolveClaude } from '../src/main/claude'
+import { git } from '../src/main/git'
 import { stage } from '../src/main/repo'
-import { makeRepo, tempDir, write } from './helpers'
+import { commitAll, makeRepo, tempDir, write } from './helpers'
 
 describe('filterDiff', () => {
   it('drops sensitive files and reports them', () => {
@@ -115,5 +116,94 @@ describe('generateCommitMessage', () => {
     const fake = await fakeClaude()
     await expect(generateCommitMessage(repo, { model: 'haiku', claudePath: fake.path })).rejects.toThrow('All staged files are sensitive')
     await expect(readFile(join(fake.dir, 'args'), 'utf8')).rejects.toThrow()
+  })
+})
+
+// Fake CLI: records its arguments and stdin, prints `output`.
+async function fake(output: string) {
+  const dir = await tempDir()
+  const path = join(dir, 'claude')
+  await writeFile(join(dir, 'out'), output)
+  await writeFile(path, `#!/bin/sh\nprintf '%s\\n' "$@" > "${dir}/args"\ncat > "${dir}/stdin"\ncat "${dir}/out"\n`, { mode: 0o755 })
+  const stdin = () => readFile(join(dir, 'stdin'), 'utf8')
+  return { opts: { model: 'haiku', claudePath: path }, stdin }
+}
+
+describe('explainCommit', () => {
+  it('sends the message and the diff without sensitive files', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.c', 'int a;\n')
+    await write(repo, '.env', 'TOKEN=abc\n')
+    await git(repo, ['add', '-A'])
+    await git(repo, ['commit', '-q', '-m', 'feat: add a', '-m', 'Because.'])
+    const f = await fake('It adds a.')
+    expect(await explainCommit(repo, 'HEAD', f.opts)).toEqual({ text: 'It adds a.', excluded: ['.env'] })
+    const stdin = await f.stdin()
+    expect(stdin).toContain('feat: add a\n\nBecause.')
+    expect(stdin).toContain('+int a;')
+    expect(stdin).not.toContain('TOKEN')
+    expect(stdin).not.toContain('.env')
+  })
+})
+
+describe('generateStashMessage', () => {
+  it('sends local changes and untracked names, keeps the first line', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.c', 'int a;\n')
+    await commitAll(repo, 'init')
+    await write(repo, 'a.c', 'int b;\n')
+    await write(repo, 'notes.txt', 'n\n')
+    await write(repo, 'secret.key', 'k\n')
+    const f = await fake('wip: rename a to b\nextra line\n')
+    expect(await generateStashMessage(repo, f.opts)).toBe('wip: rename a to b')
+    const stdin = await f.stdin()
+    expect(stdin).toContain('+int b;')
+    expect(stdin).toContain('notes.txt')
+    expect(stdin).not.toContain('secret.key')
+  })
+
+  it('refuses without local changes', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.c', 'int a;\n')
+    await commitAll(repo, 'init')
+    await expect(generateStashMessage(repo, (await fake('x')).opts)).rejects.toThrow('No local changes')
+  })
+})
+
+describe('merge prompts', () => {
+  async function setup() {
+    const repo = await makeRepo()
+    await write(repo, 'a.c', 'base\n')
+    await commitAll(repo, 'base')
+    await git(repo, ['switch', '-q', '-c', 'feature'])
+    await write(repo, 'f.c', 'f\n')
+    await commitAll(repo, 'feat: on feature')
+    await git(repo, ['switch', '-q', 'main'])
+    await write(repo, 'a.c', 'main\n')
+    await commitAll(repo, 'fix: on main')
+    return repo
+  }
+
+  it('asks merge or rebase with both sides and parses the choice', async () => {
+    const repo = await setup()
+    const f = await fake('Rebase\nNothing is pushed yet.\n')
+    expect(await adviseMerge(repo, 'feature', 'main', f.opts)).toEqual({ choice: 'rebase', text: 'Nothing is pushed yet.' })
+    const stdin = await f.stdin()
+    expect(stdin).toContain('- feat: on feature')
+    expect(stdin).toContain('- fix: on main')
+    expect(stdin).toContain('not on any remote yet: 1')
+    expect(stdin).toContain('Predicted conflicts: none')
+    const g = await fake('Hard to say.')
+    expect(await adviseMerge(repo, 'feature', 'main', g.opts)).toEqual({ choice: null, text: 'Hard to say.' })
+  })
+
+  it('drafts a merge message from the incoming commits', async () => {
+    const repo = await setup()
+    const f = await fake("Merge branch 'feature' into main\n\n- adds f.c\n")
+    expect(await generateMergeMessage(repo, 'feature', 'main', f.opts)).toBe("Merge branch 'feature' into main\n\n- adds f.c")
+    const stdin = await f.stdin()
+    expect(stdin).toContain('Merging feature into main')
+    expect(stdin).toContain('- feat: on feature')
+    expect(stdin).toContain('f.c')
   })
 })
