@@ -27,7 +27,8 @@ test('1. dashboard shows the repos with their state', async () => {
   await expect(page.locator('.repo-row')).toHaveCount(3)
   await expect(page.locator('.folder')).toHaveCount(1) // grouped by folder
   await expect(row('alpha').locator('.rc-sync')).toContainText('↑1')
-  await expect(row('beta')).toContainText('2 modified') // file.txt + notes.txt
+  await expect(row('beta')).toContainText('1 modified') // file.txt
+  await expect(row('beta')).toContainText('1 untracked') // notes.txt
   await expect(row('gamma')).toContainText('Detached HEAD')
   await page.getByRole('button', { name: /^Modified/ }).click()
   await expect(page.locator('.repo-row')).toHaveCount(1)
@@ -63,11 +64,11 @@ test('3. staging the first change group from the gutter', async () => {
 test('4. staging a single added line', async () => {
   const v = repoView()
   await expect(v.locator('.hunk')).toHaveCount(1) // unstaged side now has only the line-15 hunk
-  // The file watcher reloads the diff ~300 ms after the previous stage and clears the selection: tick again until the click lands.
-  await expect(async () => {
-    await v.locator('.hunk .line.add input[type=checkbox]').check({ timeout: 2000 })
-    await v.getByRole('button', { name: 'Stage lines' }).click({ timeout: 2000 })
-  }).toPass({ timeout: 15_000 })
+  const box = v.locator('.hunk .line.add input[type=checkbox]')
+  await box.check()
+  await page.waitForTimeout(1000) // let the watcher-triggered refresh land: the selection must survive it
+  await expect(box).toBeChecked()
+  await v.getByRole('button', { name: 'Stage lines' }).click()
   await expect.poll(() => fx.git(fx.beta, 'show', ':file.txt')).toContain('line 15 CHANGED')
   const index = fx.git(fx.beta, 'show', ':file.txt').split('\n')
   expect(index).toContain('line 15') // old line kept
@@ -104,6 +105,15 @@ test('7. commit with a generated message', async () => {
   await expect.poll(() => fx.git(fx.beta, 'log', '-1', '--format=%s').trim()).toBe(FAKE_MESSAGE)
   await expect(v.locator('.right-head')).toContainText('0 files')
   expect(fx.git(fx.beta, 'status', '--porcelain')).toBe('')
+  const toast = await page.locator('.toast').first().boundingBox()
+  const btn = await v.getByRole('button', { name: /^Commit to/ }).boundingBox()
+  expect(toast && btn).toBeTruthy()
+  const code = await v.getByRole('button', { name: /VS Code/ }).boundingBox()
+  expect(code).toBeTruthy()
+  const t = toast!
+  const hits = (b: NonNullable<typeof code>) => t.x < b.x + b.width && b.x < t.x + t.width && t.y < b.y + b.height && b.y < t.y + t.height
+  expect(hits(btn!)).toBe(false)
+  expect(hits(code!)).toBe(false)
   await shot('after-commit')
 })
 

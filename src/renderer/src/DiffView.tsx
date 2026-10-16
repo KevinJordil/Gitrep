@@ -30,8 +30,12 @@ export function DiffView({ repo, selection, version, onBack, run }: Props) {
       .diff(repo, path, side)
       .then((d) => {
         if (!alive) return
-        setDiff(d)
-        setPicked({})
+        // Background refreshes often return the same diff: keep the displayed one and the ticked lines.
+        setDiff((old) => {
+          if (old !== undefined && JSON.stringify(old) === JSON.stringify(d)) return old
+          setPicked({})
+          return d
+        })
       })
       .catch((e: unknown) => notify('error', errorText(e)))
     return () => {

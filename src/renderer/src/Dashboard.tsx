@@ -151,7 +151,8 @@ interface RowProps {
 
 function RepoRow({ r, busy, onOpen, onFetch, onCode, onTerminal, onRemove }: RowProps) {
   const st = r.status
-  const unstaged = st?.unstaged.length ?? 0
+  const untracked = st?.unstaged.filter((f) => f.status === '?').length ?? 0
+  const unstaged = (st?.unstaged.length ?? 0) - untracked
   const staged = st?.staged.length ?? 0
   const conflicts = st?.conflicted.length ?? 0
   const dot = matchesFilter(r, 'attention') ? 'var(--red)' : changeCount(r) ? 'var(--amber)' : st?.behind ? 'var(--accent)' : 'var(--faint)'
@@ -186,6 +187,7 @@ function RepoRow({ r, busy, onOpen, onFetch, onCode, onTerminal, onRemove }: Row
             {unstaged} modified
           </span>
         )}
+        {untracked > 0 && <span className="badge amber">{untracked} untracked</span>}
         {staged > 0 && (
           <span className="badge blue">
             {staged} staged
