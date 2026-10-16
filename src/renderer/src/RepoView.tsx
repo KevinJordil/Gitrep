@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Branch, Commit, RepoStatus } from '../../shared/types'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Branch, Commit, GraphScope, RepoStatus, Stash, Tag } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
 import { DiffView } from './DiffView'
-import { colorFor, errorText, initials, parseRef, relativeDate } from './format'
+import { errorText } from './format'
+import { Graph } from './Graph'
+import { layoutGraph, type GraphNode } from './graph'
 import { Icon, type IconName } from './icons'
-import type { RunOp, Selection } from './model'
+import type { Focus, RunOp, Selection } from './model'
+import { Sidebar } from './Sidebar'
 import { useToast } from './toast'
+
+const ALL: GraphScope = { only: null, hidden: [] }
+const WIP = 'WIP' // sha of the work-in-progress graph row (never a real sha)
 
 interface Props {
   path: string
@@ -19,6 +25,9 @@ export function RepoView({ path, active, onBranch }: Props) {
   const [status, setStatus] = useState<RepoStatus | null>(null)
   const [log, setLog] = useState<Commit[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
+  const [stashes, setStashes] = useState<Stash[]>([])
+  const [focus, setFocus] = useState<Focus>({ kind: 'wip' })
   const [selection, setSelection] = useState<Selection | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
@@ -53,9 +62,11 @@ export function RepoView({ path, active, onBranch }: Props) {
   const refreshAll = useCallback(async () => {
     await refreshStatus(true)
     try {
-      const [l, b] = await Promise.all([api.log(path, { only: null, hidden: [] }), api.branches(path)])
+      const [l, b, t, s] = await Promise.all([api.log(path, ALL), api.branches(path), api.tags(path), api.stashes(path)])
       setLog(l)
       setBranches(b)
+      setTags(t)
+      setStashes(s)
     } catch (e) {
       report(e)
     }
@@ -112,9 +123,21 @@ export function RepoView({ path, active, onBranch }: Props) {
     [notify, refreshAll]
   )
 
-  const branchLabel = status ? (status.branch ?? `Detached HEAD (${status.head?.slice(0, 7) ?? '?'})`) : '…'
-  const remoteNames = new Set(branches.filter((b) => b.remote).map((b) => b.name))
+  const focusOn = useCallback((f: Focus) => {
+    setFocus(f)
+    setSelection(null)
+  }, [])
+
   const changes = status ? status.staged.length + status.unstaged.length + status.conflicted.length : 0
+  const hasWip = changes > 0
+  const head = status?.head ?? null
+  const nodes = useMemo<GraphNode[]>(() => (hasWip ? [{ sha: WIP, parents: head ? [head] : [], wip: true }, ...log] : log), [log, hasWip, head])
+  const rows = useMemo(() => layoutGraph(nodes), [nodes])
+  const colors = useMemo(() => new Map(nodes.map((n, i) => [n.sha, rows[i].color])), [nodes, rows])
+  const remoteNames = useMemo(() => new Set(branches.filter((b) => b.remote).map((b) => b.name)), [branches])
+  const staged = status?.staged.length ?? 0
+  const wipLabel = hasWip ? `${changes} modified file${changes === 1 ? '' : 's'}${staged ? ` · ${staged} staged` : ''}` : null
+  const branchLabel = status ? (status.branch ?? `Detached HEAD (${status.head?.slice(0, 7) ?? '?'})`) : '…'
 
   return (
     <>
@@ -135,12 +158,20 @@ export function RepoView({ path, active, onBranch }: Props) {
         </button>
       </div>
       <div className="panes">
-        <Sidebar branches={branches} onSwitch={(b) => void run('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)} />
+        <Sidebar
+          branches={branches}
+          tags={tags}
+          stashes={stashes}
+          colors={colors}
+          focus={focus}
+          onFocus={focusOn}
+          onSwitch={(b) => void run('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)}
+        />
         <section className="center">
           {selection ? (
             <DiffView key={`${selection.path}:${selection.side}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} />
           ) : (
-            <History log={log} changes={changes} remoteNames={remoteNames} />
+            <Graph repoName={path.split('/').pop() ?? path} commits={log} rows={rows} wip={wipLabel} head={head} focus={focus} remoteNames={remoteNames} onFocus={focusOn} />
           )}
         </section>
         <ChangesPanel repo={path} status={status} selection={selection} onSelect={setSelection} run={run} busy={busy} />
@@ -165,92 +196,5 @@ function ToolButton({ icon, label, count, busy, disabled, onClick }: ToolButtonP
       <span>{label}</span>
       {count ? <span className="count">{count}</span> : null}
     </button>
-  )
-}
-
-function Sidebar({ branches, onSwitch }: { branches: Branch[]; onSwitch: (b: Branch) => void }) {
-  const groups: [string, Branch[]][] = [
-    ['Local branches', branches.filter((b) => !b.remote)],
-    ['Remote', branches.filter((b) => b.remote)]
-  ]
-  return (
-    <aside className="sidebar">
-      {groups.map(([title, list]) => (
-        <section key={title}>
-          <div className="side-title">
-            <span>{title}</span>
-            <span className="mono">{list.length}</span>
-          </div>
-          {list.map((b) => (
-            <button key={b.name} className={`side-item ${b.current ? 'current' : ''}`} title={b.current ? 'Current branch' : 'Double-click to switch to this branch'} onDoubleClick={() => !b.current && onSwitch(b)}>
-              <span className="dot" style={{ background: b.current ? 'var(--amber)' : b.remote ? 'var(--faint)' : 'var(--accent)' }} />
-              <span className="name">{b.name}</span>
-              <span className="faint">{[b.ahead ? `↑${b.ahead}` : '', b.behind ? `↓${b.behind}` : ''].join(' ').trim()}</span>
-            </button>
-          ))}
-        </section>
-      ))}
-    </aside>
-  )
-}
-
-function History({ log, changes, remoteNames }: { log: Commit[]; changes: number; remoteNames: ReadonlySet<string> }) {
-  return (
-    <>
-      <div className="pane-head">
-        <span className="pane-title">History</span>
-        <span className="faint">{log.length >= 300 ? 'Last 300 commits' : `${log.length} commit${log.length === 1 ? '' : 's'}`}</span>
-      </div>
-      <div className="cols">
-        <span style={{ flex: 1 }}>Message</span>
-        <span className="c-author">Author</span>
-        <span className="c-date">Date</span>
-        <span className="c-sha">SHA</span>
-      </div>
-      <div className="scroll">
-        {changes > 0 && (
-          <div className="row wip">
-            <span className="msg">
-              <span className="wip-tag">WIP</span>
-              <span className="s muted">
-                {changes} modified file{changes === 1 ? '' : 's'}
-              </span>
-            </span>
-            <span className="c-author" />
-            <span className="c-date">now</span>
-            <span className="c-sha" />
-          </div>
-        )}
-        {log.map((c) => (
-          <div key={c.sha} className="row">
-            <span className="msg">
-              {c.refs.map((r) => {
-                const ref = parseRef(r, remoteNames)
-                return (
-                  <span key={r} className={`ref ${ref.kind}`}>
-                    {ref.kind === 'remote' && <Icon name="cloud" size={12} stroke={2.2} />}
-                    {ref.kind === 'tag' && <Icon name="tag" size={11} stroke={2.2} />}
-                    {ref.label}
-                  </span>
-                )
-              })}
-              <span className="s" style={{ color: c.parents.length > 1 ? 'var(--muted)' : undefined }}>
-                {c.subject}
-              </span>
-            </span>
-            <span className="c-author">
-              <span className="avatar" style={{ background: colorFor(c.author) }}>
-                {initials(c.author)}
-              </span>
-              {c.author}
-            </span>
-            <span className="c-date" title={new Date(c.date * 1000).toLocaleString('en-GB')}>
-              {relativeDate(c.date)}
-            </span>
-            <span className="c-sha">{c.sha.slice(0, 7)}</span>
-          </div>
-        ))}
-      </div>
-    </>
   )
 }

@@ -74,6 +74,9 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 .side-item:hover { background: var(--hover); }
 .side-item.current { color: var(--text); background: var(--hover); }
 .side-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-item.sel { color: var(--text); background: var(--hover); box-shadow: inset 2px 0 0 var(--accent); }
+.side-item.sans { font: 13px var(--sans); }
+.dot.sq { border-radius: 2px; background: var(--faint); }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 
 /* history */
@@ -81,19 +84,22 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 .pane-title { font-size: 14px; font-weight: 600; }
 .cols { display: flex; padding: 6px 14px; color: var(--faint); font-size: 11.5px; border-bottom: 1px solid var(--line); flex: none; }
 .scroll { flex: 1; overflow: auto; min-height: 0; }
-.row { display: flex; align-items: center; height: 34px; padding: 0 14px; }
+.row { display: flex; align-items: center; height: 34px; padding: 0 14px 0 0; content-visibility: auto; contain-intrinsic-size: auto 34px; }
 .row:hover { background: #161a21; }
-.row.wip { background: var(--raised); box-shadow: inset 2px 0 0 var(--amber); }
+.row.sel { background: #1d2533; box-shadow: inset 2px 0 0 var(--accent); }
+.row.wip.sel { background: var(--raised); box-shadow: inset 2px 0 0 var(--amber); }
+.lanes { flex: none; }
 .row .msg { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; }
 .row .msg .s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .c-author { width: 150px; display: flex; align-items: center; gap: 7px; color: var(--muted); overflow: hidden; white-space: nowrap; }
 .c-date { width: 110px; color: var(--faint); white-space: nowrap; }
 .c-sha { width: 70px; text-align: right; font: 12px var(--mono); color: var(--faint); }
 .avatar { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 9.5px; font-weight: 600; color: var(--bg); flex: none; }
-.ref { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 20px; padding: 0 7px; border-radius: 5px; font: 11.5px var(--mono); border: 1px solid; }
-.ref.head { color: var(--bg); background: var(--amber); border-color: var(--amber); }
-.ref.local { color: var(--accent); background: #6ea8ff1f; border-color: #6ea8ff55; }
-.ref.remote { color: var(--accent); background: transparent; border-color: #6ea8ff40; }
+/* --c: the lane color of the commit the ref points at */
+.ref { --c: var(--accent); display: inline-flex; align-items: center; gap: 5px; flex: none; height: 20px; padding: 0 7px; border-radius: 5px; font: 11.5px var(--mono); border: 1px solid; }
+.ref.head { color: var(--bg); background: var(--c); border-color: var(--c); }
+.ref.local { color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); border-color: color-mix(in srgb, var(--c) 33%, transparent); }
+.ref.remote { color: var(--c); background: transparent; border-color: color-mix(in srgb, var(--c) 25%, transparent); }
 .ref.tag { color: #c9ced8; background: var(--hover); border-color: #323846; }
 .wip-tag { font: 11.5px var(--mono); padding: 2px 7px; border-radius: 5px; border: 1px dashed var(--amber); color: var(--amber); }
 

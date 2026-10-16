@@ -1,4 +1,4 @@
-import { _electron, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -100,4 +100,11 @@ export async function launchFixture(): Promise<Fixture> {
       rmSync(root, { recursive: true, force: true })
     }
   }
+}
+
+// Opens a repository tab from the dashboard and returns the visible repo view.
+export async function openRepo(page: Page, name: string): Promise<Locator> {
+  await page.getByRole('button', { name: 'Dashboard' }).click()
+  await page.locator('.repo-row').getByRole('button', { name, exact: true }).click()
+  return page.locator('.repo:visible')
 }

@@ -20,6 +20,9 @@ export function relativeDate(unixSeconds: number, now = Date.now()): string {
 
 const PALETTE = ['#f5a524', '#6ea8ff', '#e879b9', '#5bd38a', '#b69cf5']
 
+// Graph lanes cycle through the same colors as the avatars (amber, blue, pink, green, violet).
+export const laneColor = (index: number): string => PALETTE[index % PALETTE.length]
+
 export function colorFor(name: string): string {
   let h = 0
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0

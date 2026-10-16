@@ -1,5 +1,8 @@
 import type { DiffSide } from '../../shared/types'
 
+// What the right panel shows: the working tree changes, one commit, or one stash.
+export type Focus = { kind: 'wip' } | { kind: 'commit'; sha: string } | { kind: 'stash'; sha: string }
+
 export interface Selection {
   path: string
   side: DiffSide

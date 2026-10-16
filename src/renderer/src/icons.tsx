@@ -15,7 +15,8 @@ const PATHS = {
   discard: ['M3 12a9 9 0 1 0 3-6.7L3 8', 'M3 3v5h5'],
   back: ['m15 6-6 6 6 6'],
   cloud: ['M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.5 1.5A3.5 3.5 0 0 0 7 18z'],
-  tag: ['M3 12V4h8l10 10-8 8z']
+  tag: ['M3 12V4h8l10 10-8 8z'],
+  check: ['m5 12 5 5 9-10']
 } as const
 
 export type IconName = keyof typeof PATHS
