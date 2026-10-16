@@ -87,9 +87,10 @@ interface RowProps {
   current: boolean // the current search match
   dim: boolean // a search is active and this row does not match
   onSelect: (sha: string) => void
+  onMenu: (c: Commit, x: number, y: number) => void
 }
 
-const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, match, field, current, dim, onSelect }: RowProps) {
+const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, match, field, current, dim, onSelect, onMenu }: RowProps) {
   const merge = c.parents.length > 1
   const hl = (f: SearchField) => (field === 'all' || field === f ? match : '')
   return (
@@ -100,7 +101,20 @@ const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selecte
       tabIndex={0}
       aria-pressed={selected}
       onClick={() => onSelect(c.sha)}
-      onKeyDown={(e) => e.key === 'Enter' && onSelect(c.sha)}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        onSelect(c.sha)
+        onMenu(c, e.clientX, e.clientY)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onSelect(c.sha)
+        if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+          e.preventDefault()
+          const r = e.currentTarget.getBoundingClientRect()
+          onSelect(c.sha)
+          onMenu(c, r.left + width + 40, r.bottom)
+        }
+      }}
     >
       <Lanes row={row} width={width} dot={head ? 'head' : merge ? 'merge' : 'commit'} selected={selected} />
       <span className="msg">
@@ -140,9 +154,10 @@ interface Props {
   remoteNames: ReadonlySet<string>
   onFocus: (f: Focus) => void
   onScope: (s: GraphScope) => void
+  onMenu: (c: Commit, x: number, y: number) => void // must be stable (useCallback)
 }
 
-export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, remoteNames, onFocus, onScope }: Props) {
+export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, remoteNames, onFocus, onScope, onMenu }: Props) {
   const list = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
@@ -292,6 +307,7 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
             current={c.sha === currentSha}
             dim={searching && !matchSet.has(i)}
             onSelect={select}
+            onMenu={onMenu}
           />
         ))}
         {commits.length === 0 && <span className="faint" style={{ padding: 14 }}>No commits yet.</span>}

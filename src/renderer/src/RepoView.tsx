@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Branch, Commit, GraphScope, RepoStatus, Stash, Tag } from '../../shared/types'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { Branch, Commit, GraphScope, RepoStatus, ResetMode, Stash, Tag } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
+import { CommitMenu, type CommitAction } from './CommitMenu'
 import { CommitPanel } from './CommitPanel'
+import { PromptDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import { errorText } from './format'
 import { Graph } from './Graph'
 import { layoutGraph, type GraphNode } from './graph'
 import { Icon, type IconName } from './icons'
-import type { Focus, RunOp, Selection } from './model'
+import type { Focus, RunOp, RunOutcome, Selection } from './model'
 import { Sidebar } from './Sidebar'
 import { useToast } from './toast'
 
 const ALL: GraphScope = { only: null, hidden: [] }
 const WIP = 'WIP' // sha of the work-in-progress graph row (never a real sha)
+const CONFLICTS = 'Stopped on conflicts: resolve them, stage the files, then click Continue'
 
 interface Props {
   path: string
@@ -31,6 +34,8 @@ export function RepoView({ path, active, onBranch }: Props) {
   const [focus, setFocus] = useState<Focus>({ kind: 'wip' })
   const [scope, setScope] = useState<GraphScope>(ALL)
   const [selection, setSelection] = useState<Selection | null>(null)
+  const [menu, setMenu] = useState<{ commit: Commit; x: number; y: number } | null>(null)
+  const [dialog, setDialog] = useState<ReactNode>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const lastError = useRef('')
@@ -147,6 +152,58 @@ export function RepoView({ path, active, onBranch }: Props) {
     setFocus(f)
     setSelection(null)
   }, [])
+  // On conflicts, show the changes panel: its Conflicts group lists the files to resolve and stage.
+  const runOutcome = useCallback<RunOutcome>(
+    (label, fn, done) =>
+      run(label, async () => {
+        const conflicts = (await fn()) === 'conflicts'
+        if (conflicts) focusOn({ kind: 'wip' })
+        notify('info', conflicts ? CONFLICTS : done)
+      }),
+    [run, notify, focusOn]
+  )
+  const openMenu = useCallback((commit: Commit, x: number, y: number) => setMenu({ commit, x, y }), [])
+  const closeMenu = useCallback(() => setMenu(null), [])
+  const closeDialog = () => setDialog(null)
+
+  const newBranch = (at: string, label: string) =>
+    setDialog(
+      <PromptDialog
+        title={`Create a branch at ${label}`}
+        label="Branch name"
+        submit="Create branch"
+        checkbox="Check out the new branch"
+        onSubmit={(name, _long, checkout) => run('branch', () => api.createBranch(path, name, at, checkout), `Branch ${name} created`)}
+        onClose={closeDialog}
+      />
+    )
+
+  const onCommitAction = (c: Commit, a: CommitAction) => {
+    const short = c.sha.slice(0, 7)
+    const target = status?.branch ?? 'HEAD'
+    if (a === 'checkout') void run('checkout', () => api.checkoutCommit(path, c.sha), `Checked out ${short} (detached HEAD)`)
+    else if (a === 'branch') newBranch(c.sha, short)
+    else if (a === 'tag')
+      setDialog(
+        <PromptDialog
+          title={`Create a tag at ${short}`}
+          label="Tag name"
+          submit="Create tag"
+          textarea="Message (optional, makes an annotated tag)"
+          onSubmit={(name, message) => run('tag', () => api.createTag(path, name, c.sha, message), `Tag ${name} created`)}
+          onClose={closeDialog}
+        />
+      )
+    else if (a === 'cherry-pick') void runOutcome('cherry-pick', () => api.cherryPick(path, c.sha), `Cherry-picked ${short} onto ${target}`)
+    else if (a === 'revert') void runOutcome('revert', () => api.revert(path, c.sha), `Reverted ${short}`)
+    else if (a === 'copy') api.copyText(c.sha).then(() => notify('info', `Copied ${short}`), (e: unknown) => notify('error', errorText(e)))
+    else if (a === 'explain') focusOn({ kind: 'commit', sha: c.sha, explain: Date.now() })
+    else {
+      const mode = a.slice('reset-'.length) as ResetMode
+      if (mode === 'hard' && !window.confirm(`Reset ${target} to ${short} and discard all uncommitted changes? This cannot be undone.`)) return
+      void run('reset', () => api.reset(path, c.sha, mode), `${target} reset to ${short} (${mode})`)
+    }
+  }
 
   const changes = status ? status.staged.length + status.unstaged.length + status.conflicted.length : 0
   const hasWip = changes > 0
@@ -169,6 +226,8 @@ export function RepoView({ path, active, onBranch }: Props) {
         <ToolButton icon="fetch" label="Fetch" busy={busy === 'fetch'} disabled={!!busy} onClick={() => void run('fetch', () => api.fetch(path), 'Fetch complete')} />
         <ToolButton icon="pull" label="Pull" count={status?.behind ? `↓${status.behind}` : ''} busy={busy === 'pull'} disabled={!!busy} onClick={() => void run('pull', () => api.pull(path), 'Pull complete')} />
         <ToolButton icon="push" label="Push" count={status?.ahead ? `↑${status.ahead}` : ''} busy={busy === 'push'} disabled={!!busy} onClick={() => void run('push', () => api.push(path), 'Push complete')} />
+        <div className="tsep" />
+        <ToolButton icon="branch" label="Branch" busy={busy === 'branch'} disabled={!!busy || !head} onClick={() => head && newBranch(head, status?.branch ?? head.slice(0, 7))} />
         <div className="grow" />
         <button className="tbtn boxed" onClick={() => api.openInCode(path).catch((e) => notify('error', errorText(e)))}>
           <Icon name="code" /> VS Code
@@ -206,15 +265,18 @@ export function RepoView({ path, active, onBranch }: Props) {
               remoteNames={remoteNames}
               onFocus={focusOn}
               onScope={setScope}
+              onMenu={openMenu}
             />
           )}
         </section>
         {focus.kind === 'commit' ? (
-          <CommitPanel key={focus.sha} repo={path} sha={focus.sha} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} />
+          <CommitPanel key={`${focus.sha}:${focus.explain ?? ''}`} repo={path} sha={focus.sha} autoExplain={!!focus.explain} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} />
         ) : (
           <ChangesPanel repo={path} status={status} selection={selection} onSelect={setSelection} run={run} busy={busy} />
         )}
       </div>
+      {menu && <CommitMenu commit={menu.commit} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
+      {dialog}
     </>
   )
 }

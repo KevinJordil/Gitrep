@@ -10,6 +10,7 @@ import { useToast } from './toast'
 interface Props {
   repo: string
   sha: string
+  autoExplain: boolean // ask Claude as soon as the panel opens
   selection: Selection | null
   colors: ReadonlyMap<string, number>
   remoteNames: ReadonlySet<string>
@@ -17,7 +18,7 @@ interface Props {
   onFocus: (f: Focus) => void
 }
 
-export function CommitPanel({ repo, sha, selection, colors, remoteNames, onSelect, onFocus }: Props) {
+export function CommitPanel({ repo, sha, autoExplain, selection, colors, remoteNames, onSelect, onFocus }: Props) {
   const notify = useToast()
   const [details, setDetails] = useState<CommitDetails | null>(null)
   const [explanation, setExplanation] = useState<Explanation | null>(null)
@@ -44,6 +45,11 @@ export function CommitPanel({ repo, sha, selection, colors, remoteNames, onSelec
       setThinking(false)
     }
   }
+  // Opened from the context menu's "Explain with Claude" (the panel is re-created for each request).
+  useEffect(() => {
+    if (autoExplain) void explain()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const copy = () =>
     api
       .copyText(sha)
