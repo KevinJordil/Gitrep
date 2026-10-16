@@ -9,9 +9,13 @@ import type {
   GeneratedMessage,
   GraphScope,
   LineAction,
+  MergePreview,
+  MergeRequest,
+  OpOutcome,
   RepoEntry,
   RepoStatus,
   RepoSummary,
+  ResetMode,
   Tag
 } from './types'
 
@@ -41,6 +45,16 @@ export interface Api {
   pull(repo: string): Promise<void>
   push(repo: string): Promise<void>
   switchBranch(repo: string, name: string, remote: boolean): Promise<void>
+  checkoutCommit(repo: string, sha: string): Promise<void>
+  createBranch(repo: string, name: string, at: string, checkout: boolean): Promise<void>
+  createTag(repo: string, name: string, at: string, message: string): Promise<void>
+  cherryPick(repo: string, sha: string): Promise<OpOutcome>
+  revert(repo: string, sha: string): Promise<OpOutcome>
+  reset(repo: string, sha: string, mode: ResetMode): Promise<void>
+  continueOperation(repo: string): Promise<OpOutcome>
+  abortOperation(repo: string): Promise<void>
+  mergePreview(repo: string, source: string, target: string): Promise<MergePreview>
+  integrate(repo: string, req: MergeRequest): Promise<OpOutcome>
   openInCode(repo: string): Promise<void>
   openTerminal(repo: string): Promise<void>
   setWatched(repos: string[]): Promise<void>
@@ -75,6 +89,16 @@ export const API_METHODS = [
   'pull',
   'push',
   'switchBranch',
+  'checkoutCommit',
+  'createBranch',
+  'createTag',
+  'cherryPick',
+  'revert',
+  'reset',
+  'continueOperation',
+  'abortOperation',
+  'mergePreview',
+  'integrate',
   'openInCode',
   'openTerminal',
   'setWatched'

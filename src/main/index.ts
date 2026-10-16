@@ -4,11 +4,12 @@ import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { API_METHODS, type Api, type IpcResult } from '../shared/api'
-import type { Config, GraphScope, RepoEntry } from '../shared/types'
+import type { Config, GraphScope, MergeRequest, RepoEntry } from '../shared/types'
 import { generateCommitMessage } from './claude'
 import { addRepo, loadConfig, removeRepo, saveConfig } from './config'
 import { git } from './git'
 import * as history from './history'
+import * as ops from './ops'
 import * as repo from './repo'
 import { smoke } from './smoke'
 
@@ -162,6 +163,16 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   pull: forRepo(repo.pull),
   push: forRepo(repo.push),
   switchBranch: forRepo(repo.switchBranch),
+  checkoutCommit: forRepo(ops.checkoutCommit),
+  createBranch: forRepo((p, name: string, at: string, checkout: boolean) => ops.createBranch(p, name, at, !!checkout)),
+  createTag: forRepo(ops.createTag),
+  cherryPick: forRepo(ops.cherryPick),
+  revert: forRepo(ops.revert),
+  reset: forRepo(ops.resetTo),
+  continueOperation: forRepo(ops.continueOperation),
+  abortOperation: forRepo(ops.abortOperation),
+  mergePreview: forRepo(ops.mergePreview),
+  integrate: forRepo((p, req: MergeRequest) => ops.integrate(p, { ...req, autostash: !!req?.autostash })),
   openInCode: forRepo((p) => launch('code', [p], p)),
   openTerminal: forRepo((p) => launch('gnome-terminal', [`--working-directory=${p}`], p).catch(() => launch('x-terminal-emulator', [], p))),
   setWatched

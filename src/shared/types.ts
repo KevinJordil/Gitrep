@@ -118,6 +118,28 @@ export interface Config {
   settings: Settings
 }
 
+export type ResetMode = 'soft' | 'mixed' | 'hard'
+
+// 'conflicts': git stopped with conflicted files; the operation banner takes over.
+export type OpOutcome = 'done' | 'conflicts'
+
+export type MergeMode = 'merge' | 'rebase' | 'ff'
+
+// Drag `source` onto `target`: merge source into target, rebase target onto source, or fast-forward target to source.
+export interface MergeRequest {
+  source: string
+  target: string // a local branch
+  mode: MergeMode
+  message: string // merge commit message ('' = git's default)
+  autostash: boolean
+}
+
+export interface MergePreview {
+  incoming: number // commits of source missing from target
+  local: number // commits of target missing from source
+  conflicts: string[] // predicted by a dry-run merge
+}
+
 export interface GeneratedMessage {
   message: string
   excluded: string[]
