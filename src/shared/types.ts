@@ -118,6 +118,16 @@ export interface Config {
   settings: Settings
 }
 
+export interface Stash {
+  index: number // n in stash@{n}: changes when stashes are added or dropped, use `sha` to refer to one
+  sha: string
+  base: string // the commit it was made on
+  untracked: string | null // commit holding the untracked files, if they were included
+  date: number // unix seconds
+  branch: string | null
+  message: string
+}
+
 export type ResetMode = 'soft' | 'mixed' | 'hard'
 
 // 'conflicts': git stopped with conflicted files; the operation banner takes over.

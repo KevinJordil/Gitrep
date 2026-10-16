@@ -1,4 +1,4 @@
-import type { Branch, Commit, FileChange, FileStatus, RepoStatus, Tag } from '../shared/types'
+import type { Branch, Commit, FileChange, FileStatus, RepoStatus, Stash, Tag } from '../shared/types'
 
 // Parses `git status --porcelain=v2 --branch -z`.
 export function parseStatus(out: string): Omit<RepoStatus, 'operation'> {
@@ -107,4 +107,27 @@ export function parseCommitFiles(out: string): FileChange[] {
   }
   const counts = parseNumstat(numstat.join('\0'))
   return files.map((f) => ({ ...f, ...counts[f.path] }))
+}
+
+export const STASH_FORMAT = '%gd%x1f%H%x1f%P%x1f%at%x1f%gs'
+
+// Parses `git stash list --format=STASH_FORMAT`. Subjects: "On <branch>: <message>" or "WIP on <branch>: <sha> <subject>".
+export function parseStashes(out: string): Stash[] {
+  return out
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [ref, sha, parents, at, subject] = line.split('\x1f')
+      const [base, , untracked] = parents.split(' ')
+      const m = /^(WIP on|On) ([^:]+): (.*)$/.exec(subject)
+      return {
+        index: Number(/\{(\d+)\}/.exec(ref)?.[1] ?? 0),
+        sha,
+        base,
+        untracked: untracked ?? null,
+        date: Number(at),
+        branch: m && m[2] !== '(no branch)' ? m[2] : null,
+        message: m?.[1] === 'On' ? m[3] : subject
+      }
+    })
 }

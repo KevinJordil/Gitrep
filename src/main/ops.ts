@@ -9,7 +9,7 @@ const DIFF3 = ['-c', 'merge.conflictStyle=diff3']
 const NO_EDITOR = { GIT_EDITOR: 'true' }
 const RESET_MODES: readonly ResetMode[] = ['soft', 'mixed', 'hard']
 
-async function ensureIdle(repo: string): Promise<void> {
+export async function ensureIdle(repo: string): Promise<void> {
   const s = await getStatus(repo)
   if (s.operation) throw new Error(`A ${s.operation} is in progress: continue or abort it first`)
   if (s.conflicted.length) throw new Error('Resolve the conflicted files first')

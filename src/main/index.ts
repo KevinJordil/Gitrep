@@ -12,6 +12,7 @@ import * as history from './history'
 import * as ops from './ops'
 import * as repo from './repo'
 import { smoke } from './smoke'
+import * as stash from './stash'
 
 const SMOKE = !!process.env.GITREP_SMOKE
 if (SMOKE) app.setPath('userData', join(tmpdir(), 'gitrep-smoke'))
@@ -173,6 +174,12 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   abortOperation: forRepo(ops.abortOperation),
   mergePreview: forRepo(ops.mergePreview),
   integrate: forRepo((p, req: MergeRequest) => ops.integrate(p, { ...req, autostash: !!req?.autostash })),
+  stashes: forRepo(stash.getStashes),
+  stashPush: forRepo((p, message: string, includeUntracked: boolean) => stash.stashPush(p, message, !!includeUntracked)),
+  stashApply: forRepo((p, sha: string, pop: boolean) => stash.stashApply(p, sha, !!pop)),
+  stashDrop: forRepo(stash.stashDrop),
+  stashBranch: forRepo(stash.stashBranch),
+  stashConflicts: forRepo(stash.stashConflicts),
   openInCode: forRepo((p) => launch('code', [p], p)),
   openTerminal: forRepo((p) => launch('gnome-terminal', [`--working-directory=${p}`], p).catch(() => launch('x-terminal-emulator', [], p))),
   setWatched

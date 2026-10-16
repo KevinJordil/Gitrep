@@ -16,6 +16,7 @@ import type {
   RepoStatus,
   RepoSummary,
   ResetMode,
+  Stash,
   Tag
 } from './types'
 
@@ -55,6 +56,12 @@ export interface Api {
   abortOperation(repo: string): Promise<void>
   mergePreview(repo: string, source: string, target: string): Promise<MergePreview>
   integrate(repo: string, req: MergeRequest): Promise<OpOutcome>
+  stashes(repo: string): Promise<Stash[]>
+  stashPush(repo: string, message: string, includeUntracked: boolean): Promise<void>
+  stashApply(repo: string, sha: string, pop: boolean): Promise<OpOutcome>
+  stashDrop(repo: string, sha: string): Promise<void>
+  stashBranch(repo: string, sha: string, name: string): Promise<OpOutcome>
+  stashConflicts(repo: string, sha: string): Promise<string[]>
   openInCode(repo: string): Promise<void>
   openTerminal(repo: string): Promise<void>
   setWatched(repos: string[]): Promise<void>
@@ -99,6 +106,12 @@ export const API_METHODS = [
   'abortOperation',
   'mergePreview',
   'integrate',
+  'stashes',
+  'stashPush',
+  'stashApply',
+  'stashDrop',
+  'stashBranch',
+  'stashConflicts',
   'openInCode',
   'openTerminal',
   'setWatched'
