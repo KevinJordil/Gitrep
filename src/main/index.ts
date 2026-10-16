@@ -13,6 +13,8 @@ import { smoke } from './smoke'
 
 const SMOKE = !!process.env.GITREP_SMOKE
 if (SMOKE) app.setPath('userData', join(tmpdir(), 'gitrep-smoke'))
+// Test support: end-to-end tests point the app at a throw-away config directory.
+if (process.env.GITREP_USER_DATA) app.setPath('userData', process.env.GITREP_USER_DATA)
 if (!app.requestSingleInstanceLock()) app.exit(0)
 
 const configFile = join(app.getPath('userData'), 'config.json')
@@ -180,7 +182,8 @@ function createWindow(): void {
     title: 'GitRep',
     backgroundColor: '#0d0f13',
     autoHideMenuBar: true,
-    show: !SMOKE,
+    // Test support: GITREP_HIDDEN=1 keeps the window hidden (end-to-end runs).
+    show: !SMOKE && !process.env.GITREP_HIDDEN,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   })
   win.on('closed', () => {
