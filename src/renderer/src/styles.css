@@ -258,3 +258,11 @@ mark.cur { background: var(--amber); color: var(--bg); }
 .menu-item .desc { font-size: 12px; color: var(--faint); }
 .menu-item.danger span:first-child { color: var(--red); }
 .tsep { width: 1px; height: 22px; margin: 0 6px; background: var(--line); }
+
+/* operation in progress */
+.op-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 9px 14px; background: #2a1c12; border-bottom: 1px solid #5a3a1a; color: #f7d9a6; flex: none; }
+.op-banner > svg { color: var(--amber); flex: none; }
+.op-text b { font-weight: 600; color: #ffe7c2; }
+.op-text .mono { font-size: 12.5px; }
+.op-continue { height: 30px; padding: 0 12px; border-radius: 7px; background: var(--primary); color: #fff; font-weight: 500; }
+.op-abort { height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #f2786d80; color: var(--red); }

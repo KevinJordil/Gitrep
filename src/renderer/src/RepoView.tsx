@@ -11,6 +11,7 @@ import { Graph } from './Graph'
 import { layoutGraph, type GraphNode } from './graph'
 import { Icon, type IconName } from './icons'
 import type { Focus, RunOp, RunOutcome, Selection } from './model'
+import { OperationBanner } from './OperationBanner'
 import { Sidebar } from './Sidebar'
 import { useToast } from './toast'
 
@@ -215,6 +216,7 @@ export function RepoView({ path, active, onBranch }: Props) {
   const staged = status?.staged.length ?? 0
   const wipLabel = hasWip ? `${changes} modified file${changes === 1 ? '' : 's'}${staged ? ` · ${staged} staged` : ''}` : null
   const branchLabel = status ? (status.branch ?? `Detached HEAD (${status.head?.slice(0, 7) ?? '?'})`) : '…'
+  const openCode = () => api.openInCode(path).catch((e: unknown) => notify('error', errorText(e)))
 
   return (
     <>
@@ -229,13 +231,14 @@ export function RepoView({ path, active, onBranch }: Props) {
         <div className="tsep" />
         <ToolButton icon="branch" label="Branch" busy={busy === 'branch'} disabled={!!busy || !head} onClick={() => head && newBranch(head, status?.branch ?? head.slice(0, 7))} />
         <div className="grow" />
-        <button className="tbtn boxed" onClick={() => api.openInCode(path).catch((e) => notify('error', errorText(e)))}>
+        <button className="tbtn boxed" onClick={() => void openCode()}>
           <Icon name="code" /> VS Code
         </button>
         <button className="tbtn boxed" onClick={() => api.openTerminal(path).catch((e) => notify('error', errorText(e)))}>
           <Icon name="terminal" /> Terminal
         </button>
       </div>
+      {status && <OperationBanner repo={path} status={status} busy={busy} run={run} runOutcome={runOutcome} onCode={() => void openCode()} />}
       <div className="panes">
         <Sidebar
           branches={branches}
