@@ -80,7 +80,7 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 
 /* history */
-.pane-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex: none; min-height: 49px; }
+.pane-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex: none; min-height: 49px; }
 .pane-title { font-size: 14px; font-weight: 600; }
 .cols { display: flex; padding: 6px 14px; color: var(--faint); font-size: 11.5px; border-bottom: 1px solid var(--line); flex: none; }
 .scroll { flex: 1; overflow: auto; min-height: 0; }
@@ -217,3 +217,22 @@ button.file { width: 100%; }
 button.file .path { height: auto; }
 .iconbtn.sm { width: 24px; height: 24px; border-radius: 5px; color: var(--faint); }
 .avatar.lg { width: 22px; height: 22px; font-size: 10px; }
+
+/* history search and branch filters */
+.row.dim { opacity: 0.4; }
+mark { background: #f5a52440; color: inherit; border-radius: 3px; padding: 0 1px; }
+mark.cur { background: var(--amber); color: var(--bg); }
+.pane-head .searchbox { height: 30px; padding: 0 4px 0 8px; gap: 6px; }
+.pane-head .searchbox input { width: 190px; }
+.searchbox.on { border-color: var(--accent); }
+.searchbox .count { font: 11.5px var(--mono); color: var(--muted); padding: 0 4px; white-space: nowrap; }
+.searchbox .nav { width: 22px; height: 22px; border-radius: 5px; background: var(--hover); display: grid; place-items: center; color: var(--muted); }
+.select { height: 30px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font: inherit; }
+.scope-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 10px; border-radius: 999px; background: #6ea8ff1f; border: 1px solid #6ea8ff55; color: var(--claude-fg); white-space: nowrap; }
+.scope-chip .mono { font-size: 12px; }
+.scope-chip button { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: var(--claude-fg); }
+.side-item.br { padding: 4px 4px 4px 8px; }
+.side-item.off { opacity: 0.45; }
+.sbtn { width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--line); display: grid; place-items: center; color: var(--faint); flex: none; visibility: hidden; }
+.side-item:hover .sbtn, .side-item:focus-within .sbtn, .sbtn.on { visibility: visible; }
+.sbtn.on { border-color: var(--accent); background: #6ea8ff26; color: var(--claude-fg); }

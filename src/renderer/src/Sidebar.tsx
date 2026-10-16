@@ -1,5 +1,6 @@
-import type { Branch, Stash, Tag } from '../../shared/types'
+import type { Branch, GraphScope, Stash, Tag } from '../../shared/types'
 import { laneColor } from './format'
+import { Icon } from './icons'
 import type { Focus } from './model'
 
 interface Props {
@@ -8,8 +9,10 @@ interface Props {
   stashes: Stash[]
   colors: ReadonlyMap<string, number> // commit sha -> graph lane color
   focus: Focus
+  scope: GraphScope
   onSwitch: (b: Branch) => void
   onFocus: (f: Focus) => void
+  onScope: (s: GraphScope) => void
 }
 
 function Title({ title, count }: { title: string; count: number }) {
@@ -21,7 +24,7 @@ function Title({ title, count }: { title: string; count: number }) {
   )
 }
 
-export function Sidebar({ branches, tags, stashes, colors, focus, onSwitch, onFocus }: Props) {
+export function Sidebar({ branches, tags, stashes, colors, focus, scope, onSwitch, onFocus, onScope }: Props) {
   const dot = (sha: string, fallback: string) => {
     const c = colors.get(sha)
     return c === undefined ? fallback : laneColor(c)
@@ -36,20 +39,44 @@ export function Sidebar({ branches, tags, stashes, colors, focus, onSwitch, onFo
       {groups.map(([title, list]) => (
         <section key={title}>
           <Title title={title} count={list.length} />
-          {list.map((b) => (
-            <div
-              key={b.name}
-              className={`side-item ${b.current ? 'current' : ''} ${focused === b.sha ? 'sel' : ''}`}
-              title={b.current ? 'Current branch' : 'Double-click to switch to this branch'}
-              onDoubleClick={() => !b.current && onSwitch(b)}
-            >
-              <span className="dot" style={{ background: dot(b.sha, b.remote ? 'var(--faint)' : 'var(--accent)') }} />
-              <button className="name" onClick={() => onFocus({ kind: 'commit', sha: b.sha })}>
-                {b.name}
-              </button>
-              <span className="faint">{[b.ahead ? `↑${b.ahead}` : '', b.behind ? `↓${b.behind}` : ''].join(' ').trim()}</span>
-            </div>
-          ))}
+          {list.map((b) => {
+            const isolated = scope.only === b.name
+            const hidden = scope.hidden.includes(b.name)
+            const off = hidden || (!!scope.only && !isolated)
+            return (
+              <div
+                key={b.name}
+                className={`side-item br ${b.current ? 'current' : ''} ${focused === b.sha ? 'sel' : ''} ${off ? 'off' : ''}`}
+                title={b.current ? 'Current branch' : 'Double-click to switch to this branch'}
+                onDoubleClick={() => !b.current && onSwitch(b)}
+              >
+                <span className="dot" style={{ background: dot(b.sha, b.remote ? 'var(--faint)' : 'var(--accent)') }} />
+                <button className="name" onClick={() => onFocus({ kind: 'commit', sha: b.sha })}>
+                  {b.name}
+                </button>
+                <span className="faint">{[b.ahead ? `↑${b.ahead}` : '', b.behind ? `↓${b.behind}` : ''].join(' ').trim()}</span>
+                <button
+                  className={`sbtn ${hidden ? 'on' : ''}`}
+                  aria-label={`${hidden ? 'Show' : 'Hide'} ${b.name}`}
+                  aria-pressed={hidden}
+                  disabled={b.current}
+                  title={b.current ? 'The checked-out branch is always shown' : hidden ? 'Show this branch' : 'Hide this branch'}
+                  onClick={() => onScope({ only: null, hidden: hidden ? scope.hidden.filter((h) => h !== b.name) : [...scope.hidden, b.name] })}
+                >
+                  <Icon name={hidden ? 'eyeOff' : 'eye'} size={13} stroke={2} />
+                </button>
+                <button
+                  className={`sbtn ${isolated ? 'on' : ''}`}
+                  aria-label={`${isolated ? 'Stop isolating' : 'Isolate'} ${b.name}`}
+                  aria-pressed={isolated}
+                  title={isolated ? 'Show all branches' : 'Show only this branch'}
+                  onClick={() => onScope({ only: isolated ? null : b.name, hidden: [] })}
+                >
+                  <Icon name="target" size={13} stroke={2} />
+                </button>
+              </div>
+            )
+          })}
         </section>
       ))}
       <section>

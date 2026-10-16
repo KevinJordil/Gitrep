@@ -29,6 +29,7 @@ export function RepoView({ path, active, onBranch }: Props) {
   const [tags, setTags] = useState<Tag[]>([])
   const [stashes, setStashes] = useState<Stash[]>([])
   const [focus, setFocus] = useState<Focus>({ kind: 'wip' })
+  const [scope, setScope] = useState<GraphScope>(ALL)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
@@ -60,18 +61,36 @@ export function RepoView({ path, active, onBranch }: Props) {
     }
   }, [path, onBranch, report])
 
+  const request = useRef(0)
+  // Keeps the previous object when the new one is JSON-equal, so memoized children do not re-render.
+  const same = <T,>(next: T) => (prev: T) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next)
+
   const refreshAll = useCallback(async () => {
+    const id = ++request.current
     await refreshStatus(true)
     try {
-      const [l, b, t, s] = await Promise.all([api.log(path, ALL), api.branches(path), api.tags(path), api.stashes(path)])
-      setLog(l)
-      setBranches(b)
-      setTags(t)
-      setStashes(s)
+      const [l, b, t, s] = await Promise.all([api.log(path, scope), api.branches(path), api.tags(path), api.stashes(path)])
+      if (id !== request.current) return // a newer load started; its result wins
+      setLog(same(l))
+      setBranches(same(b))
+      setTags(same(t))
+      setStashes(same(s))
     } catch (e) {
       report(e)
     }
-  }, [path, refreshStatus, report])
+  }, [path, scope, refreshStatus, report])
+
+  // A deleted branch must not stay isolated or hidden.
+  useEffect(() => {
+    if (!branches.length) return
+    const names = new Set(branches.map((b) => b.name))
+    setScope((s) => {
+      const only = s.only && names.has(s.only) ? s.only : null
+      const current = branches.find((b) => b.current)?.name
+      const hidden = s.hidden.filter((h) => names.has(h) && h !== current)
+      return only === s.only && hidden.length === s.hidden.length ? s : { only, hidden }
+    })
+  }, [branches])
 
   useEffect(() => {
     if (active) void refreshAll()
@@ -165,14 +184,29 @@ export function RepoView({ path, active, onBranch }: Props) {
           stashes={stashes}
           colors={colors}
           focus={focus}
+          scope={scope}
           onFocus={focusOn}
+          onScope={setScope}
           onSwitch={(b) => void run('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)}
         />
         <section className="center">
           {selection ? (
             <DiffView key={`${selection.path}:${selection.side ?? selection.commit}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} />
           ) : (
-            <Graph repoName={path.split('/').pop() ?? path} commits={log} rows={rows} wip={wipLabel} head={head} focus={focus} remoteNames={remoteNames} onFocus={focusOn} />
+            <Graph
+              repoName={path.split('/').pop() ?? path}
+              active={active}
+              commits={log}
+              rows={rows}
+              wip={wipLabel}
+              head={head}
+              focus={focus}
+              branches={branches}
+              scope={scope}
+              remoteNames={remoteNames}
+              onFocus={focusOn}
+              onScope={setScope}
+            />
           )}
         </section>
         {focus.kind === 'commit' ? (

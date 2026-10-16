@@ -1,7 +1,7 @@
-import { memo, useCallback, useEffect, useRef, type CSSProperties } from 'react'
-import { GRAPH_LIMIT, type Commit } from '../../shared/types'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { GRAPH_LIMIT, type Branch, type Commit, type GraphScope } from '../../shared/types'
 import { colorFor, initials, laneColor, parseRef, relativeDate } from './format'
-import type { GraphRow, Segment } from './graph'
+import { searchCommits, splitMatch, type GraphRow, type SearchField, type Segment } from './graph'
 import { Icon } from './icons'
 import type { Focus } from './model'
 
@@ -56,6 +56,25 @@ export function RefPill({ text, color, remoteNames }: { text: string; color: str
   )
 }
 
+const SEARCH_FIELDS: [SearchField, string][] = [
+  ['all', 'All fields'],
+  ['message', 'Message'],
+  ['author', 'Author'],
+  ['sha', 'SHA']
+]
+
+function Highlight({ text, query, current }: { text: string; query: string; current: boolean }) {
+  const parts = query ? splitMatch(text, query) : null
+  if (!parts) return <>{text}</>
+  return (
+    <>
+      {parts[0]}
+      <mark className={current ? 'cur' : ''}>{parts[1]}</mark>
+      {parts[2]}
+    </>
+  )
+}
+
 interface RowProps {
   commit: Commit
   row: GraphRow
@@ -63,14 +82,19 @@ interface RowProps {
   head: boolean
   selected: boolean
   remoteNames: ReadonlySet<string>
+  match: string // the search query when this row matches, else ''
+  field: SearchField
+  current: boolean // the current search match
+  dim: boolean // a search is active and this row does not match
   onSelect: (sha: string) => void
 }
 
-const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, onSelect }: RowProps) {
+const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, match, field, current, dim, onSelect }: RowProps) {
   const merge = c.parents.length > 1
+  const hl = (f: SearchField) => (field === 'all' || field === f ? match : '')
   return (
     <div
-      className={`row ${selected ? 'sel' : ''}`}
+      className={`row ${selected ? 'sel' : ''} ${dim ? 'dim' : ''}`}
       data-sha={c.sha}
       role="button"
       tabIndex={0}
@@ -84,52 +108,156 @@ const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selecte
           <RefPill key={r} text={r} color={laneColor(row.color)} remoteNames={remoteNames} />
         ))}
         <span className="s" style={{ color: merge ? 'var(--muted)' : undefined }}>
-          {c.subject}
+          <Highlight text={c.subject} query={hl('message')} current={current} />
         </span>
       </span>
       <span className="c-author">
         <span className="avatar" style={{ background: colorFor(c.author) }}>
           {initials(c.author)}
         </span>
-        {c.author}
+        <Highlight text={c.author} query={hl('author')} current={current} />
       </span>
       <span className="c-date" title={new Date(c.date * 1000).toLocaleString('en-GB')}>
         {relativeDate(c.date)}
       </span>
-      <span className="c-sha">{c.sha.slice(0, 7)}</span>
+      <span className="c-sha">
+        <Highlight text={c.sha.slice(0, 7)} query={hl('sha')} current={current} />
+      </span>
     </div>
   )
 })
 
 interface Props {
   repoName: string
+  active: boolean
   commits: Commit[]
   rows: GraphRow[] // one per commit, plus the work-in-progress row first when `wip` is set
   wip: string | null // label of the work-in-progress row
   head: string | null
   focus: Focus
+  branches: Branch[]
+  scope: GraphScope
   remoteNames: ReadonlySet<string>
   onFocus: (f: Focus) => void
+  onScope: (s: GraphScope) => void
 }
 
-export function Graph({ repoName, commits, rows, wip, head, focus, remoteNames, onFocus }: Props) {
+export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, remoteNames, onFocus, onScope }: Props) {
   const list = useRef<HTMLDivElement>(null)
+  const input = useRef<HTMLInputElement>(null)
+  const [query, setQuery] = useState('')
+  const [field, setField] = useState<SearchField>('all')
+  const [cur, setCur] = useState(0)
   const width = graphWidth(rows)
   const offset = wip ? 1 : 0
   const focused = focus.kind === 'commit' ? focus.sha : null
   const select = useCallback((sha: string) => onFocus({ kind: 'commit', sha }), [onFocus])
+  const matches = useMemo(() => searchCommits(commits, query, field), [commits, query, field])
+  const matchSet = useMemo(() => new Set(matches), [matches])
+  const k = Math.min(cur, matches.length - 1) // current match, -1 when none
+  const currentSha = k >= 0 ? commits[matches[k]].sha : null
+  const searching = query.trim() !== ''
+
+  // The first press selects the highlighted match, the next ones move to the next/previous match.
+  const go = (delta: number) => {
+    if (k < 0) return
+    const next = focused === currentSha ? (k + delta + matches.length) % matches.length : k
+    setCur(next)
+    select(commits[matches[next]].sha)
+  }
 
   useEffect(() => {
     if (focused) list.current?.querySelector(`[data-sha="${focused}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [focused])
+
+  useEffect(() => {
+    if (currentSha) list.current?.querySelector(`[data-sha="${currentSha}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [currentSha])
+
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        input.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active])
 
   return (
     <>
       <div className="pane-head">
         <span className="pane-title">History</span>
         <span className="faint">{repoName}</span>
+        {scope.only && (
+          <span className="scope-chip">
+            Only <span className="mono">{scope.only}</span>
+            <button aria-label="Show all branches" title="Show all branches" onClick={() => onScope({ only: null, hidden: [] })}>
+              <Icon name="close" size={11} stroke={2.4} />
+            </button>
+          </span>
+        )}
+        {scope.hidden.length > 0 && (
+          <span className="scope-chip" title={scope.hidden.join(', ')}>
+            {scope.hidden.length} hidden
+            <button aria-label="Show hidden branches" title="Show hidden branches" onClick={() => onScope({ only: null, hidden: [] })}>
+              <Icon name="close" size={11} stroke={2.4} />
+            </button>
+          </span>
+        )}
         <div className="grow" />
-        <span className="faint">{commits.length >= GRAPH_LIMIT ? `Last ${GRAPH_LIMIT} commits` : `${commits.length} commit${commits.length === 1 ? '' : 's'}`}</span>
+        <label className={`searchbox ${searching ? 'on' : ''}`}>
+          <Icon name="search" size={13} stroke={2} />
+          <span className="sr-only">Search the history</span>
+          <input
+            ref={input}
+            value={query}
+            placeholder="Search: message, author, SHA"
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setCur(0)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') go(e.shiftKey ? -1 : 1)
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault()
+                go(e.key === 'ArrowDown' ? 1 : -1)
+              }
+              if (e.key === 'Escape') setQuery('')
+            }}
+          />
+          {searching && <span className="count">{matches.length ? `${k + 1} / ${matches.length}` : 'No match'}</span>}
+          {searching && (
+            <>
+              <button className="nav" aria-label="Previous match" disabled={!matches.length} onClick={() => go(-1)}>
+                <Icon name="up" size={12} stroke={2.4} />
+              </button>
+              <button className="nav" aria-label="Next match" disabled={!matches.length} onClick={() => go(1)}>
+                <Icon name="down" size={12} stroke={2.4} />
+              </button>
+            </>
+          )}
+        </label>
+        <select className="select" aria-label="Search in" value={field} onChange={(e) => setField(e.target.value as SearchField)}>
+          {SEARCH_FIELDS.map(([f, label]) => (
+            <option key={f} value={f}>
+              In: {label}
+            </option>
+          ))}
+        </select>
+        {!scope.only && (
+          <select className="select" aria-label="Branches shown" value="" onChange={(e) => e.target.value && onScope({ only: e.target.value, hidden: [] })}>
+            <option value="">All branches</option>
+            {branches.map((b) => (
+              <option key={`${b.remote}:${b.name}`} value={b.name}>
+                Only {b.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <span className="faint">{commits.length >= GRAPH_LIMIT ? `Last ${GRAPH_LIMIT}` : `${commits.length} commit${commits.length === 1 ? '' : 's'}`}</span>
       </div>
       <div className="cols" style={{ paddingLeft: width }}>
         <span style={{ flex: 1 }}>Message</span>
@@ -151,7 +279,20 @@ export function Graph({ repoName, commits, rows, wip, head, focus, remoteNames, 
           </div>
         )}
         {commits.map((c, i) => (
-          <CommitRow key={c.sha} commit={c} row={rows[i + offset]} width={width} head={c.sha === head} selected={c.sha === focused} remoteNames={remoteNames} onSelect={select} />
+          <CommitRow
+            key={c.sha}
+            commit={c}
+            row={rows[i + offset]}
+            width={width}
+            head={c.sha === head}
+            selected={c.sha === focused}
+            remoteNames={remoteNames}
+            match={matchSet.has(i) ? query : ''}
+            field={field}
+            current={c.sha === currentSha}
+            dim={searching && !matchSet.has(i)}
+            onSelect={select}
+          />
         ))}
         {commits.length === 0 && <span className="faint" style={{ padding: 14 }}>No commits yet.</span>}
       </div>
