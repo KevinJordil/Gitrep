@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { FileDiff, Hunk, LineAction } from '../../shared/types'
+import type { DiffSide, FileDiff, Hunk, LineAction } from '../../shared/types'
 import { api } from './api'
 import { changeGroups, errorText, splitPath } from './format'
 import { Icon } from './icons'
@@ -19,15 +19,17 @@ interface Props {
 
 export function DiffView({ repo, selection, version, onBack, run }: Props) {
   const notify = useToast()
-  const { path, side } = selection
+  const { path } = selection
+  const commit = selection.commit ?? null // a file of a commit: read-only
+  const side: DiffSide = selection.side ?? 'unstaged'
   const [diff, setDiff] = useState<FileDiff | null | undefined>(undefined)
   const [picked, setPicked] = useState<Record<number, number[]>>({})
   const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     let alive = true
-    api
-      .diff(repo, path, side)
+    const load = commit ? api.commitDiff(repo, commit, path) : api.diff(repo, path, side)
+    load
       .then((d) => {
         if (!alive) return
         // Background refreshes often return the same diff: keep the displayed one and the ticked lines.
@@ -41,9 +43,9 @@ export function DiffView({ repo, selection, version, onBack, run }: Props) {
     return () => {
       alive = false
     }
-  }, [repo, path, side, version, notify])
+  }, [repo, path, side, commit, version, notify])
 
-  const partial = !!diff && !diff.binary && !diff.isNew && !diff.isDeleted && side !== 'untracked'
+  const partial = !commit && !!diff && !diff.binary && !diff.isNew && !diff.isDeleted && side !== 'untracked'
   const primary: LineAction = side === 'staged' ? 'unstage' : 'stage'
   const primaryVerb = primary === 'stage' ? 'Stage' : 'Unstage'
 
@@ -94,13 +96,13 @@ export function DiffView({ repo, selection, version, onBack, run }: Props) {
           <span className="faint">{dir}</span>
           {name}
         </span>
-        <span className={`badge ${side === 'staged' ? 'blue' : 'amber'}`}>{SIDE_LABEL[side]}</span>
+        {commit ? <span className="badge grey">{commit.slice(0, 7)}</span> : <span className={`badge ${side === 'staged' ? 'blue' : 'amber'}`}>{SIDE_LABEL[side]}</span>}
       </div>
       <div className="diff-body">
         {diff === undefined && <span className="faint">Loading…</span>}
         {diff === null && <span className="faint">No changes to display.</span>}
         {diff?.binary && <div className="banner">Binary file: no preview.</div>}
-        {diff && !diff.binary && !partial && <div className="banner">This file can only be staged as a whole: use the buttons in the right panel.</div>}
+        {diff && !diff.binary && !partial && !commit && <div className="banner">This file can only be staged as a whole: use the buttons in the right panel.</div>}
         {shown.map(({ h, i }) => (
           <section key={`${i}:${h.header}`} className="hunk">
             <div className="hunk-head">

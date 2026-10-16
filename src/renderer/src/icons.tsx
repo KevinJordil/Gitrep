@@ -16,7 +16,8 @@ const PATHS = {
   back: ['m15 6-6 6 6 6'],
   cloud: ['M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.5 1.5A3.5 3.5 0 0 0 7 18z'],
   tag: ['M3 12V4h8l10 10-8 8z'],
-  check: ['m5 12 5 5 9-10']
+  check: ['m5 12 5 5 9-10'],
+  copy: ['M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z', 'M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3']
 } as const
 
 export type IconName = keyof typeof PATHS

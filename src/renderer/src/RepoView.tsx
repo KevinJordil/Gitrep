@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Branch, Commit, GraphScope, RepoStatus, Stash, Tag } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
+import { CommitPanel } from './CommitPanel'
 import { DiffView } from './DiffView'
 import { errorText } from './format'
 import { Graph } from './Graph'
@@ -95,7 +96,7 @@ export function RepoView({ path, active, onBranch }: Props) {
 
   // Keep the open diff on the file when it moves between staged and unstaged; close it when the file is clean.
   useEffect(() => {
-    if (!selection || !status) return
+    if (!selection || !status || selection.commit) return
     const inStaged = status.staged.find((f) => f.path === selection.path)
     const inUnstaged = status.unstaged.find((f) => f.path === selection.path)
     const here = selection.side === 'staged' ? inStaged : inUnstaged
@@ -169,12 +170,16 @@ export function RepoView({ path, active, onBranch }: Props) {
         />
         <section className="center">
           {selection ? (
-            <DiffView key={`${selection.path}:${selection.side}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} />
+            <DiffView key={`${selection.path}:${selection.side ?? selection.commit}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} />
           ) : (
             <Graph repoName={path.split('/').pop() ?? path} commits={log} rows={rows} wip={wipLabel} head={head} focus={focus} remoteNames={remoteNames} onFocus={focusOn} />
           )}
         </section>
-        <ChangesPanel repo={path} status={status} selection={selection} onSelect={setSelection} run={run} busy={busy} />
+        {focus.kind === 'commit' ? (
+          <CommitPanel key={focus.sha} repo={path} sha={focus.sha} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} />
+        ) : (
+          <ChangesPanel repo={path} status={status} selection={selection} onSelect={setSelection} run={run} busy={busy} />
+        )}
       </div>
     </>
   )

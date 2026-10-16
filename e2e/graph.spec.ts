@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { launchFixture, openRepo, type Fixture } from './fixtures'
+import { FAKE_MESSAGE, launchFixture, openRepo, type Fixture } from './fixtures'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -51,4 +51,27 @@ test('sidebar: branches, stashes and tags; clicking one selects its commit', asy
   await expect(row('init alpha')).toHaveClass(/sel/)
   await v.locator('.row.wip').click()
   await expect(v.locator('.row.wip')).toHaveClass(/sel/)
+})
+
+test('commit details: message, files, read-only diff, Explain with Claude, copy SHA', async () => {
+  await row('feat: y').click()
+  const panel = v.locator('.commit-panel')
+  await expect(panel.locator('.cp-subject')).toHaveText('feat: y')
+  await expect(panel).toContainText('E2E Tester')
+  await expect(panel.locator('.file', { hasText: 'y.txt' })).toContainText('+1')
+  await panel.locator('.file', { hasText: 'y.txt' }).click()
+  await expect(v.locator('.hunk')).toHaveCount(1)
+  await expect(v.locator('.hunk .line.add')).toHaveText(/y/)
+  await expect(v.getByRole('button', { name: /Stage hunk/ })).toHaveCount(0)
+  await expect(v.locator('.diff-body .banner')).toHaveCount(0)
+  await panel.getByRole('button', { name: 'Explain this commit' }).click()
+  await expect(panel.locator('.claude-box')).toContainText(FAKE_MESSAGE)
+  await page.screenshot({ path: 'e2e-artifacts/commit-details.png' })
+  await panel.getByRole('button', { name: 'Copy the full SHA' }).click()
+  const sha = fx.git(fx.alpha, 'rev-parse', 'feature/y').trim()
+  await expect.poll(() => fx.app.evaluate(({ clipboard }) => clipboard.readText())).toBe(sha)
+  await v.getByRole('button', { name: 'History' }).click()
+  await expect(row('feat: y')).toHaveClass(/sel/)
+  await panel.getByRole('button', { name: 'Close the commit details' }).click()
+  await expect(v.locator('.right-head')).toContainText('Changes')
 })

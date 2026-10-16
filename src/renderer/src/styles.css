@@ -198,3 +198,22 @@ textarea.field { padding: 8px 10px; resize: none; font-size: 12px; line-height: 
 .toast.error { border-color: #f2786d80; }
 .toast pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px/1.5 var(--mono); max-height: 240px; overflow: auto; flex: 1; }
 .toast .t { flex: 1; }
+
+/* commit details */
+.commit-panel { overflow: auto; }
+.cp-head { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.cp-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cp-sha { font: 12.5px var(--mono); color: var(--accent); }
+.cp-subject { font-size: 15px; font-weight: 600; line-height: 1.35; }
+.cp-body { color: var(--muted); white-space: pre-line; }
+.cp-author { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.cp-parents { display: flex; gap: 6px; font-size: 12px; color: var(--faint); }
+.link { color: var(--accent); }
+.cp-explain { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.claude-box { padding: 10px 12px; border-radius: 8px; background: #151c2b; border: 1px solid #263450; color: #c9d6ee; line-height: 1.5; white-space: pre-line; }
+.cp-files { padding: 12px 8px; display: flex; flex-direction: column; gap: 1px; }
+.cp-files-title { padding: 0 8px 6px; font-weight: 500; color: var(--muted); }
+button.file { width: 100%; }
+button.file .path { height: auto; }
+.iconbtn.sm { width: 24px; height: 24px; border-radius: 5px; color: var(--faint); }
+.avatar.lg { width: 22px; height: 22px; font-size: 10px; }
