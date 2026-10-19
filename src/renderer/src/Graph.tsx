@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { GRAPH_LIMIT, type Branch, type Commit, type GraphScope } from '../../shared/types'
 import { colorFor, initials, laneColor, parseRef, relativeDate } from './format'
+import { dragBranch, dropOnBranch, type DropBranch } from './dnd'
 import { searchCommits, splitMatch, type GraphRow, type SearchField, type Segment } from './graph'
 import { Icon } from './icons'
 import type { Focus } from './model'
@@ -44,10 +45,20 @@ function Lanes({ row, width, dot, selected }: { row: GraphRow; width: number; do
   )
 }
 
-export function RefPill({ text, color, remoteNames }: { text: string; color: string; remoteNames: ReadonlySet<string> }) {
+interface PillProps {
+  text: string
+  color: string
+  remoteNames: ReadonlySet<string>
+  branches?: Branch[] // with onDrop: branch pills can be dragged, local ones accept drops
+  onDrop?: DropBranch
+}
+
+export function RefPill({ text, color, remoteNames, branches = [], onDrop }: PillProps) {
   const ref = parseRef(text, remoteNames)
+  const branch = onDrop && ref.kind !== 'tag' ? branches.find((b) => b.name === ref.label && b.remote === (ref.kind === 'remote')) : undefined
+  const dnd = branch && onDrop ? { ...dragBranch(branch), ...(branch.remote ? {} : dropOnBranch(branch, branches, onDrop)) } : {}
   return (
-    <span className={`ref ${ref.kind}`} style={{ '--c': color } as CSSProperties}>
+    <span className={`ref ${ref.kind}`} style={{ '--c': color } as CSSProperties} title={branch ? 'Drag onto another branch to merge or rebase' : undefined} {...dnd}>
       {ref.kind === 'head' && <Icon name="check" size={11} stroke={2.6} />}
       {ref.kind === 'remote' && <Icon name="cloud" size={12} stroke={2.2} />}
       {ref.kind === 'tag' && <Icon name="tag" size={11} stroke={2.2} />}
@@ -82,15 +93,17 @@ interface RowProps {
   head: boolean
   selected: boolean
   remoteNames: ReadonlySet<string>
+  branches: Branch[]
   match: string // the search query when this row matches, else ''
   field: SearchField
   current: boolean // the current search match
   dim: boolean // a search is active and this row does not match
   onSelect: (sha: string) => void
   onMenu: (c: Commit, x: number, y: number) => void
+  onDrop: DropBranch
 }
 
-const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, match, field, current, dim, onSelect, onMenu }: RowProps) {
+const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, branches, match, field, current, dim, onSelect, onMenu, onDrop }: RowProps) {
   const merge = c.parents.length > 1
   const hl = (f: SearchField) => (field === 'all' || field === f ? match : '')
   return (
@@ -119,7 +132,7 @@ const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selecte
       <Lanes row={row} width={width} dot={head ? 'head' : merge ? 'merge' : 'commit'} selected={selected} />
       <span className="msg">
         {c.refs.map((r) => (
-          <RefPill key={r} text={r} color={laneColor(row.color)} remoteNames={remoteNames} />
+          <RefPill key={r} text={r} color={laneColor(row.color)} remoteNames={remoteNames} branches={branches} onDrop={onDrop} />
         ))}
         <span className="s" style={{ color: merge ? 'var(--muted)' : undefined }}>
           <Highlight text={c.subject} query={hl('message')} current={current} />
@@ -155,9 +168,10 @@ interface Props {
   onFocus: (f: Focus) => void
   onScope: (s: GraphScope) => void
   onMenu: (c: Commit, x: number, y: number) => void // must be stable (useCallback)
+  onDrop: DropBranch // must be stable (useCallback)
 }
 
-export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, remoteNames, onFocus, onScope, onMenu }: Props) {
+export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, remoteNames, onFocus, onScope, onMenu, onDrop }: Props) {
   const list = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
@@ -302,12 +316,14 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
             head={c.sha === head}
             selected={c.sha === focused}
             remoteNames={remoteNames}
+            branches={branches}
             match={matchSet.has(i) ? query : ''}
             field={field}
             current={c.sha === currentSha}
             dim={searching && !matchSet.has(i)}
             onSelect={select}
             onMenu={onMenu}
+            onDrop={onDrop}
           />
         ))}
         {commits.length === 0 && <span className="faint" style={{ padding: 14 }}>No commits yet.</span>}

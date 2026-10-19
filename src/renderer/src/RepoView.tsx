@@ -6,10 +6,12 @@ import { CommitMenu, type CommitAction } from './CommitMenu'
 import { CommitPanel } from './CommitPanel'
 import { PromptDialog } from './Dialog'
 import { DiffView } from './DiffView'
+import type { DropBranch } from './dnd'
 import { errorText } from './format'
 import { Graph } from './Graph'
 import { layoutGraph, type GraphNode } from './graph'
 import { Icon, type IconName } from './icons'
+import { MergeMenu } from './MergeMenu'
 import type { Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
 import { Sidebar } from './Sidebar'
@@ -38,6 +40,7 @@ export function RepoView({ path, active, onBranch }: Props) {
   const [selection, setSelection] = useState<Selection | null>(null)
   const [menu, setMenu] = useState<{ commit: Commit; x: number; y: number } | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
+  const [drop, setDrop] = useState<{ source: Branch; target: Branch; x: number; y: number } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const lastError = useRef('')
@@ -171,6 +174,8 @@ export function RepoView({ path, active, onBranch }: Props) {
   )
   const openMenu = useCallback((commit: Commit, x: number, y: number) => setMenu({ commit, x, y }), [])
   const closeMenu = useCallback(() => setMenu(null), [])
+  const openDrop = useCallback<DropBranch>((source, target, x, y) => setDrop({ source, target, x, y }), [])
+  const closeDrop = useCallback(() => setDrop(null), [])
   const closeDialog = () => setDialog(null)
 
   const newBranch = (at: string, label: string) =>
@@ -268,6 +273,7 @@ export function RepoView({ path, active, onBranch }: Props) {
           scope={scope}
           onFocus={focusOn}
           onScope={setScope}
+          onDrop={openDrop}
           onSwitch={(b) => void run('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)}
         />
         <section className="center">
@@ -290,6 +296,7 @@ export function RepoView({ path, active, onBranch }: Props) {
               onFocus={focusOn}
               onScope={setScope}
               onMenu={openMenu}
+              onDrop={openDrop}
             />
           )}
         </section>
@@ -302,6 +309,7 @@ export function RepoView({ path, active, onBranch }: Props) {
         )}
       </div>
       {menu && <CommitMenu commit={menu.commit} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
+      {drop && <MergeMenu repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onClose={closeDrop} />}
       {dialog}
     </>
   )

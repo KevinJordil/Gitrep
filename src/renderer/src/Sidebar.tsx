@@ -1,4 +1,5 @@
 import type { Branch, GraphScope, Stash, Tag } from '../../shared/types'
+import { dragBranch, dropOnBranch, type DropBranch } from './dnd'
 import { laneColor } from './format'
 import { Icon } from './icons'
 import type { Focus } from './model'
@@ -13,6 +14,7 @@ interface Props {
   onSwitch: (b: Branch) => void
   onFocus: (f: Focus) => void
   onScope: (s: GraphScope) => void
+  onDrop: DropBranch
 }
 
 function Title({ title, count }: { title: string; count: number }) {
@@ -24,7 +26,7 @@ function Title({ title, count }: { title: string; count: number }) {
   )
 }
 
-export function Sidebar({ branches, tags, stashes, colors, focus, scope, onSwitch, onFocus, onScope }: Props) {
+export function Sidebar({ branches, tags, stashes, colors, focus, scope, onSwitch, onFocus, onScope, onDrop }: Props) {
   const dot = (sha: string, fallback: string) => {
     const c = colors.get(sha)
     return c === undefined ? fallback : laneColor(c)
@@ -49,6 +51,8 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, onSwitc
                 className={`side-item br ${b.current ? 'current' : ''} ${focused === b.sha ? 'sel' : ''} ${off ? 'off' : ''}`}
                 title={b.current ? 'Current branch' : 'Double-click to switch to this branch'}
                 onDoubleClick={() => !b.current && onSwitch(b)}
+                {...dragBranch(b)}
+                {...(b.remote ? {} : dropOnBranch(b, branches, onDrop))}
               >
                 <span className="dot" style={{ background: dot(b.sha, b.remote ? 'var(--faint)' : 'var(--accent)') }} />
                 <button className="name" onClick={() => onFocus({ kind: 'commit', sha: b.sha })}>

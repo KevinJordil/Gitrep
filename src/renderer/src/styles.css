@@ -282,3 +282,24 @@ mark.cur { background: var(--amber); color: var(--bg); }
 .warn-box svg { color: var(--amber); flex: none; margin-top: 1px; }
 .dialog-row { display: flex; align-items: center; justify-content: space-between; color: var(--muted); }
 .btn-claude.sm { height: 26px; padding: 0 9px; font-size: 12px; }
+
+/* drag a branch onto another */
+[draggable='true'] { cursor: grab; }
+.drop-over { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.merge-menu { position: fixed; z-index: 20; width: 420px; border-radius: 12px; background: #1e232d; border: 1px solid #343b4a; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6); overflow: hidden; }
+.mm-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #2c3240; color: var(--faint); }
+.mm-ops { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.mm-op { display: flex; align-items: flex-start; gap: 12px; padding: 9px 10px; border-radius: 8px; color: var(--muted); }
+.mm-op:not(:disabled):hover, .mm-op:focus-visible { background: #2a3242; color: var(--claude-fg); outline: none; }
+.mm-op svg { margin-top: 1px; flex: none; }
+.mm-op > span { display: flex; flex-direction: column; gap: 2px; }
+.mm-op .t { font-weight: 500; color: var(--text); }
+.mm-op .d { font-size: 12px; color: var(--muted); }
+.mm-box { padding: 4px 12px 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.mm-box > div, .mm-box .dialog-field { align-self: stretch; }
+.advice-title { display: flex; align-items: center; gap: 6px; font-weight: 600; color: #cfe0ff; margin-bottom: 4px; }
+.ok-box { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #5bd38a14; border: 1px solid #5bd38a40; color: #c8f0d6; font-size: 12.5px; }
+.mm-box .check { font-size: 12.5px; }
+.mm-actions { display: flex; align-items: center; gap: 8px; align-self: stretch; }
+.mm-actions .btn-primary { height: 30px; }
+.mm-foot { display: block; padding: 4px 14px 12px; font-size: 12px; color: var(--faint); }

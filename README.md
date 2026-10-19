@@ -1,12 +1,13 @@
 # GitRep
 
-Local multi-repo git client (Electron + React). A dashboard of all your repositories, history, diffs with staging per file, hunk or line, and commit messages suggested by Claude.
+Local multi-repo git client (Electron + React). A dashboard of all your repositories; a commit graph of every branch with search, isolate/hide, commit details and a context menu (checkout, branch, tag, cherry-pick, revert, reset); stashes; drag a branch onto another to merge, rebase or fast-forward, with conflict prediction; diffs with staging per file, hunk or line; and commit, merge and stash messages, commit explanations and merge advice suggested by Claude.
 
 ## Run
 
     npm install
     npm run dev          # development (hot reload)
     npm test             # tests (parsers + real temporary git repositories)
+    npm run e2e          # end-to-end tests (builds, then drives the app with Playwright)
     npm run smoke        # checks that the window loads without errors
 
 ## Install in the GNOME launcher
