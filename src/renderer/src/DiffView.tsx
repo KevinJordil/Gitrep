@@ -15,9 +15,10 @@ interface Props {
   version: number
   onBack: () => void
   run: RunOp
+  hideHead?: boolean // the parent shows its own header (stash view)
 }
 
-export function DiffView({ repo, selection, version, onBack, run }: Props) {
+export function DiffView({ repo, selection, version, onBack, run, hideHead = false }: Props) {
   const notify = useToast()
   const { path } = selection
   const commit = selection.commit ?? null // a file of a commit: read-only
@@ -88,16 +89,18 @@ export function DiffView({ repo, selection, version, onBack, run }: Props) {
 
   return (
     <>
-      <div className="pane-head">
-        <button className="tbtn boxed" onClick={onBack}>
-          <Icon name="back" size={14} stroke={2} /> History
-        </button>
-        <span className="mono">
-          <span className="faint">{dir}</span>
-          {name}
-        </span>
-        {commit ? <span className="badge grey">{commit.slice(0, 7)}</span> : <span className={`badge ${side === 'staged' ? 'blue' : 'amber'}`}>{SIDE_LABEL[side]}</span>}
-      </div>
+      {!hideHead && (
+        <div className="pane-head">
+          <button className="tbtn boxed" onClick={onBack}>
+            <Icon name="back" size={14} stroke={2} /> History
+          </button>
+          <span className="mono">
+            <span className="faint">{dir}</span>
+            {name}
+          </span>
+          {commit ? <span className="badge grey">{commit.slice(0, 7)}</span> : <span className={`badge ${side === 'staged' ? 'blue' : 'amber'}`}>{SIDE_LABEL[side]}</span>}
+        </div>
+      )}
       <div className="diff-body">
         {diff === undefined && <span className="faint">Loading…</span>}
         {diff === null && <span className="faint">No changes to display.</span>}

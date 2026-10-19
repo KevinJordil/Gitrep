@@ -81,13 +81,18 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, onSwitc
       ))}
       <section>
         <Title title="Stashes" count={stashes.length} />
-        {stashes.map((s) => (
-          <div key={s.sha} className="side-item sans" title={`stash@{${s.index}}`}>
-            <span className="dot sq" />
-            <span className="name">{s.message}</span>
-            <span className="faint mono">{s.branch ?? ''}</span>
-          </div>
-        ))}
+        {stashes.map((s) => {
+          const selected = focus.kind === 'stash' && focus.sha === s.sha
+          return (
+            <div key={s.sha} className={`side-item sans ${selected ? 'sel' : ''}`} title={`stash@{${s.index}}`}>
+              <span className="dot sq" style={{ background: selected ? 'var(--accent)' : undefined }} />
+              <button className="name" onClick={() => onFocus({ kind: 'stash', sha: s.sha })}>
+                {s.message}
+              </button>
+              <span className="faint mono">{s.branch ?? ''}</span>
+            </div>
+          )
+        })}
       </section>
       <section>
         <Title title="Tags" count={tags.length} />

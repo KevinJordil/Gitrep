@@ -13,6 +13,7 @@ import { Icon, type IconName } from './icons'
 import type { Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
 import { Sidebar } from './Sidebar'
+import { StashDialog, StashPanel, StashView } from './Stash'
 import { useToast } from './toast'
 
 const ALL: GraphScope = { only: null, hidden: [] }
@@ -97,6 +98,11 @@ export function RepoView({ path, active, onBranch }: Props) {
       return only === s.only && hidden.length === s.hidden.length ? s : { only, hidden }
     })
   }, [branches])
+
+  // A popped or dropped stash leaves the view.
+  useEffect(() => {
+    if (focus.kind === 'stash' && !stashes.some((s) => s.sha === focus.sha)) setFocus({ kind: 'wip' })
+  }, [focus, stashes])
 
   useEffect(() => {
     if (active) void refreshAll()
@@ -216,6 +222,17 @@ export function RepoView({ path, active, onBranch }: Props) {
   const staged = status?.staged.length ?? 0
   const wipLabel = hasWip ? `${changes} modified file${changes === 1 ? '' : 's'}${staged ? ` · ${staged} staged` : ''}` : null
   const branchLabel = status ? (status.branch ?? `Detached HEAD (${status.head?.slice(0, 7) ?? '?'})`) : '…'
+  const stash = focus.kind === 'stash' ? stashes.find((s) => s.sha === focus.sha) : undefined
+  const stashBranch = (s: Stash) =>
+    setDialog(
+      <PromptDialog
+        title={`Create a branch from "${s.message}"`}
+        label="Branch name"
+        submit="Create branch"
+        onSubmit={(name) => runOutcome('branch', () => api.stashBranch(path, s.sha, name), `Branch ${name} created from the stash`)}
+        onClose={closeDialog}
+      />
+    )
   const openCode = () => api.openInCode(path).catch((e: unknown) => notify('error', errorText(e)))
 
   return (
@@ -230,6 +247,8 @@ export function RepoView({ path, active, onBranch }: Props) {
         <ToolButton icon="push" label="Push" count={status?.ahead ? `↑${status.ahead}` : ''} busy={busy === 'push'} disabled={!!busy} onClick={() => void run('push', () => api.push(path), 'Push complete')} />
         <div className="tsep" />
         <ToolButton icon="branch" label="Branch" busy={busy === 'branch'} disabled={!!busy || !head} onClick={() => head && newBranch(head, status?.branch ?? head.slice(0, 7))} />
+        <ToolButton icon="stash" label="Stash" busy={busy === 'stash'} disabled={!!busy || !hasWip || !head} onClick={() => status && setDialog(<StashDialog repo={path} status={status} run={run} onClose={closeDialog} />)} />
+        <ToolButton icon="pop" label="Pop" busy={busy === 'pop'} disabled={!!busy || !stashes.length} onClick={() => void runOutcome('pop', () => api.stashApply(path, stashes[0].sha, true), 'Stash applied and dropped')} />
         <div className="grow" />
         <button className="tbtn boxed" onClick={() => void openCode()}>
           <Icon name="code" /> VS Code
@@ -254,6 +273,8 @@ export function RepoView({ path, active, onBranch }: Props) {
         <section className="center">
           {selection ? (
             <DiffView key={`${selection.path}:${selection.side ?? selection.commit}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} />
+          ) : stash ? (
+            <StashView key={stash.sha} repo={path} stash={stash} version={version} run={run} onBack={() => focusOn({ kind: 'wip' })} />
           ) : (
             <Graph
               repoName={path.split('/').pop() ?? path}
@@ -272,7 +293,9 @@ export function RepoView({ path, active, onBranch }: Props) {
             />
           )}
         </section>
-        {focus.kind === 'commit' ? (
+        {stash ? (
+          <StashPanel repo={path} stash={stash} branch={status?.branch ?? null} busy={busy} run={run} runOutcome={runOutcome} onNewBranch={() => stashBranch(stash)} />
+        ) : focus.kind === 'commit' ? (
           <CommitPanel key={`${focus.sha}:${focus.explain ?? ''}`} repo={path} sha={focus.sha} autoExplain={!!focus.explain} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} />
         ) : (
           <ChangesPanel repo={path} status={status} selection={selection} onSelect={setSelection} run={run} busy={busy} />
