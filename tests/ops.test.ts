@@ -127,6 +127,12 @@ describe('cherry-pick, revert, reset', () => {
     expect(await readFile(join(repo, 'a.txt'), 'utf8')).toBe('base\n')
     await expect(resetTo(repo, base, 'keep' as never)).rejects.toThrow('Invalid reset mode')
   })
+
+  it('refuses to reset during a stopped operation', async () => {
+    const repo = await setup(true)
+    expect(await integrate(repo, { source: 'feature', target: 'main', mode: 'merge', message: '', autostash: false })).toBe('conflicts')
+    await expect(resetTo(repo, 'HEAD~1', 'hard')).rejects.toThrow('merge is in progress')
+  })
 })
 
 describe('mergePreview and integrate', () => {
@@ -160,6 +166,28 @@ describe('mergePreview and integrate', () => {
     await integrate(repo, { source: 'feature', target: 'main', mode: 'merge', message: '', autostash: false })
     expect((await getStatus(repo)).branch).toBe('main')
     expect(await subject(repo)).toBe("Merge branch 'feature' into main")
+  })
+
+  it('refuses to merge onto another branch while tracked files are modified', async () => {
+    const repo = await setup()
+    await git(repo, ['switch', '-q', 'feature'])
+    await write(repo, 'f.txt', 'dirty\n')
+    const head = await rev(repo, 'HEAD')
+    for (const autostash of [false, true]) {
+      await expect(integrate(repo, { source: 'feature', target: 'main', mode: 'merge', message: '', autostash })).rejects.toThrow('Commit or stash your changes, or check out main first.')
+    }
+    const s = await getStatus(repo)
+    expect([s.branch, s.head]).toEqual(['feature', head])
+    expect(await readFile(join(repo, 'f.txt'), 'utf8')).toBe('dirty\n')
+  })
+
+  it('does not let a user autostash config override an unticked checkbox', async () => {
+    const repo = await setup()
+    await git(repo, ['config', 'rebase.autoStash', 'true'])
+    await write(repo, 'a.txt', 'main\nlocal\n')
+    await expect(integrate(repo, { source: 'feature', target: 'main', mode: 'rebase', message: '', autostash: false })).rejects.toThrow()
+    expect((await git(repo, ['stash', 'list'])).trim()).toBe('')
+    expect(await readFile(join(repo, 'a.txt'), 'utf8')).toBe('main\nlocal\n')
   })
 
   it('rebases the target onto the source', async () => {

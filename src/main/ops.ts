@@ -90,7 +90,10 @@ export async function revert(repo: string, rev: string): Promise<OpOutcome> {
 export async function resetTo(repo: string, rev: string, mode: ResetMode): Promise<void> {
   if (!RESET_MODES.includes(mode)) throw new Error(`Invalid reset mode: ${mode}`)
   const sha = await resolveCommit(repo, rev)
-  await serialized(repo, () => git(repo, ['reset', `--${mode}`, sha]))
+  await serialized(repo, async () => {
+    await ensureIdle(repo)
+    await git(repo, ['reset', `--${mode}`, sha])
+  })
 }
 
 export async function continueOperation(repo: string): Promise<OpOutcome> {
@@ -143,13 +146,15 @@ export function defaultMergeMessage(source: Pick<Branch, 'name' | 'remote'>, tar
   return `Merge ${source.remote ? 'remote-tracking ' : ''}branch '${source.name}' into ${target}`
 }
 
-// Merge and rebase switch to the target first when it is not checked out. --autostash is git's own: stash, run, re-apply.
+// A merge switches to the target first when it is not checked out, so it refuses tracked changes there. --autostash is git's own: stash, run, re-apply.
 export async function integrate(repo: string, req: MergeRequest): Promise<OpOutcome> {
   const { source, target } = await branchPair(repo, req.source, req.target)
-  const auto = req.autostash ? ['--autostash'] : []
+  // Explicit both ways: a user's merge.autoStash / rebase.autoStash must not override the checkbox.
+  const auto = [req.autostash ? '--autostash' : '--no-autostash']
   return serialized(repo, async () => {
     await ensureIdle(repo)
-    const current = (await getStatus(repo)).branch === target.name
+    const status = await getStatus(repo)
+    const current = status.branch === target.name
     if (req.mode === 'ff') {
       if ((await count(repo, `${source.sha}..${target.sha}`)) > 0) throw new Error(`${target.name} cannot be fast-forwarded: it has commits that ${source.name} does not have`)
       if (current) await git(repo, ['merge', '--ff-only', ...auto, source.ref])
@@ -158,7 +163,10 @@ export async function integrate(repo: string, req: MergeRequest): Promise<OpOutc
     }
     if (req.mode === 'rebase') return mayConflict(repo, ['rebase', ...auto, source.ref, target.name])
     if (req.mode !== 'merge') throw new Error(`Invalid mode: ${req.mode}`)
-    if (!current) await git(repo, ['switch', target.name])
+    if (!current) {
+      if (status.staged.length || status.unstaged.some((f) => f.status !== '?')) throw new Error(`Commit or stash your changes, or check out ${target.name} first.`)
+      await git(repo, ['switch', target.name])
+    }
     const message = String(req.message ?? '').trim() || defaultMergeMessage(source, target.name)
     return mayConflict(repo, ['merge', '--no-ff', ...auto, '-m', message, source.ref])
   })

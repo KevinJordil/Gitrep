@@ -301,7 +301,7 @@ export function RepoView({ path, active, onBranch }: Props) {
           )}
         </section>
         {stash ? (
-          <StashPanel repo={path} stash={stash} branch={status?.branch ?? null} busy={busy} run={run} runOutcome={runOutcome} onNewBranch={() => stashBranch(stash)} />
+          <StashPanel key={stash.sha} repo={path} stash={stash} branch={status?.branch ?? null} busy={busy} run={run} runOutcome={runOutcome} onNewBranch={() => stashBranch(stash)} />
         ) : focus.kind === 'commit' ? (
           <CommitPanel key={`${focus.sha}:${focus.explain ?? ''}`} repo={path} sha={focus.sha} autoExplain={!!focus.explain} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} />
         ) : (
@@ -309,7 +309,7 @@ export function RepoView({ path, active, onBranch }: Props) {
         )}
       </div>
       {menu && <CommitMenu commit={menu.commit} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
-      {drop && <MergeMenu repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onClose={closeDrop} />}
+      {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onClose={closeDrop} />}
       {dialog}
     </>
   )

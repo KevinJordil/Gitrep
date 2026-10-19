@@ -68,7 +68,8 @@ export function ChangesPanel({ repo, status, selection, onSelect, run, busy }: P
   }
 
   const message = body.trim() ? `${summary.trim()}\n\n${body.trim()}\n` : `${summary.trim()}\n`
-  const canCommit = !busy && summary.trim() !== '' && (amend || staged.length > 0) && conflicted.length === 0
+  const operation = status?.operation ?? null // committing mid-operation would land inside the replay
+  const canCommit = !busy && !operation && summary.trim() !== '' && (amend || staged.length > 0) && conflicted.length === 0
   const commit = async () => {
     if (!canCommit) return
     const ok = await run('commit', () => api.commit(repo, message, amend), amend ? 'Commit amended' : 'Commit created')
@@ -155,8 +156,9 @@ export function ChangesPanel({ repo, status, selection, onSelect, run, busy }: P
         </label>
         <textarea id={`body-${repo}`} className="field" rows={4} value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={onKey} placeholder="Description (optional)" />
         {note && <span className="note">{note}</span>}
+        {operation && <span className="note">Finish the {operation} with Continue in the banner.</span>}
         <label className="check">
-          <input type="checkbox" checked={amend} onChange={(e) => void toggleAmend(e.target.checked)} /> Amend last commit
+          <input type="checkbox" checked={amend} disabled={!!operation} onChange={(e) => void toggleAmend(e.target.checked)} /> Amend last commit
         </label>
         <button type="submit" className="btn-primary" disabled={!canCommit}>
           {busy === 'commit' ? 'Commit…' : `Commit to ${branch}`}

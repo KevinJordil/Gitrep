@@ -70,13 +70,18 @@ export function MergeMenu({ repo, source, target, status, x, y, runOutcome, onCl
   const local = preview?.local ?? 0
   const upToDate = !!preview && incoming === 0
   const canFf = !!preview && incoming > 0 && local === 0
+  const blocked = !target.current && dirty > 0 // a merge would have to switch branches first
   const checkout = target.current ? '' : ` · checks out ${target.name} first`
   const ops: { icon: IconName; title: string; desc: string; disabled: boolean; run: () => void }[] = [
     {
       icon: 'merge',
       title: `Merge ${source.name} into ${target.name}`,
-      desc: upToDate ? `${target.name} already contains ${source.name}` : `Merge commit, message drafted by Claude · ${plural(incoming, 'commit')} to integrate${checkout}`,
-      disabled: !preview || upToDate,
+      desc: upToDate
+        ? `${target.name} already contains ${source.name}`
+        : blocked
+          ? `Commit or stash your changes, or check out ${target.name} first.`
+          : `Merge commit, message drafted by Claude · ${plural(incoming, 'commit')} to integrate${checkout}`,
+      disabled: !preview || upToDate || blocked,
       run: () => setStep('message')
     },
     {
