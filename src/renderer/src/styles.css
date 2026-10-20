@@ -260,9 +260,14 @@ mark.cur { background: var(--amber); color: var(--on-c); }
 .scope-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 33%, transparent); color: var(--claude-fg); white-space: nowrap; }
 .scope-chip .mono { font-size: 12px; }
 .scope-chip button { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: var(--claude-fg); }
-.side-item.br { padding: 4px 4px 4px 8px; }
+/* --row: the row's background, which the action overlay fades from */
+.side-item.br { --row: var(--panel); position: relative; min-height: 32px; padding: 4px 8px; background: var(--row); }
+.side-item.br:hover, .side-item.br:focus-within, .side-item.br.current, .side-item.br.sel { --row: var(--hover); }
 .side-item.off { opacity: 0.45; }
-.sbtn { width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--line); display: grid; place-items: center; color: var(--faint); flex: none; visibility: hidden; }
+.side-actions { position: absolute; top: 0; right: 4px; bottom: 0; display: none; align-items: center; gap: 4px; padding-left: 28px; background: linear-gradient(to right, transparent, var(--row) 24px); pointer-events: none; }
+.side-actions > * { pointer-events: auto; } /* the faded part lets clicks reach the name */
+.side-item:hover .side-actions, .side-item:focus-within .side-actions, .side-actions:has(.on) { display: flex; }
+.sbtn { width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--line); background: var(--row); display: grid; place-items: center; color: var(--faint); flex: none; visibility: hidden; }
 .side-item:hover .sbtn, .side-item:focus-within .sbtn, .sbtn.on { visibility: visible; }
 .sbtn.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--claude-fg); }
 /* dialogs and menus */

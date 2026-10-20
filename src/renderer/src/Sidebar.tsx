@@ -56,34 +56,37 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeD
         {...(b.remote ? {} : dropOnBranch(b, branches, onDrop))}
       >
         <span className="dot" style={{ background: dot(b.sha, b.remote ? 'var(--faint)' : 'var(--accent)') }} />
-        <button className="name" onClick={() => onFocus({ kind: 'commit', sha: b.sha })}>
+        <button className="name" title={b.name} onClick={() => onFocus({ kind: 'commit', sha: b.sha })}>
           {b.name}
         </button>
         <span className="faint">{[b.ahead ? `↑${b.ahead}` : '', b.behind ? `↓${b.behind}` : ''].join(' ').trim()}</span>
-        <button
-          className={`sbtn ${hidden ? 'on' : ''}`}
-          aria-label={`${hidden ? 'Show' : 'Hide'} ${b.name}`}
-          aria-pressed={hidden}
-          disabled={b.current}
-          title={b.current ? 'The checked-out branch is always shown' : hidden ? 'Show this branch' : 'Hide this branch'}
-          onClick={() => onScope({ only: null, hidden: hidden ? scope.hidden.filter((h) => h !== b.name) : [...scope.hidden, b.name] })}
-        >
-          <Icon name={hidden ? 'eyeOff' : 'eye'} size={13} stroke={2} />
-        </button>
-        <button
-          className={`sbtn ${isolated ? 'on' : ''}`}
-          aria-label={`${isolated ? 'Stop isolating' : 'Isolate'} ${b.name}`}
-          aria-pressed={isolated}
-          title={isolated ? 'Show all branches' : 'Show only this branch'}
-          onClick={() => onScope({ only: isolated ? null : b.name, hidden: [] })}
-        >
-          <Icon name="target" size={13} stroke={2} />
-        </button>
-        {!b.remote && !b.current && (
-          <button className="sbtn" aria-label={`Delete ${b.name}`} title="Delete this branch (Ctrl+Z restores it)" onClick={() => onDelete(b)}>
-            <Icon name="trash" size={13} stroke={2} />
+        {/* Over the end of the row, not beside the name: shown on hover and keyboard focus, or while a toggle is on. */}
+        <span className="side-actions">
+          <button
+            className={`sbtn ${hidden ? 'on' : ''}`}
+            aria-label={`${hidden ? 'Show' : 'Hide'} ${b.name}`}
+            aria-pressed={hidden}
+            disabled={b.current}
+            title={b.current ? 'The checked-out branch is always shown' : hidden ? 'Show this branch' : 'Hide this branch'}
+            onClick={() => onScope({ only: null, hidden: hidden ? scope.hidden.filter((h) => h !== b.name) : [...scope.hidden, b.name] })}
+          >
+            <Icon name={hidden ? 'eyeOff' : 'eye'} size={13} stroke={2} />
           </button>
-        )}
+          <button
+            className={`sbtn ${isolated ? 'on' : ''}`}
+            aria-label={`${isolated ? 'Stop isolating' : 'Isolate'} ${b.name}`}
+            aria-pressed={isolated}
+            title={isolated ? 'Show all branches' : 'Show only this branch'}
+            onClick={() => onScope({ only: isolated ? null : b.name, hidden: [] })}
+          >
+            <Icon name="target" size={13} stroke={2} />
+          </button>
+          {!b.remote && !b.current && (
+            <button className="sbtn" aria-label={`Delete ${b.name}`} title="Delete this branch (Ctrl+Z restores it)" onClick={() => onDelete(b)}>
+              <Icon name="trash" size={13} stroke={2} />
+            </button>
+          )}
+        </span>
       </div>
     )
   }

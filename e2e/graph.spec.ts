@@ -132,3 +132,22 @@ test('rapid isolate then show all ends showing all branches', async () => {
   await expect(row('second alpha')).toBeVisible()
   await expect(row('feat: y')).toBeVisible()
 })
+
+test('sidebar: branch actions overlay the end of the row, the name keeps its width', async () => {
+  const item = v.locator('.side-item', { hasText: 'feature/y' })
+  const name = item.locator('.name')
+  const hide = item.getByRole('button', { name: 'Hide feature/y' })
+  await page.mouse.move(0, 0)
+  await expect(hide).toBeHidden()
+  const before = (await name.boundingBox())!.width
+  expect(before).toBeGreaterThan((await item.boundingBox())!.width - 60) // no room kept for the buttons
+  await item.hover()
+  await expect(hide).toBeVisible()
+  expect((await name.boundingBox())!.width).toBe(before)
+  await expect(name).toHaveAttribute('title', 'feature/y')
+  await page.mouse.move(0, 0)
+  await expect(hide).toBeHidden()
+  await name.focus() // keyboard focus in the row shows the actions too
+  await expect(hide).toBeVisible()
+  await page.screenshot({ path: 'e2e-artifacts/sidebar-actions.png' })
+})
