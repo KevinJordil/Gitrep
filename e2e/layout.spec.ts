@@ -73,3 +73,14 @@ test('wide saved widths are clamped to a small window; the saved values are kept
   await expect(v.getByRole('separator', { name: 'Resize the right panel' })).toHaveAttribute('aria-valuenow', String(await widthOf(v.locator('aside.right'))))
   expect(saved()).toMatchObject({ sidebarWidth: 480, rightWidth: 720 })
 })
+
+test('commit form: a tall summary field and a six-line description that grows vertically', async () => {
+  const summary = v.getByPlaceholder('Summary', { exact: true })
+  const description = v.getByPlaceholder('Description', { exact: true })
+  await expect(v.getByLabel('Commit message')).toHaveAttribute('placeholder', 'Summary')
+  expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(42)
+  expect(await summary.evaluate((e) => getComputedStyle(e).fontSize)).toBe('14px')
+  await expect(description).toHaveAttribute('rows', '6')
+  expect(await description.evaluate((e) => getComputedStyle(e).resize)).toBe('vertical')
+  await expect(v.locator('.commit-form')).not.toContainText(/required|optional/i)
+})

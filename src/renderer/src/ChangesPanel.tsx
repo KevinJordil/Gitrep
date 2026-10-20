@@ -153,11 +153,11 @@ export function ChangesPanel({ repo, status, selection, onSelect, onConflict, ru
             {thinking ? 'Claude is writing…' : 'Generate with Claude'}
           </button>
         </div>
-        <input id={`summary-${repo}`} className="field" value={summary} onChange={(e) => setSummary(e.target.value)} onKeyDown={onKey} placeholder="Summary (required)" />
+        <input id={`summary-${repo}`} className="field" value={summary} onChange={(e) => setSummary(e.target.value)} onKeyDown={onKey} placeholder="Summary" />
         <label htmlFor={`body-${repo}`} className="sr-only">
           Description
         </label>
-        <textarea id={`body-${repo}`} className="field" rows={4} value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={onKey} placeholder="Description (optional)" />
+        <textarea id={`body-${repo}`} className="field" rows={6} value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={onKey} placeholder="Description" />
         {note && <span className="note">{note}</span>}
         {operation && <span className="note">Finish the {operation} with Continue in the banner.</span>}
         <label className="check">

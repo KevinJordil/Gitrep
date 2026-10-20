@@ -453,3 +453,5 @@ mark.cur { background: var(--amber); color: var(--on-c); }
 .splitter.at-right { right: calc(var(--right-w) - 3px); }
 .splitter:hover, .splitter:focus-visible, body.resizing .splitter:active { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: none; }
 body.resizing { user-select: none; cursor: col-resize; }
+.commit-form input.field { height: 42px; font-size: 14px; }
+.commit-form textarea.field { min-height: 72px; max-height: 50vh; font-size: 13px; resize: vertical; }
