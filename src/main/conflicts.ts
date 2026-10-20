@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { hasConflictMarkers } from '../shared/conflicts'
 import type { ConflictFile, ConflictSide, OperationInfo, RebaseStep } from '../shared/types'
+import { isSensitive } from './claude'
 import { currentOperation, git, gitDir, serialized } from './git'
 import { getStatus, insideRepo, RO } from './repo'
 
@@ -136,7 +137,9 @@ const MAX_FILES = 50
 // What Claude Code is told when the conflict is handed over to it in a terminal.
 export function handOverContext(info: OperationInfo, files: string[]): string {
   const current = info.steps.find((s) => s.state === 'current')
-  const listed = files.slice(0, MAX_FILES).map(clean).join(', ') + (files.length > MAX_FILES ? ` and ${files.length - MAX_FILES} more` : '')
+  const shown = files.filter((f) => !isSensitive(f))
+  const hidden = files.length - shown.length
+  const listed = shown.slice(0, MAX_FILES).map(clean).join(', ') + (shown.length > MAX_FILES ? ` and ${shown.length - MAX_FILES} more` : '') + (hidden ? ` and ${hidden} other files` : '')
   return [
     `${info.operation ? `A ${info.operation} stopped on conflicts` : 'Applying a stash left conflicts'} in this git repository.`,
     `Upper side (stage 2, HEAD): ${clean(info.ours.name)} (${clean(info.ours.detail)}).`,

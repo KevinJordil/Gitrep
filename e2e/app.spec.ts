@@ -54,8 +54,11 @@ test('3. staging the first change group from the gutter', async () => {
   await v.locator('.file', { hasText: 'file.txt' }).getByRole('button', { name: /file\.txt/ }).first().click()
   await expect(v.locator('.hunk')).toHaveCount(2)
   await shot('diff')
-  await v.locator('.hunk').first().locator('.gbtn').first().click()
-  await expect(v.locator('.fgroup', { hasText: 'Staged' }).locator('.file', { hasText: 'file.txt' })).toBeVisible()
+  await expect(v.locator('.hunk').first()).toContainText('line 3 CHANGED')
+  await expect(async () => {
+    await v.locator('.hunk').first().locator('.gbtn').first().click()
+    await expect(v.locator('.fgroup', { hasText: 'Staged' }).locator('.file', { hasText: 'file.txt' })).toBeVisible({ timeout: 2000 })
+  }).toPass()
   const cached = fx.git(fx.beta, 'diff', '--cached')
   expect(cached).toContain('+line 3 CHANGED')
   expect(cached).not.toContain('line 15')

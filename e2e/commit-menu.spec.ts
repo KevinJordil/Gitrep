@@ -93,7 +93,7 @@ test('cherry-pick onto main, then revert it', async () => {
   await expect.poll(() => git('log', '-1', '--format=%s')).toBe('feat: y')
   expect(existsSync(join(fx.alpha, 'y.txt'))).toBe(true)
   await expect(page.locator('.toast', { hasText: 'Cherry-picked' })).toBeVisible()
-  const picked = v.locator('.graph-rows .row').filter({ has: page.locator('.ref.head') })
+  const picked = v.locator('.graph-rows .row', { hasText: 'feat: y' }).filter({ has: page.locator('.ref.head') })
   await picked.click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Revert this commit' }).click()
   await expect.poll(() => git('log', '-1', '--format=%s')).toBe('Revert "feat: y"')

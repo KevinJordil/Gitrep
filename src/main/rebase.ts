@@ -74,13 +74,15 @@ async function writeTodo(dir: string, commits: RebaseCommit[], items: RebaseItem
   await mkdir(dir, { recursive: true })
   const bySha = new Map(commits.map((c) => [c.sha, c]))
   const lines: string[] = []
-  let group: { message: string; changed: boolean } | null = null
+  let group: { message: string; changed: boolean; n: number } | null = null
   let files = 0
+  // The amend only runs when the group's pick produced a commit (not emptied and dropped, not skipped).
   const close = async () => {
     if (!group?.changed) return
-    const file = join(dir, `message-${++files}.txt`)
+    const file = join(dir, `message-${group.n}.txt`)
     await writeFile(file, group.message.trim() + '\n')
-    lines.push(`exec git commit --amend --no-verify --cleanup=whitespace -F ${quote(file)}`)
+    const before = quote(join(dir, `before-${group.n}`))
+    lines.push(`exec if [ "$(git rev-parse HEAD)" != "$(cat ${before})" ]; then git commit --amend --no-verify --cleanup=whitespace -F ${quote(file)}; fi`)
   }
   for (const item of items) {
     const c = bySha.get(item.sha)!
@@ -92,13 +94,16 @@ async function writeTodo(dir: string, commits: RebaseCommit[], items: RebaseItem
     }
     if (item.action === 'squash' || item.action === 'fixup') {
       lines.push(`fixup ${c.sha} ${subject}`)
-      if (item.action === 'squash') group = { message: `${group!.message.trim()}\n\n${item.message ?? messageOf(c)}`, changed: true }
+      if (item.action === 'squash') group = { ...group!, message: `${group!.message.trim()}\n\n${item.message ?? messageOf(c)}`, changed: true }
       continue
     }
     await close()
-    lines.push(`pick ${c.sha} ${subject}`)
     const message = item.action === 'reword' && item.message !== undefined ? item.message : messageOf(c)
-    group = { message, changed: message.trim() !== messageOf(c).trim() }
+    const changed = message.trim() !== messageOf(c).trim()
+    const n = ++files // a later squash can change the group: always record where it started
+    lines.push(`exec git rev-parse HEAD > ${quote(join(dir, `before-${n}`))}`)
+    lines.push(`pick ${c.sha} ${subject}`)
+    group = { message, changed, n }
   }
   await close()
   const todo = join(dir, 'todo')
@@ -113,7 +118,7 @@ export async function interactiveRebase(repo: string, req: InteractiveRebaseRequ
     const plan = await rebaseCommits(repo, String(req?.branch), String(req?.upstream))
     const list = validateItems(plan.commits, req?.items)
     const todo = await writeTodo(join(await gitDir(repo), 'gitrep-rebase'), plan.commits, list)
-    const args = ['rebase', '-i', '--empty=drop', ...(req.autostash ? ['--autostash'] : []), plan.onto, plan.branch]
+    const args = ['rebase', '-i', '--empty=drop', req.autostash ? '--autostash' : '--no-autostash', plan.onto, plan.branch]
     // git runs the sequence editor with its own todo file as argument: ours replaces it.
     return tracked(repo, `Interactive rebase of ${plan.branch}`, 'keep', () => mayConflict(repo, args, { GIT_SEQUENCE_EDITOR: `cp ${quote(todo)}` }))
   })

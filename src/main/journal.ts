@@ -50,7 +50,6 @@ export function record(repo: string, label: string, step: Step): void {
   if (h.undo.length > MAX_ENTRIES) h.undo.shift()
   h.redo = []
   while (h.undo.length > 1 && patchBytes(h) > MAX_PATCH_BYTES) h.undo.shift()
-  h.pending = undefined
 }
 
 export const peek = (repo: string, stack: 'undo' | 'redo'): Entry | undefined => histories.get(repo)?.[stack].at(-1)
@@ -102,11 +101,19 @@ async function dropStalePending(repo: string): Promise<void> {
 export async function tracked<T>(repo: string, label: string, mode: MoveMode, fn: () => Promise<T>, saved?: string): Promise<T> {
   await dropStalePending(repo)
   const before = await snapshot(repo)
-  const result = await fn()
+  let result: T
+  try {
+    result = await fn()
+  } catch (e) {
+    // A stop without conflicts (failing exec, signing failure) leaves an operation in progress: Continue journals it.
+    if (await currentOperation(repo)) historyOf(repo).pending = { label, mode, before }
+    throw e
+  }
   if (result === 'conflicts' && (await currentOperation(repo))) {
     historyOf(repo).pending = { label, mode, before }
     return result
   }
+  historyOf(repo).pending = undefined
   const after = await snapshot(repo)
   // Saved changes make a step even when the refs did not move (reset --hard HEAD).
   if (!same(before, after) || saved) record(repo, label, { kind: 'refs', before, after, mode, ...(saved ? { saved } : {}) })

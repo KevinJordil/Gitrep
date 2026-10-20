@@ -185,6 +185,12 @@ describe('hand-over safety', () => {
     expect(text.split('\n')).toHaveLength(7)
   })
 
+  it('does not list sensitive files in the context', () => {
+    const text = handOverContext({ operation: 'merge', ours: { name: 'a', detail: 'x' }, theirs: { name: 'b', detail: 'y' }, steps: [] }, ['src/a.c', '.env', 'a.pem'])
+    expect(text).toContain('Conflicted files: src/a.c and 2 other files')
+    expect(text).not.toContain('.env')
+  })
+
   it('treats a file that is not valid UTF-8 as binary', async () => {
     const repo = await setup(async (r) => writeFile(join(r, 'a.txt'), Buffer.from([0x66, 0xe9, 0x0a])))
     await merge(repo, 'feature', 'main')

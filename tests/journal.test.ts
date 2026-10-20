@@ -397,4 +397,26 @@ describe('undo of stashes and discards', () => {
     expect((await getStashes(repo)).map((s) => s.message)).toEqual(['k'])
     expect((await getStatus(repo)).staged).toEqual([])
   })
+
+  it('keeps a stopped merge journaled when another action is recorded meanwhile', async () => {
+    const repo = await setup(true)
+    const main = await rev(repo)
+    expect(await integrate(repo, { source: 'feature', target: 'main', mode: 'merge', message: '', autostash: false })).toBe('conflicts')
+    await createTag(repo, 'v1', main, '')
+    await write(repo, 'a.txt', 'both\n')
+    await stage(repo, ['a.txt'])
+    expect(await continueOperation(repo)).toBe('done')
+    await undo(repo) // the merge (the tag is an older entry)
+    expect(await rev(repo)).toBe(main)
+  })
+
+  it('redoes a hard reset to the same commit: the changes are discarded again', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'uncommitted\n')
+    await resetTo(repo, 'HEAD', 'hard')
+    await undo(repo)
+    expect(await read(repo, 'a.txt')).toBe('uncommitted\n')
+    await redo(repo)
+    expect(await read(repo, 'a.txt')).toBe('main\n')
+  })
 })

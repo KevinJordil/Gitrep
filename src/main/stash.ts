@@ -26,7 +26,7 @@ export async function stashPush(repo: string, message: string, includeUntracked:
     if (!tracked && !(includeUntracked && untracked)) throw new Error(untracked ? 'Only untracked files changed: tick "Include untracked files"' : 'No local changes to stash')
     const text = String(message ?? '').trim()
     const sha = await pushStash(repo, text, includeUntracked)
-    if (sha) record(repo, `Stash "${text || 'local changes'}"`, { kind: 'stash', pushed: true, sha, message: text, untracked: includeUntracked })
+    if (sha) record(repo, `Stash "${text || 'local changes'}"`, { kind: 'stash', pushed: true, sha, message: text, untracked: includeUntracked && untracked > 0 })
   })
 }
 

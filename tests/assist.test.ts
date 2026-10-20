@@ -46,6 +46,11 @@ describe('parseSuggestions', () => {
     ])
   })
 
+  it('strips carriage returns and trailing empty lines from a resolution', () => {
+    const out = ['=== conflict 1', 'confidence: high', 'summary: s', 'explanation: e', '--- resolution', 'main\r', 'feature\r', '', '', '=== end'].join('\n')
+    expect(parseSuggestions(out, 1)[0]?.lines).toEqual(['main', 'feature'])
+  })
+
   it('ignores a resolution that still has conflict markers, and fails when nothing can be read', () => {
     const bad = ['=== conflict 1', 'confidence: low', 'summary: x', 'explanation: y', '--- resolution', '<<<<<<< HEAD', 'a', '=======', 'b', '>>>>>>> f', '=== end'].join('\n')
     expect(parseSuggestions(bad, 1)).toEqual([null])

@@ -6,6 +6,7 @@ import { git } from '../src/main/git'
 import { parseStashes } from '../src/main/parse'
 import { getStatus } from '../src/main/repo'
 import { integrate } from '../src/main/ops'
+import { redo, undo } from '../src/main/undo'
 import { getStashes, stashApply, stashBranch, stashConflicts, stashDrop, stashPush } from '../src/main/stash'
 import { commitAll, makeRepo, write } from './helpers'
 
@@ -40,6 +41,15 @@ describe('stash operations', () => {
     expect(s.untracked).toMatch(/^[0-9a-f]{40}$/)
     expect(existsSync(join(repo, 'new.txt'))).toBe(false)
     expect((await getStatus(repo)).unstaged).toEqual([])
+  })
+
+  it('redoes a push with untracked files ticked when there were none', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'changed\n')
+    await stashPush(repo, 'tracked only', true)
+    await undo(repo)
+    await redo(repo)
+    expect(await getStashes(repo)).toHaveLength(1)
   })
 
   it('refuses when there is nothing to stash', async () => {

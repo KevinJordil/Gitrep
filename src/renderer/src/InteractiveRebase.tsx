@@ -62,14 +62,14 @@ export function InteractiveRebase({ repo, branch, upstream, status, busy, runOut
     let cancelled = false
     api.rebaseCommits(repo, branch, upstream).then(
       (p) => {
-        if (cancelled) return
+        if (cancelled || !alive.current) return
         setPlan(p)
         setRows(rowsOf(p))
         setExplanation(null)
         setStale(false)
       },
       (e: unknown) => {
-        if (cancelled) return
+        if (cancelled || !alive.current) return
         notify('error', errorText(e))
         onClose()
       }

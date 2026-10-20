@@ -41,6 +41,10 @@ export function parseSuggestions(out: string, count: number): (ConflictSuggestio
     } else if (n < 0) continue
     else if (line.trim() === '=== end') {
       found = true
+      if (lines) {
+        for (let i = 0; i < lines.length; i++) lines[i] = lines[i].replace(/\r$/, '')
+        while (lines.length && lines[lines.length - 1] === '') lines.pop()
+      }
       const confidence = CONFIDENCE.find((c) => c === fields.confidence?.toLowerCase()) ?? 'low'
       if (n < count && lines && !hasConflictMarkers(lines.join('\n'))) result[n] = { lines, confidence, summary: fields.summary ?? '', explanation: fields.explanation ?? '' }
       n = -1

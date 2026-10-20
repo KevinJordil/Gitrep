@@ -25,7 +25,7 @@ async function moveRefs(repo: string, from: Snapshot, to: Snapshot, mode: 'soft'
   }
   if (from.head.branch === to.head.branch) {
     const current = to.head.branch
-    if (from.head.sha !== to.head.sha) {
+    if (from.head.sha !== to.head.sha || mode === 'hard') {
       if (to.head.sha) await git(repo, ['reset', `--${mode}`, to.head.sha])
       else if (current) await set(current) // back before the first commit
     }
@@ -39,7 +39,10 @@ async function moveRefs(repo: string, from: Snapshot, to: Snapshot, mode: 'soft'
   try {
     await git(repo, to.head.branch ? ['switch', to.head.branch] : ['switch', '--detach', to.head.sha!])
   } catch (e) {
-    if (target) await git(repo, from.heads[target] ? ['update-ref', `refs/heads/${target}`, from.heads[target].sha, to.heads[target]?.sha ?? ''] : ['update-ref', '-d', `refs/heads/${target}`, to.heads[target]!.sha])
+    if (target) {
+      const undoSet = from.heads[target] ? ['update-ref', `refs/heads/${target}`, from.heads[target].sha, to.heads[target]?.sha ?? ''] : ['update-ref', '-d', `refs/heads/${target}`, to.heads[target]!.sha]
+      await git(repo, undoSet).catch(() => undefined) // the switch error is the one to report
+    }
     throw e
   }
   for (const n of names) if (n !== from.head.branch && n !== target) await set(n)

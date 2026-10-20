@@ -73,15 +73,15 @@ export async function launchFixture(): Promise<Fixture> {
   git(gamma, 'commit', '-m', 'init gamma')
   git(gamma, 'checkout', '--detach')
 
-  // The task is the last argument: a conflict gets one proposal, a rebase plan reverses the commits and drops
+  // The prompt is the last argument: a conflict gets one proposal, a rebase plan reverses the commits and drops
   // the "wip" ones, everything else gets the fixed message.
   const fakeClaude = join(root, 'claude')
   writeFileSync(
     fakeClaude,
     [
       '#!/bin/sh',
-      'for task; do :; done',
-      'case "$task" in',
+      'for prompt; do :; done',
+      'case "$prompt" in',
       `  Resolve*) printf '%s\\n' '=== conflict 1' 'confidence: high' 'summary: ${FAKE_SUMMARY}' 'explanation: Both changes are needed.' '--- resolution' two other '=== end' ;;`,
       `  Plan*) awk '/^commit /{ line[n++] = ($3 ~ /^wip/ ? "drop " : "pick ") $2 } END { for (i = n - 1; i >= 0; i--) print line[i]; print "---"; print "${FAKE_PLAN}" }' ;;`,
       `  *) echo '${FAKE_MESSAGE}' ;;`,
