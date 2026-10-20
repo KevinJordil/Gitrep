@@ -81,7 +81,14 @@ export function App() {
     }
   }
   const onBranch = useCallback((path: string, label: string) => setBranches((b) => (b[path] === label ? b : { ...b, [path]: label })), [])
-  const updateSettings = useCallback((patch: Partial<Settings>) => void api.updateSettings(patch).then(reload, (e: unknown) => notify('error', errorText(e))), [reload, notify])
+  const updateSettings = useCallback(
+    (patch: Partial<Settings>) =>
+      api.updateSettings(patch).then(
+        () => (reload(), true),
+        (e: unknown) => (notify('error', errorText(e)), false)
+      ),
+    [reload, notify]
+  )
 
   const toastList = (
     <div className="toasts" role="status">

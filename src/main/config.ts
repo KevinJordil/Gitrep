@@ -2,7 +2,7 @@ import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from
 import { basename, dirname } from 'node:path'
 import type { Config, Settings } from '../shared/types'
 
-export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30 } }
+export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360 } }
 
 export function loadConfig(file: string): Config {
   let raw: string
@@ -38,9 +38,13 @@ export function removeRepo(cfg: Config, path: string): Config {
   return { ...cfg, repos: cfg.repos.filter((r) => r.path !== path), openTabs: cfg.openTabs.filter((p) => p !== path) }
 }
 
+const isWidth = (v: unknown) => Number.isInteger(v) && (v as number) >= 100 && (v as number) <= 2000
+
 // The settings the app changes itself, with their validation; the others (Claude model and path) are edited in the file.
 const EDITABLE: Partial<Record<keyof Settings, (v: unknown) => boolean>> = {
-  activeDays: (v) => Number.isInteger(v) && (v as number) >= 0
+  activeDays: (v) => Number.isInteger(v) && (v as number) >= 0,
+  sidebarWidth: (v) => isWidth(v),
+  rightWidth: (v) => isWidth(v)
 }
 
 export function applySettings(cfg: Config, patch: Partial<Settings>): Config {

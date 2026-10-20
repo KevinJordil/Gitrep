@@ -1,0 +1,75 @@
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { launchFixture, openRepo, type Fixture } from './fixtures'
+
+test.describe.configure({ mode: 'serial' })
+
+let fx: Fixture
+let page: Page
+let v: Locator
+const saved = () => JSON.parse(readFileSync(join(fx.root, 'userData', 'config.json'), 'utf8')).settings
+const widthOf = async (l: Locator) => Math.round((await l.boundingBox())!.width)
+
+test.beforeAll(async () => {
+  fx = await launchFixture()
+  page = fx.page
+  v = await openRepo(page, 'beta')
+})
+test.afterAll(async () => {
+  await fx?.close()
+})
+
+// Drags the handle sideways by dx with the mouse.
+async function drag(handle: Locator, dx: number) {
+  const box = (await handle.boundingBox())!
+  const x = box.x + box.width / 2
+  const y = box.y + 200
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + dx, y, { steps: 5 })
+  await page.mouse.up()
+}
+
+test('the sidebar resizes with the mouse and the keyboard, double-click resets it; the width is saved', async () => {
+  const sidebar = v.locator('.sidebar')
+  const handle = v.getByRole('separator', { name: 'Resize the sidebar' })
+  await expect(handle).toHaveAttribute('aria-orientation', 'vertical')
+  expect(await widthOf(sidebar)).toBe(232)
+  await drag(handle, 60)
+  await expect.poll(() => widthOf(sidebar)).toBe(292)
+  await expect.poll(() => saved().sidebarWidth).toBe(292)
+  await expect(handle).toHaveAttribute('aria-valuenow', '292') // the saved width is back from the config
+  await handle.focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect.poll(() => widthOf(sidebar)).toBe(276)
+  await expect(handle).toHaveAttribute('aria-valuenow', '276')
+  await drag(handle, -500) // stops at the minimum
+  await expect.poll(() => widthOf(sidebar)).toBe(160)
+  await handle.dblclick()
+  await expect.poll(() => widthOf(sidebar)).toBe(232)
+  await expect.poll(() => saved().sidebarWidth).toBe(232)
+})
+
+test('the right panel resizes from its left edge', async () => {
+  const right = v.locator('aside.right')
+  const handle = v.getByRole('separator', { name: 'Resize the right panel' })
+  expect(await widthOf(right)).toBe(360)
+  await drag(handle, -100)
+  await expect.poll(() => widthOf(right)).toBe(460)
+  await expect.poll(() => saved().rightWidth).toBe(460)
+  await handle.blur()
+  await page.mouse.move(600, 10)
+  await page.screenshot({ path: 'e2e-artifacts/resized-panes.png' })
+})
+
+test('wide saved widths are clamped to a small window; the saved values are kept', async () => {
+  await page.evaluate(() => (window as any).api.updateSettings({ sidebarWidth: 480, rightWidth: 720 }))
+  await expect.poll(() => saved().rightWidth).toBe(720)
+  await fx.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 700))
+  const center = v.locator('section.center')
+  await expect.poll(() => widthOf(center)).toBeGreaterThanOrEqual(360)
+  expect(await widthOf(v.locator('aside.right'))).toBeLessThan(720)
+  await expect(v.getByRole('separator', { name: 'Resize the right panel' })).toHaveAttribute('aria-valuenow', String(await widthOf(v.locator('aside.right'))))
+  expect(saved()).toMatchObject({ sidebarWidth: 480, rightWidth: 720 })
+})

@@ -14,7 +14,7 @@ describe('config', () => {
     saveConfig(file, { ...DEFAULT_CONFIG, repos: [{ path: '/r/a', name: 'a' }] })
     expect(loadConfig(file).repos).toEqual([{ path: '/r/a', name: 'a' }])
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30 })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360 })
   })
 
   it('backs up a corrupt file instead of losing it', async () => {
@@ -40,6 +40,9 @@ describe('config', () => {
     expect(() => applySettings(DEFAULT_CONFIG, { activeDays: -1 })).toThrow('Invalid setting: activeDays')
     expect(() => applySettings(DEFAULT_CONFIG, { activeDays: 1.5 })).toThrow('Invalid setting: activeDays')
     expect(() => applySettings(DEFAULT_CONFIG, { claudePath: '/bin/sh' })).toThrow('Invalid setting: claudePath')
+    expect(applySettings(DEFAULT_CONFIG, { sidebarWidth: 300, rightWidth: 420 }).settings).toMatchObject({ sidebarWidth: 300, rightWidth: 420 })
+    expect(() => applySettings(DEFAULT_CONFIG, { rightWidth: 50 })).toThrow('Invalid setting: rightWidth')
+    expect(() => applySettings(DEFAULT_CONFIG, { sidebarWidth: 250.5 })).toThrow('Invalid setting: sidebarWidth')
     expect(DEFAULT_CONFIG.settings.activeDays).toBe(30) // not mutated
     expect(() => applySettings(DEFAULT_CONFIG, { constructor: 1 } as never)).toThrow('Invalid setting: constructor')
     expect(() => applySettings(DEFAULT_CONFIG, { toString: 1 } as never)).toThrow('Invalid setting: toString')

@@ -112,6 +112,8 @@ export interface Settings {
   claudeModel: string
   claudePath: string // empty = resolve from the login shell
   activeDays: number // the graph draws the branches committed to in the last N days; 0 = every branch
+  sidebarWidth: number // px, resizable
+  rightWidth: number // px, resizable
 }
 
 export interface Config {

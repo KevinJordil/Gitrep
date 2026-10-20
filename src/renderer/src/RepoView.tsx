@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Branch, Commit, GraphScope, OperationInfo, RepoStatus, ResetMode, Settings, Stash, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
@@ -18,6 +18,8 @@ import type { Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
 import { applySuggestions, blocksOf, hunkOf, newDraft, textOf, type Draft } from './resolve'
 import { Sidebar } from './Sidebar'
+import { clampPane } from './panes'
+import { Splitter } from './Splitter'
 import { StashDialog, StashPanel, StashView } from './Stash'
 import { useToast } from './toast'
 
@@ -29,12 +31,21 @@ interface Props {
   path: string
   active: boolean
   settings: Settings
-  onSettings: (patch: Partial<Settings>) => void
+  onSettings: (patch: Partial<Settings>) => Promise<boolean> // false when the save failed
   onBranch: (path: string, label: string) => void
 }
 
 export function RepoView({ path, active, settings, onSettings, onBranch }: Props) {
   const { activeDays } = settings
+  // The saved pane widths, clamped to the current window so the center keeps its minimum (the saved values are left as they are).
+  const [winW, setWinW] = useState(window.innerWidth)
+  useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const sideW = clampPane('sidebar', settings.sidebarWidth, settings.rightWidth, winW)
+  const rightW = clampPane('right', settings.rightWidth, sideW, winW)
   const notify = useToast()
   const [status, setStatus] = useState<RepoStatus | null>(null)
   const [log, setLog] = useState<Commit[]>([])
@@ -404,7 +415,9 @@ export function RepoView({ path, active, settings, onSettings, onBranch }: Props
           onResolveAll={() => void resolveAll()}
         />
       )}
-      <div className="panes">
+      <div className="panes" style={{ '--side-w': `${sideW}px`, '--right-w': `${rightW}px` } as CSSProperties}>
+        <Splitter pane="sidebar" width={sideW} other={rightW} onSave={(w) => onSettings({ sidebarWidth: w })} />
+        <Splitter pane="right" width={rightW} other={sideW} onSave={(w) => onSettings({ rightWidth: w })} />
         <Sidebar
           branches={branches}
           tags={tags}

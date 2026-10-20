@@ -94,10 +94,10 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 
 /* repo layout */
 .repo { flex: 1; min-height: 0; flex-direction: column; }
-.panes { flex: 1; min-height: 0; display: flex; }
-.sidebar { width: 232px; flex: none; background: var(--panel); border-right: 1px solid var(--line); padding: 12px 8px; overflow: auto; display: flex; flex-direction: column; gap: 18px; }
+.panes { --side-w: 232px; --right-w: 360px; flex: 1; min-height: 0; display: flex; position: relative; }
+.sidebar { width: var(--side-w); flex: none; background: var(--panel); border-right: 1px solid var(--line); padding: 12px 8px; overflow: auto; display: flex; flex-direction: column; gap: 18px; }
 .center { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
-.right { width: 360px; flex: none; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.right { width: var(--right-w); flex: none; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
 .side-title { display: flex; justify-content: space-between; padding: 0 8px 6px; color: var(--faint); font-size: 11.5px; font-weight: 500; }
 .side-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 6px; color: var(--muted); font: 12px var(--mono); }
 .side-item:hover { background: var(--hover); }
@@ -446,3 +446,10 @@ mark.cur { background: var(--amber); color: var(--on-c); }
 .ri-start { flex: 2; }
 .side-more { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 8px; border-radius: 6px; color: var(--faint); font-size: 12px; }
 .side-more:hover { background: var(--hover); color: var(--muted); }
+
+/* resizable panes: handles over the inner edges of the sidebar and the right panel */
+.splitter { position: absolute; top: 0; bottom: 0; z-index: 5; width: 7px; cursor: col-resize; touch-action: none; background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; }
+.splitter.at-sidebar { left: calc(var(--side-w) - 4px); }
+.splitter.at-right { right: calc(var(--right-w) - 3px); }
+.splitter:hover, .splitter:focus-visible, body.resizing .splitter:active { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: none; }
+body.resizing { user-select: none; cursor: col-resize; }
