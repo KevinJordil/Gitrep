@@ -3,6 +3,8 @@ import type {
   Commit,
   CommitDetails,
   ConflictFile,
+  ConflictHunk,
+  ConflictSuggestion,
   Config,
   DiffSide,
   Explanation,
@@ -70,6 +72,7 @@ export interface Api {
   resolveFile(repo: string, path: string, content: string): Promise<void>
   resolveSide(repo: string, path: string, side: 'ours' | 'theirs'): Promise<void>
   handOver(repo: string): Promise<void> // opens Claude Code in a terminal with the conflict's context
+  suggestConflict(repo: string, path: string, hunks: ConflictHunk[]): Promise<(ConflictSuggestion | null)[]>
   mergePreview(repo: string, source: string, target: string): Promise<MergePreview>
   integrate(repo: string, req: MergeRequest): Promise<OpOutcome>
   stashes(repo: string): Promise<Stash[]>
@@ -134,6 +137,7 @@ export const API_METHODS = [
   'resolveFile',
   'resolveSide',
   'handOver',
+  'suggestConflict',
   'mergePreview',
   'integrate',
   'stashes',

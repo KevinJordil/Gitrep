@@ -4,7 +4,8 @@ import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { API_METHODS, type Api, type IpcResult } from '../shared/api'
-import type { Config, GraphScope, MergeRequest, RepoEntry } from '../shared/types'
+import type { Config, ConflictHunk, GraphScope, MergeRequest, RepoEntry } from '../shared/types'
+import * as assist from './assist'
 import * as claude from './claude'
 import { addRepo, loadConfig, removeRepo, saveConfig } from './config'
 import * as conflicts from './conflicts'
@@ -191,6 +192,7 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   resolveFile: forRepo(conflicts.resolveFile),
   resolveSide: forRepo(conflicts.resolveSide),
   handOver: forRepo(handOver),
+  suggestConflict: forRepo((p, path: string, hunks: ConflictHunk[]) => assist.suggestConflict(p, path, hunks, claudeOptions())),
   mergePreview: forRepo(ops.mergePreview),
   integrate: forRepo((p, req: MergeRequest) => ops.integrate(p, { ...req, autostash: !!req?.autostash })),
   stashes: forRepo(stash.getStashes),
