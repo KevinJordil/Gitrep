@@ -53,7 +53,7 @@ test('stash content: files, diff, details', async () => {
   await page.screenshot({ path: 'e2e-artifacts/stash.png' })
 })
 
-test('apply keeps the stash, drop removes it after confirmation', async () => {
+test('apply keeps the stash, drop removes it', async () => {
   await v.locator('.stash-actions').getByRole('button', { name: 'Apply' }).click()
   await expect.poll(a).toBe('one\ntwo\nstashed\n')
   expect(existsSync(join(fx.alpha, 'notes.txt'))).toBe(true)

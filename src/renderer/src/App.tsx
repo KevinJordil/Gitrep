@@ -5,12 +5,13 @@ import { Dashboard } from './Dashboard'
 import { errorText } from './format'
 import { Icon, Logo } from './icons'
 import { RepoView } from './RepoView'
-import { ToastContext, type Notify, type ToastKind } from './toast'
+import { ToastContext, type Notify, type ToastAction, type ToastKind } from './toast'
 
 interface Toast {
   id: number
   kind: ToastKind
   text: string
+  action?: ToastAction
 }
 
 let nextToastId = 1
@@ -23,10 +24,12 @@ export function App() {
   const configRef = useRef<Config | null>(null)
   const queue = useRef<Promise<void>>(Promise.resolve())
 
-  const notify = useCallback<Notify>((kind, text) => {
+  const dismiss = (id: number) => setToasts((t) => t.filter((x) => x.id !== id))
+  // Info toasts go away by themselves; one with a button stays longer so it can be clicked.
+  const notify = useCallback<Notify>((kind, text, action) => {
     const id = nextToastId++
-    setToasts((t) => [...t.slice(-4), { id, kind, text }])
-    if (kind === 'info') setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000)
+    setToasts((t) => [...t.slice(-4), { id, kind, text, action }])
+    if (kind === 'info') setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? 10_000 : 5000)
   }, [])
 
   const reload = useCallback(async () => {
@@ -82,9 +85,21 @@ export function App() {
   const toastList = (
     <div className="toasts" role="status">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast ${t.kind}`}>
+        <div key={t.id} className={`toast ${t.kind} ${t.action ? 'act' : ''}`}>
+          {t.action && <Icon name="check" size={16} stroke={2} />}
           {t.kind === 'error' ? <pre>{t.text}</pre> : <span className="t">{t.text}</span>}
-          <button className="tab-close" aria-label="Dismiss notification" onClick={() => setToasts((x) => x.filter((y) => y.id !== t.id))}>
+          {t.action && (
+            <button
+              className="toast-btn"
+              onClick={() => {
+                dismiss(t.id)
+                t.action?.run()
+              }}
+            >
+              {t.action.label}
+            </button>
+          )}
+          <button className="tab-close" aria-label="Dismiss notification" onClick={() => dismiss(t.id)}>
             <Icon name="close" size={12} stroke={2} />
           </button>
         </div>

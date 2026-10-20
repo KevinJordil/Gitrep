@@ -303,3 +303,8 @@ mark.cur { background: var(--amber); color: var(--bg); }
 .mm-actions { display: flex; align-items: center; gap: 8px; align-self: stretch; }
 .mm-actions .btn-primary { height: 30px; }
 .mm-foot { display: block; padding: 4px 14px 12px; font-size: 12px; color: var(--faint); }
+
+/* undo */
+.toast.act { align-items: center; }
+.toast > svg { color: var(--green); flex: none; }
+.toast-btn { height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #3b4252; color: var(--text); font-weight: 500; white-space: nowrap; }

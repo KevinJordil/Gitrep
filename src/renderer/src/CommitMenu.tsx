@@ -6,7 +6,7 @@ export type CommitAction = 'checkout' | 'branch' | 'tag' | 'cherry-pick' | 'reve
 const RESETS: [ResetMode, string, string][] = [
   ['soft', 'Soft', 'Keeps the changes, staged'],
   ['mixed', 'Mixed', 'Keeps the changes, unstaged'],
-  ['hard', 'Hard', 'Discards all uncommitted changes']
+  ['hard', 'Hard', 'Discards uncommitted changes · can be undone']
 ]
 
 interface Props {

@@ -15,6 +15,7 @@ interface Props {
   onFocus: (f: Focus) => void
   onScope: (s: GraphScope) => void
   onDrop: DropBranch
+  onDelete: (b: Branch) => void
 }
 
 function Title({ title, count }: { title: string; count: number }) {
@@ -26,7 +27,7 @@ function Title({ title, count }: { title: string; count: number }) {
   )
 }
 
-export function Sidebar({ branches, tags, stashes, colors, focus, scope, onSwitch, onFocus, onScope, onDrop }: Props) {
+export function Sidebar({ branches, tags, stashes, colors, focus, scope, onSwitch, onFocus, onScope, onDrop, onDelete }: Props) {
   const dot = (sha: string, fallback: string) => {
     const c = colors.get(sha)
     return c === undefined ? fallback : laneColor(c)
@@ -78,6 +79,11 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, onSwitc
                 >
                   <Icon name="target" size={13} stroke={2} />
                 </button>
+                {!b.remote && !b.current && (
+                  <button className="sbtn" aria-label={`Delete ${b.name}`} title="Delete this branch (Ctrl+Z restores it)" onClick={() => onDelete(b)}>
+                    <Icon name="trash" size={13} stroke={2} />
+                  </button>
+                )}
               </div>
             )
           })}

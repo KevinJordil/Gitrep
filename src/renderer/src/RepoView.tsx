@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Branch, Commit, GraphScope, RepoStatus, ResetMode, Stash, Tag } from '../../shared/types'
+import type { Branch, Commit, GraphScope, RepoStatus, ResetMode, Stash, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
 import { CommitMenu, type CommitAction } from './CommitMenu'
@@ -35,6 +35,7 @@ export function RepoView({ path, active, onBranch }: Props) {
   const [branches, setBranches] = useState<Branch[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [stashes, setStashes] = useState<Stash[]>([])
+  const [undo, setUndo] = useState<UndoState>({ undo: null, redo: null })
   const [focus, setFocus] = useState<Focus>({ kind: 'wip' })
   const [scope, setScope] = useState<GraphScope>(ALL)
   const [selection, setSelection] = useState<Selection | null>(null)
@@ -79,12 +80,13 @@ export function RepoView({ path, active, onBranch }: Props) {
     const id = ++request.current
     await refreshStatus(true)
     try {
-      const [l, b, t, s] = await Promise.all([api.log(path, scope), api.branches(path), api.tags(path), api.stashes(path)])
+      const [l, b, t, s, u] = await Promise.all([api.log(path, scope), api.branches(path), api.tags(path), api.stashes(path), api.undoState(path)])
       if (id !== request.current) return // a newer load started; its result wins
       setLog(same(l))
       setBranches(same(b))
       setTags(same(t))
       setStashes(same(s))
+      setUndo(same(u))
     } catch (e) {
       report(e)
     }
@@ -172,6 +174,32 @@ export function RepoView({ path, active, onBranch }: Props) {
       }),
     [run, notify, focusOn]
   )
+  // The toast says what was undone and offers the opposite move.
+  const replay = useCallback(
+    (dir: 'undo' | 'redo'): void => {
+      void run(dir, async () => {
+        const back = dir === 'undo' ? 'redo' : 'undo'
+        notify('info', await api[dir](path), { label: back === 'redo' ? 'Redo' : 'Undo', run: () => replay(back) })
+      })
+    },
+    [path, run, notify]
+  )
+
+  // Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y in the active tab, except while typing or in a dialog.
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+      const key = e.key.toLowerCase()
+      const dir = key === 'z' ? (e.shiftKey ? 'redo' : 'undo') : key === 'y' && !e.shiftKey ? 'redo' : null
+      if (!dir || (e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable], dialog') || document.querySelector('dialog[open], [role="dialog"], [role="menu"]')) return
+      e.preventDefault()
+      if (!busy && undo[dir]) replay(dir)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active, busy, undo, replay])
+
   const openMenu = useCallback((commit: Commit, x: number, y: number) => setMenu({ commit, x, y }), [])
   const closeMenu = useCallback(() => setMenu(null), [])
   const openDrop = useCallback<DropBranch>((source, target, x, y) => setDrop({ source, target, x, y }), [])
@@ -212,7 +240,7 @@ export function RepoView({ path, active, onBranch }: Props) {
     else if (a === 'explain') focusOn({ kind: 'commit', sha: c.sha, explain: Date.now() })
     else {
       const mode = a.slice('reset-'.length) as ResetMode
-      if (mode === 'hard' && !window.confirm(`Reset ${target} to ${short} and discard all uncommitted changes? This cannot be undone.`)) return
+      if (mode === 'hard' && !window.confirm(`Reset ${target} to ${short} and discard all uncommitted changes? Undo (Ctrl+Z) brings them back while GitRep is open.`)) return
       void run('reset', () => api.reset(path, c.sha, mode), `${target} reset to ${short} (${mode})`)
     }
   }
@@ -239,6 +267,18 @@ export function RepoView({ path, active, onBranch }: Props) {
       />
     )
   const openCode = () => api.openInCode(path).catch((e: unknown) => notify('error', errorText(e)))
+  // git refuses to delete a branch that is not merged: ask, then force.
+  const deleteBranch = (b: Branch) =>
+    void run('delete', async () => {
+      try {
+        await api.deleteBranch(path, b.name, false)
+      } catch (e) {
+        if (!errorText(e).includes('not fully merged')) throw e
+        if (!window.confirm(`${b.name} is not fully merged. Delete it anyway? Ctrl+Z can restore it while GitRep is open.`)) return
+        await api.deleteBranch(path, b.name, true)
+      }
+      notify('info', `Branch ${b.name} deleted`)
+    })
 
   return (
     <>
@@ -247,6 +287,9 @@ export function RepoView({ path, active, onBranch }: Props) {
           <Icon name="branch" size={16} stroke={2} />
           {branchLabel}
         </span>
+        <ToolButton icon="undo" label="Undo" title={undo.undo ? `Undo ${undo.undo}` : 'Nothing to undo'} busy={busy === 'undo'} disabled={!!busy || !undo.undo} onClick={() => replay('undo')} />
+        <ToolButton icon="redo" label="Redo" title={undo.redo ? `Redo ${undo.redo}` : 'Nothing to redo'} busy={busy === 'redo'} disabled={!!busy || !undo.redo} onClick={() => replay('redo')} />
+        <div className="tsep" />
         <ToolButton icon="fetch" label="Fetch" busy={busy === 'fetch'} disabled={!!busy} onClick={() => void run('fetch', () => api.fetch(path), 'Fetch complete')} />
         <ToolButton icon="pull" label="Pull" count={status?.behind ? `↓${status.behind}` : ''} busy={busy === 'pull'} disabled={!!busy} onClick={() => void runOutcome('pull', () => api.pull(path), 'Pull complete')} />
         <ToolButton icon="push" label="Push" count={status?.ahead ? `↑${status.ahead}` : ''} busy={busy === 'push'} disabled={!!busy} onClick={() => void run('push', () => api.push(path), 'Push complete')} />
@@ -274,6 +317,7 @@ export function RepoView({ path, active, onBranch }: Props) {
           onFocus={focusOn}
           onScope={setScope}
           onDrop={openDrop}
+          onDelete={deleteBranch}
           onSwitch={(b) => void run('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)}
         />
         <section className="center">
@@ -318,15 +362,16 @@ export function RepoView({ path, active, onBranch }: Props) {
 interface ToolButtonProps {
   icon: IconName
   label: string
+  title?: string
   count?: string
   busy: boolean
   disabled: boolean
   onClick: () => void
 }
 
-function ToolButton({ icon, label, count, busy, disabled, onClick }: ToolButtonProps) {
+function ToolButton({ icon, label, title, count, busy, disabled, onClick }: ToolButtonProps) {
   return (
-    <button className="tbtn" disabled={disabled} onClick={onClick}>
+    <button className="tbtn" title={title} disabled={disabled} onClick={onClick}>
       {busy ? <span className="spin" /> : <Icon name={icon} />}
       <span>{label}</span>
       {count ? <span className="count">{count}</span> : null}

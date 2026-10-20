@@ -156,7 +156,7 @@ export function MergeMenu({ repo, source, target, status, x, y, runOutcome, onCl
               </label>
             )}
           </div>
-          <span className="mm-foot">Esc to cancel</span>
+          <span className="mm-foot">Esc to cancel · everything can be undone with Ctrl+Z</span>
         </>
       ) : (
         <div className="mm-box">

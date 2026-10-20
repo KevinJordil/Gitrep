@@ -33,7 +33,7 @@ export function ChangesPanel({ repo, status, selection, onSelect, run, busy }: P
 
   const discard = (files: FileChange[]) => {
     const what = files.length === 1 ? files[0].path : `${files.length} files`
-    if (!window.confirm(`Permanently discard the changes to ${what}?`)) return
+    if (!window.confirm(`Discard the changes to ${what}? Ctrl+Z can bring them back while GitRep is open (not for very large changes).`)) return
     void run('discard', async () => {
       if (!(await api.discard(repo, files))) notify('info', 'Discarded. Too large to be undone.')
     })

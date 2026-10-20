@@ -53,7 +53,7 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
   // hunk === null → apply the checkbox selection (bottom-up so earlier hunk positions stay valid).
   const apply = async (action: LineAction, hunk: number | null, lines: number[] | null) => {
     if (!diff) return
-    if (action === 'discard' && !window.confirm('Permanently discard these changes?')) return
+    if (action === 'discard' && !window.confirm('Discard these changes? Ctrl+Z can bring them back while GitRep is open (not for very large changes).')) return
     const targets: [number, number[] | null][] =
       hunk !== null
         ? [[hunk, lines]]

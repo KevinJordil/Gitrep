@@ -84,9 +84,6 @@ export function StashPanel({ repo, stash, branch, busy, run, runOutcome, onNewBr
     api.stashConflicts(repo, stash.sha).then(setConflicts, (e: unknown) => notify('error', errorText(e)))
   }, [repo, stash.sha, branch, notify])
   const untracked = files?.filter((f) => f.status === '?').length ?? 0
-  const drop = () => {
-    if (window.confirm(`Drop the stash "${stash.message}"? This cannot be undone.`)) void run('drop', () => api.stashDrop(repo, stash.sha), 'Stash dropped')
-  }
   return (
     <aside className="right commit-panel">
       <div className="cp-head">
@@ -111,11 +108,11 @@ export function StashPanel({ repo, stash, branch, busy, run, runOutcome, onNewBr
           <button className="btn ghost" disabled={!!busy} onClick={onNewBranch}>
             Create branch…
           </button>
-          <button className="btn danger" disabled={!!busy} onClick={drop}>
+          <button className="btn danger" disabled={!!busy} onClick={() => void run('drop', () => api.stashDrop(repo, stash.sha), 'Stash dropped')}>
             Drop
           </button>
         </div>
-        <span className="note">Apply keeps the stash. Pop applies it, then drops it. Drop asks first.</span>
+        <span className="note">Apply keeps the stash. Pop applies it, then drops it. Drop can be undone (Ctrl+Z).</span>
         {conflicts.length > 0 && (
           <div className="warn-box">
             <Icon name="warn" size={16} stroke={2} />
