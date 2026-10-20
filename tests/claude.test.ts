@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { adviseMerge, cleanMessage, COMMIT_SYSTEM_PROMPT, commitSystemPrompt, explainCommit, filterDiff, filterNumstat, generateCommitMessage, generateMergeMessage, generateStashMessage, MAX_DIFF_CHARS, resolveClaude } from '../src/main/claude'
+import { adviseMerge, cleanMessage, COMMIT_SYSTEM_PROMPT, commitSystemPrompt, explainCommit, filterDiff, filterNumstat, generateCommitMessage, generateMergeMessage, generateStashMessage, MAX_DIFF_CHARS, pickWindowsClaude, resolveClaude } from '../src/main/claude'
 import { git } from '../src/main/git'
 import { stage } from '../src/main/repo'
 import { commitAll, makeRepo, tempDir, write } from './helpers'
@@ -234,5 +234,18 @@ describe('merge prompts', () => {
     expect(stdin).toContain('Merging feature into main')
     expect(stdin).toContain('- feat: on feature')
     expect(stdin).toContain('f.c')
+  })
+})
+
+describe('pickWindowsClaude', () => {
+  it('refuses scripts and cmd shims', () => {
+    const msg = 'Claude Code on Windows needs claude.exe (native installer).'
+    expect(() => pickWindowsClaude('C:\\n\\claude\r\nC:\\n\\claude.cmd\r\n')).toThrow(msg)
+  })
+  it('takes the first .exe, whatever the case', () => {
+    expect(pickWindowsClaude('C:\\n\\claude.cmd\r\nC:\\b\\Claude.EXE\r\nC:\\c\\claude.exe\r\n')).toBe('C:\\b\\Claude.EXE')
+  })
+  it('reports a missing command', () => {
+    expect(() => pickWindowsClaude('')).toThrow('not found')
   })
 })

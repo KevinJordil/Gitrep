@@ -1,5 +1,4 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
-import { spawn } from 'node:child_process'
 import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,6 +12,7 @@ import * as conflicts from './conflicts'
 import { git, gitDir } from './git'
 import * as history from './history'
 import * as journal from './journal'
+import { codeCommand, run as launch, terminalCommand } from './launch'
 import * as ops from './ops'
 import * as rebase from './rebase'
 import * as repo from './repo'
@@ -48,17 +48,6 @@ function forRepo<A extends unknown[], T>(fn: (path: string, ...args: A) => Promi
     if (!isRegistered(path)) return Promise.reject(new Error(`Repository not registered: ${path}`))
     return fn(path, ...args)
   }
-}
-
-function launch(cmd: string, args: string[], cwd: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, detached: true, stdio: 'ignore' })
-    child.once('error', reject)
-    child.once('spawn', () => {
-      child.unref()
-      resolve()
-    })
-  })
 }
 
 async function fetchOne(path: string): Promise<void> {
@@ -211,8 +200,8 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   stashDrop: forRepo(stash.stashDrop),
   stashBranch: forRepo(stash.stashBranch),
   stashConflicts: forRepo(stash.stashConflicts),
-  openInCode: forRepo((p) => launch('code', [p], p)),
-  openTerminal: forRepo((p) => launch('gnome-terminal', [`--working-directory=${p}`], p).catch(() => launch('x-terminal-emulator', [], p))),
+  openInCode: forRepo((p) => launch(codeCommand(process.platform, p), p, process.env)),
+  openTerminal: forRepo((p) => launch(terminalCommand(process.platform, p), p, process.env)),
   undoState: forRepo(async (p) => journal.undoState(p)),
   undo: forRepo(undo.undo),
   redo: forRepo(undo.redo),

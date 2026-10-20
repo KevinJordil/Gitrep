@@ -1,10 +1,10 @@
-import { spawn } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { hasConflictMarkers } from '../shared/conflicts'
 import type { ConflictFile, ConflictSide, OperationInfo, RebaseStep } from '../shared/types'
 import { isSensitive } from './claude'
 import { currentOperation, git, gitDir, serialized } from './git'
+import { handOverCommand, run, withClaudeOnPath } from './launch'
 import { getStatus, insideRepo, RO } from './repo'
 
 const MAX_TEXT = 1024 * 1024 // Limit: bigger conflicted files are resolved by taking one side
@@ -151,27 +151,16 @@ export function handOverContext(info: OperationInfo, files: string[]): string {
   ].join('\n')
 }
 
-function launch(cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, env, detached: true, stdio: 'ignore' })
-    child.once('error', reject)
-    child.once('spawn', () => {
-      child.unref()
-      resolve()
-    })
-  })
-}
-
 // Claude Code in a terminal at the repository, started with the conflict's context as its first message.
 // GITREP_TERMINAL replaces the terminal (end-to-end runs record what would be started).
 export async function handOver(repo: string, claudePath: string): Promise<void> {
   const [info, status] = await Promise.all([getOperationInfo(repo), getStatus(repo)])
   if (!status.conflicted.length) throw new Error('No conflicted file to hand over')
   const context = handOverContext(info, status.conflicted.map((f) => f.path))
-  const env = { ...process.env, PATH: `${dirname(claudePath)}:${process.env.PATH ?? ''}` }
+  const env = withClaudeOnPath(process.env, claudePath)
   const term = process.env.GITREP_TERMINAL
-  if (term) return launch(term, [claudePath, context], repo, env)
-  await launch('gnome-terminal', [`--working-directory=${repo}`, '--', claudePath, context], repo, env).catch(() => {
-    throw new Error('Hand over needs gnome-terminal.')
+  if (term) return run([{ cmd: term, args: [claudePath, context] }], repo, env)
+  await run(handOverCommand(process.platform, repo, claudePath, context), repo, env).catch((e) => {
+    throw new Error(`Could not open a terminal for the hand-over (Linux: gnome-terminal, macOS: Terminal, Windows: Windows Terminal or cmd): ${e instanceof Error ? e.message : e}`)
   })
 }

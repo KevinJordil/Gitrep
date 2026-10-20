@@ -6,6 +6,7 @@ import type { Explanation, GeneratedMessage, MergeAdvice } from '../shared/types
 import { git } from './git'
 import { resolveCommit } from './history'
 import { branchPair, predictConflicts } from './ops'
+import { withClaudeOnPath } from './launch'
 import { RO } from './repo'
 
 // Files never sent to Claude, whatever their content.
@@ -100,6 +101,13 @@ export function cleanMessage(out: string): string {
 
 let cachedPath: string | null = null
 
+// `where claude` lists every match, shims included: only a real .exe is run (never a script or a .cmd/.bat, which need a shell).
+export function pickWindowsClaude(whereOutput: string): string {
+  const found = whereOutput.split(/\r?\n/).map((l) => l.trim()).find((l) => /\.exe$/i.test(l))
+  if (!found) throw new Error(whereOutput.trim() ? 'Claude Code on Windows needs claude.exe (native installer).' : 'Command "claude" not found. Install Claude Code or set claudePath in the config.')
+  return found
+}
+
 // Apps started from the GNOME launcher do not inherit the nvm PATH: ask the login shell once.
 export async function resolveClaude(override?: string): Promise<string> {
   if (override) {
@@ -107,6 +115,10 @@ export async function resolveClaude(override?: string): Promise<string> {
     return override
   }
   if (cachedPath) return cachedPath
+  if (process.platform === 'win32') {
+    const out = await new Promise<string>((res) => execFile('where', ['claude'], { timeout: 10_000 }, (_e, stdout) => res(String(stdout ?? ''))))
+    return (cachedPath = pickWindowsClaude(out))
+  }
   const shell = process.env.SHELL || '/bin/bash'
   const out = await new Promise<string>((res) => execFile(shell, ['-lic', 'command -v claude'], { timeout: 10_000 }, (_e, stdout) => res(String(stdout ?? ''))))
   const found = out
@@ -122,7 +134,7 @@ export async function resolveClaude(override?: string): Promise<string> {
 export function runClaude(claudePath: string, args: string[], input: string, timeoutMs = 120_000): Promise<string> {
   // Fresh empty working dir (mode 0700) per call: no CLAUDE.md, no project settings are picked up. Removed when done.
   const cwd = mkdtempSync(join(tmpdir(), 'gitrep-claude-'))
-  const env = { ...process.env, PATH: `${dirname(claudePath)}:${process.env.PATH ?? ''}` }
+  const env = withClaudeOnPath(process.env, claudePath)
   return new Promise((resolve, reject) => {
     const finish = (err: Error | null, out = '') => {
       rmSync(cwd, { recursive: true, force: true })

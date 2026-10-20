@@ -27,6 +27,16 @@ The sliders button next to "Generate with Claude" opens free-text instructions t
     npm run package
     sh scripts/install-desktop.sh
 
+## Platforms
+
+"Open terminal", "Open in VS Code" and the hand-over to Claude Code work on three systems:
+
+- Linux: `gnome-terminal` (fallback `x-terminal-emulator` for "Open terminal"; the hand-over needs `gnome-terminal`) and `code`.
+- macOS: Terminal (`open -a Terminal`; the hand-over runs `claude` in Terminal through `osascript`) and `code`.
+- Windows: Windows Terminal (`wt.exe`), falling back to `cmd.exe`; `code` is run through `cmd.exe`. The Claude path is found with `where claude`.
+
+`code` must be on the PATH (VS Code: "Shell Command: Install 'code' command in PATH" on macOS).
+
 ## Configuration
 
 `~/.config/GitRep/config.json`: list of repositories, open tabs, `settings.claudeModel` (default `haiku`), `settings.claudePath` (empty = resolved through your shell), `settings.activeDays` (branches drawn by default: those with a commit in the last N days, 0 = all; default 30, set from the graph), `settings.sidebarWidth` and `settings.rightWidth` (pane widths in pixels, set by dragging their edges) and `settings.graphColumns` (widths in pixels of the graph, Author, Date and SHA columns of the history, set by dragging the header separators: 48 to 480, the graph 40 to 480 or 0 for automatic) and `settings.commitInstructions` (see above).
