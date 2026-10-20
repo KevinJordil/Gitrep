@@ -2,6 +2,16 @@
 
 Local multi-repo git client (Electron + React). A dashboard of all your repositories; a commit graph of every branch with search, isolate/hide, commit details and a context menu (checkout, branch, tag, cherry-pick, revert, reset); stashes; drag a branch onto another to merge, rebase or fast-forward, with conflict prediction; interactive rebase (reorder, reword, squash, fixup, drop, with a plan proposed by Claude) and push with `--force-with-lease` after a rewrite; undo and redo of every operation; a conflict editor (both sides named, block by block, editable result, rebase steps) with resolutions proposed by Claude or handed over to Claude Code in a terminal; diffs with staging per file, hunk or line; and commit, merge and stash messages, commit explanations and merge advice suggested by Claude.
 
+## Download
+
+Installers are attached to each [release](../../releases) (built from the `vX.Y.Z` tags):
+
+- Linux: `GitRep-*-linux-*.AppImage` runs on any distribution (`chmod +x GitRep-*.AppImage`, then run it); `.deb` for Ubuntu and Debian (`sudo apt install ./GitRep-*.deb`); `.pacman` for Arch (`sudo pacman -U GitRep-*.pacman`).
+- Windows: `GitRep-*-win-x64-setup.exe` (installer) or `GitRep-*-win-x64-portable.exe` (no installation).
+- macOS: `GitRep-*-mac-arm64.dmg` for Apple silicon, `GitRep-*-mac-x64.dmg` for Intel. The app has no Apple developer signature: on first launch, right-click it in Applications and choose Open. If macOS still says it is damaged, run `xattr -cr /Applications/GitRep.app` once.
+
+Started from the application menu, the AppImage and the Linux packages run with `--no-sandbox` (see Sandbox below). When you start the AppImage from a terminal on Ubuntu 24.04 or later, add `--no-sandbox` yourself if it does not open.
+
 ## Run
 
     npm install

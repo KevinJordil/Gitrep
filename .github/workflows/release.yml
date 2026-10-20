@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            script: dist:linux
+          - os: windows-latest
+            script: dist:win
+          - os: macos-latest
+            script: dist:mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install pacman packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+      - run: npm ci
+      - name: Set the version from the tag
+        shell: bash
+        run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
+      - run: npm run ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            dist/GitRep-*.AppImage
+            dist/GitRep-*.deb
+            dist/GitRep-*.pacman
+            dist/GitRep-*.exe
+            dist/GitRep-*.dmg
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          pattern: installers-*
+          merge-multiple: true
+      - name: Generate the changelog
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match 'v*.*.*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          {
+            echo "## Changes"
+            echo
+            git log --no-merges --pretty='- %s' ${previous:+"$previous..$GITHUB_REF_NAME"}
+            echo
+            echo "## Install"
+            echo
+            echo "- Linux: AppImage (\`chmod +x\`, then run it), \`.deb\` (Ubuntu, Debian) or \`.pacman\` (Arch: \`pacman -U\`)."
+            echo "- Windows: the setup \`.exe\`, or the portable \`.exe\`."
+            echo "- macOS: the \`.dmg\` for your chip (arm64 = Apple silicon, x64 = Intel). The app has no Apple developer signature: on first launch, right-click it and choose Open; if macOS says it is damaged, run \`xattr -cr /Applications/GitRep.app\`."
+          } > changelog.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: changelog.md
+          files: installers/*
+          fail_on_unmatched_files: true

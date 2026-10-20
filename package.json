@@ -1,6 +1,7 @@
 {
   "name": "gitrep",
   "productName": "GitRep",
+  "desktopName": "gitrep.desktop",
   "version": "0.1.0",
   "private": true,
   "description": "Local multi-repo git client",
@@ -14,7 +15,10 @@
     "test": "vitest run",
     "e2e": "electron-vite build && playwright test",
     "smoke": "electron-vite build && GITREP_SMOKE=1 electron . --no-sandbox",
-    "package": "electron-vite build && electron-builder --linux dir"
+    "package": "electron-vite build && electron-builder --linux dir",
+    "dist:linux": "electron-vite build && electron-builder --linux AppImage deb pacman --x64 --publish never",
+    "dist:win": "electron-vite build && electron-builder --win nsis portable --x64 --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac dmg --x64 --arm64 --publish never"
   },
   "build": {
     "appId": "local.gitrep",
@@ -28,7 +32,50 @@
     ],
     "linux": {
       "target": "dir",
-      "category": "Development"
+      "category": "Development",
+      "maintainer": "Kevin Jordil <kevin.jordil@outlook.com>",
+      "synopsis": "Local multi-repo git client",
+      "executableArgs": [
+        "--no-sandbox"
+      ]
+    },
+    "icon": "resources/icon.png",
+    "artifactName": "GitRep-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "artifactName": "GitRep-${version}-${os}-${arch}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "GitRep-${version}-${os}-${arch}-portable.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "identity": "-",
+      "hardenedRuntime": false
     }
   },
   "devDependencies": {
