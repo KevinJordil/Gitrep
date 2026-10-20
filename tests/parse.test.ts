@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBranches, parseCommitFiles, parseLog, parseNumstat, parseStatus, parseTags } from '../src/main/parse'
+import { parseBranches, parseCommitFiles, parseFileLog, parseLog, parseNumstat, parseStatus, parseTags } from '../src/main/parse'
 
 const nul = (...parts: string[]) => parts.join('\0') + '\0'
 
@@ -96,5 +96,33 @@ describe('parseCommitFiles', () => {
       { path: 'src/a b.c', status: 'M', add: 3, del: 1 },
       { path: 'img.png', status: 'A', add: 0, del: 0 }
     ])
+  })
+})
+
+describe('parseFileLog', () => {
+  // One commit: the log fields, then (except for a merge) its numstat entry for the file.
+  const rec = (sha: string, subject: string, numstat: string[]) =>
+    `\x1e${sha.padEnd(40, '0')}\x1fp1\x1fAda\x1fada@example.com\x1f100\x1f200\x1f\x1f${subject}\0` + (numstat.length ? `\n${numstat.join('\0')}\0` : '')
+
+  it('reads the path, the rename and the counts of each commit, newest first', () => {
+    const out = rec('c4', 'edit', ['2\t1\tsrc/new name.c']) + rec('c3', 'rename', ['0\t0\t', 'old.c', 'src/new name.c']) + rec('d2', 'merge', []) + rec('c1', 'add', ['-\t-\told.c'])
+    expect(parseFileLog(out, 'src/new name.c').map((c) => [c.sha.slice(0, 2), c.subject, c.path, c.oldPath, c.add, c.del])).toEqual([
+      ['c4', 'edit', 'src/new name.c', null, 2, 1],
+      ['c3', 'rename', 'src/new name.c', 'old.c', 0, 0],
+      ['d2', 'merge', 'old.c', null, 0, 0],
+      ['c1', 'add', 'old.c', null, 0, 0]
+    ])
+    expect(parseFileLog(out, 'x')[0]).toMatchObject({ parents: ['p1'], author: 'Ada', email: 'ada@example.com', date: 100, committed: 200, refs: [] })
+    expect(parseFileLog('', 'x')).toEqual([])
+  })
+
+  const sha = 'a'.repeat(40)
+  it('keeps a record separator inside a file name or a subject and never emits a bogus commit', () => {
+    const f = (subject: string, name: string) => `\x1e${sha}\x1fp1\x1fAda\x1fada@example.com\x1f100\x1f200\x1f\x1f${subject}\0\n1\t0\t${name}\0`
+    expect(parseFileLog(f('s', 'a\x1eb.txt') + f('x\x1ey', 'c.txt'), 'a\x1eb.txt').map((c) => [c.subject, c.path])).toEqual([
+      ['s', 'a\x1eb.txt'],
+      ['x\x1ey', 'c.txt']
+    ])
+    expect(parseFileLog('\x1ejunk\0\n1\t0\tz\0', 'z')).toEqual([])
   })
 })

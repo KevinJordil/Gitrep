@@ -1,8 +1,8 @@
-import type { CommitDetails, FileDiff, Tag } from '../shared/types'
+import { FILE_HISTORY_LIMIT, type CommitDetails, type FileCommit, type FileDiff, type Tag } from '../shared/types'
 import { parseDiff } from './diff'
 import { git } from './git'
-import { LOG_FORMAT, parseCommitFiles, parseLog, parseTags, TAG_FORMAT } from './parse'
-import { RO } from './repo'
+import { FILE_LOG_FORMAT, LOG_FORMAT, parseCommitFiles, parseFileLog, parseLog, parseTags, TAG_FORMAT } from './parse'
+import { insideRepo, RO } from './repo'
 
 // Every revision coming from the renderer goes through here: no option injection, must name an existing commit.
 export async function resolveCommit(repo: string, rev: string): Promise<string> {
@@ -29,8 +29,24 @@ export async function getCommitDetails(repo: string, rev: string): Promise<Commi
   return { ...parseLog(head)[0], body: body.trim(), files: parseCommitFiles(files) }
 }
 
-export async function getCommitDiff(repo: string, rev: string, path: string): Promise<FileDiff | null> {
+// oldPath: the file's path before this commit renamed it; the diff then shows the rename and its edits, not an added file.
+export async function getCommitDiff(repo: string, rev: string, path: string, oldPath: string | null = null): Promise<FileDiff | null> {
   const sha = await resolveCommit(repo, rev)
-  const out = await git(repo, [...RO, 'show', '--format=', '--no-color', '--no-ext-diff', ...FIRST_PARENT, sha, '--', path])
-  return parseDiff(out)[0] ?? null
+  insideRepo(repo, path)
+  if (oldPath !== null) insideRepo(repo, oldPath)
+  const opts = oldPath === null ? FIRST_PARENT : ['-M', '--diff-merges=first-parent']
+  const out = await git(repo, [...RO, 'show', '--format=', '--no-color', '--no-ext-diff', ...opts, sha, '--', ...(oldPath === null ? [] : [oldPath]), path])
+  const files = parseDiff(out)
+  return files.find((f) => f.newPath === path) ?? files[0] ?? null
+}
+
+// The commits that touched a file, newest first, from `rev` (null: HEAD; nothing before the first commit).
+// follow: through renames. log.follow=false so a user's config cannot turn it on.
+// ponytail: --follow scans the whole history (the output is capped, the time is not); the UI shows a loading state.
+export async function getFileHistory(repo: string, path: string, rev: string | null, follow: boolean): Promise<FileCommit[]> {
+  insideRepo(repo, path)
+  const start = rev === null ? (await git(repo, ['rev-parse', '--verify', '--quiet', 'HEAD'], { okCodes: [1] })).trim() : await resolveCommit(repo, rev)
+  if (!start) return []
+  const args = ['-c', 'log.follow=false', 'log', `-n${FILE_HISTORY_LIMIT}`, '-z', '--numstat', '-M', ...(follow ? ['--follow'] : []), `--format=${FILE_LOG_FORMAT}`, start, '--', path]
+  return parseFileLog(await git(repo, [...RO, ...args]), path)
 }

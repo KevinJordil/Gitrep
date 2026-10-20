@@ -64,6 +64,17 @@ export interface Tag {
   sha: string // the tagged commit (annotated tags are peeled)
 }
 
+// Most commits a file history loads.
+export const FILE_HISTORY_LIMIT = 1000
+
+// One commit of a file's history: the file's path in that commit, its previous path when the commit renamed it, the lines changed.
+export interface FileCommit extends Commit {
+  path: string
+  oldPath: string | null
+  add: number
+  del: number
+}
+
 export interface CommitDetails extends Commit {
   body: string // message without the subject line
   files: FileChange[] // against the first parent

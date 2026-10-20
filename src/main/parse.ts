@@ -1,4 +1,4 @@
-import type { Branch, Commit, FileChange, FileStatus, RepoStatus, Stash, Tag } from '../shared/types'
+import type { Branch, Commit, FileChange, FileCommit, FileStatus, RepoStatus, Stash, Tag } from '../shared/types'
 
 // Parses `git status --porcelain=v2 --branch -z`.
 export function parseStatus(out: string): Omit<RepoStatus, 'operation'> {
@@ -51,17 +51,48 @@ export function parseNumstat(out: string): Record<string, { add: number; del: nu
   return result
 }
 
-export const LOG_FORMAT = '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%ct%x1f%D%x1f%s%x1e'
+const LOG_FIELDS = '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%ct%x1f%D%x1f%s'
+export const LOG_FORMAT = `${LOG_FIELDS}%x1e`
+// The numstat of each commit follows its fields: the record separator comes first.
+export const FILE_LOG_FORMAT = `%x1e${LOG_FIELDS}`
 
 export function parseLog(out: string): Commit[] {
   return out
     .split('\x1e')
     .map((record) => record.replace(/^\n/, ''))
     .filter(Boolean)
-    .map((record) => {
-      const [sha, parents, author, email, at, ct, refs, subject] = record.split('\x1f')
-      return { sha, parents: parents ? parents.split(' ') : [], author, email, date: Number(at), committed: Number(ct), refs: refs ? refs.split(', ') : [], subject }
-    })
+    .map(toCommit)
+}
+
+function toCommit(record: string): Commit {
+  const [sha, parents, author, email, at, ct, refs, subject] = record.split('\x1f')
+  return { sha, parents: parents ? parents.split(' ') : [], author, email, date: Number(at), committed: Number(ct), refs: refs ? refs.split(', ') : [], subject }
+}
+
+// Parses `git log -z --numstat --format=FILE_LOG_FORMAT -- <path>`; `path` is the file's name in the newest commit.
+// numstat: "add\tdel\tpath", or for a rename "add\tdel\t" then the old and the new path. A merge has none: it keeps the path.
+export function parseFileLog(out: string, path: string): FileCommit[] {
+  const commits: FileCommit[] = []
+  let current = path
+  // A file name or subject may itself contain the record separator: a fragment that does not open a commit belongs to the previous record.
+  const records: string[] = []
+  for (const part of out.split('\x1e')) {
+    const fields = part.split('\0')[0].split('\x1f')
+    if (fields.length === 8 && /^[0-9a-f]{40,64}$/.test(fields[0])) records.push(part)
+    else if (records.length) records[records.length - 1] += '\x1e' + part
+  }
+  for (const record of records) {
+    const end = record.indexOf('\0')
+    const commit = toCommit(record.slice(0, end))
+    const parts = record.slice(end + 1).replace(/^\n/, '').split('\0')
+    const [add = '', del = '', ...name] = parts[0].split('\t')
+    const renamed = parts[0] !== '' && name.join('\t') === ''
+    const file = renamed ? parts[2] : name.join('\t') || current
+    const oldPath = renamed ? parts[1] : null
+    commits.push({ ...commit, path: file, oldPath, add: Number(add) || 0, del: Number(del) || 0 })
+    current = oldPath ?? file
+  }
+  return commits
 }
 
 export const BRANCH_FORMAT = '%(refname)%1f%(HEAD)%1f%(upstream:short)%1f%(upstream:track)%1f%(objectname)%1f%(committerdate:unix)'

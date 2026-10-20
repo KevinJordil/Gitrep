@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { git } from '../src/main/git'
-import { getCommitDetails, getCommitDiff, getTags, resolveCommit } from '../src/main/history'
-import { commitAll, makeRepo, write } from './helpers'
+import { getCommitDetails, getCommitDiff, getFileHistory, getTags, resolveCommit } from '../src/main/history'
+import { commitAll, lines, makeRepo, write } from './helpers'
 
 describe('resolveCommit', () => {
   it('returns the full SHA and rejects options and unknown revisions', async () => {
@@ -75,5 +75,70 @@ describe('getCommitDetails and getCommitDiff', () => {
     ])
     expect(await getCommitDiff(repo, 'HEAD~1', 'b.txt')).toBeNull()
     expect((await getCommitDiff(repo, 'HEAD~2', 'a.txt'))!.isNew).toBe(true)
+  })
+})
+
+// old.txt: added, an unrelated commit, edited, then moved to docs/new.txt and edited in the same commit.
+async function renamedRepo() {
+  const repo = await makeRepo()
+  await write(repo, 'old.txt', lines(10))
+  await commitAll(repo, 'add old')
+  await write(repo, 'other.txt', 'x\n')
+  await commitAll(repo, 'unrelated')
+  await write(repo, 'old.txt', lines(10, (i) => (i === 2 ? 'two' : `line ${i}`)))
+  await commitAll(repo, 'edit old')
+  await git(repo, ['rm', '-q', 'old.txt'])
+  await write(repo, 'docs/new.txt', lines(10, (i) => (i === 2 ? 'two' : i === 9 ? 'nine' : `line ${i}`)))
+  await commitAll(repo, 'move and edit')
+  return repo
+}
+
+describe('getFileHistory', () => {
+  const rows = (h: Awaited<ReturnType<typeof getFileHistory>>) => h.map((c) => [c.subject, c.path, c.oldPath, c.add, c.del])
+
+  it('follows renames, newest first, with the path and the counts in each commit', async () => {
+    const repo = await renamedRepo()
+    expect(rows(await getFileHistory(repo, 'docs/new.txt', null, true))).toEqual([
+      ['move and edit', 'docs/new.txt', 'old.txt', 1, 1],
+      ['edit old', 'old.txt', null, 1, 1],
+      ['add old', 'old.txt', null, 10, 0]
+    ])
+  })
+
+  it('stops at the rename without follow and starts at a given revision', async () => {
+    const repo = await renamedRepo()
+    expect(rows(await getFileHistory(repo, 'docs/new.txt', null, false))).toEqual([['move and edit', 'docs/new.txt', null, 10, 0]])
+    expect(rows(await getFileHistory(repo, 'old.txt', 'HEAD~1', true)).map((r) => r[0])).toEqual(['edit old', 'add old'])
+  })
+
+  it('reads a file whose name contains the record separator', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a\x1eb.txt', '1\n')
+    await commitAll(repo, 'one')
+    expect(rows(await getFileHistory(repo, 'a\x1eb.txt', null, true))).toEqual([['one', 'a\x1eb.txt', null, 1, 0]])
+  })
+
+  it('is empty before the first commit and refuses bad paths and revisions', async () => {
+    const repo = await makeRepo()
+    expect(await getFileHistory(repo, 'a.txt', null, true)).toEqual([])
+    await expect(getFileHistory(repo, '../a.txt', null, true)).rejects.toThrow('outside the repository')
+    await write(repo, 'a.txt', '1\n')
+    await commitAll(repo, 'one')
+    await expect(getFileHistory(repo, 'a.txt', '--all', true)).rejects.toThrow('Invalid revision')
+  })
+})
+
+describe('getCommitDiff of a renamed file', () => {
+  it('shows the rename with its edits when given the old path', async () => {
+    const repo = await renamedRepo()
+    const d = (await getCommitDiff(repo, 'HEAD', 'docs/new.txt', 'old.txt'))!
+    expect([d.oldPath, d.newPath, d.isNew]).toEqual(['old.txt', 'docs/new.txt', false])
+    expect(d.hunks.flatMap((h) => h.lines).filter((l) => l.kind !== 'context').map((l) => [l.kind, l.text])).toEqual([
+      ['del', 'line 9'],
+      ['add', 'nine']
+    ])
+    expect((await getCommitDiff(repo, 'HEAD', 'docs/new.txt'))!.isNew).toBe(true)
+    await expect(getCommitDiff(repo, 'HEAD', 'docs/new.txt', '../old.txt')).rejects.toThrow('outside the repository')
+    await expect(getCommitDiff(repo, 'HEAD', 'docs/new.txt', '')).rejects.toThrow('outside the repository')
   })
 })

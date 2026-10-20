@@ -10,6 +10,7 @@ import type {
   DiffSide,
   Explanation,
   FileChange,
+  FileCommit,
   FileDiff,
   GeneratedMessage,
   GraphScope,
@@ -46,7 +47,8 @@ export interface Api {
   branches(repo: string): Promise<Branch[]>
   tags(repo: string): Promise<Tag[]>
   commitDetails(repo: string, sha: string): Promise<CommitDetails>
-  commitDiff(repo: string, sha: string, path: string): Promise<FileDiff | null>
+  commitDiff(repo: string, sha: string, path: string, oldPath?: string | null): Promise<FileDiff | null> // oldPath: renamed in that commit
+  fileHistory(repo: string, path: string, rev: string | null, follow: boolean): Promise<FileCommit[]> // rev null: from HEAD
   copyText(text: string): Promise<void>
   diff(repo: string, path: string, side: DiffSide): Promise<FileDiff | null>
   stage(repo: string, paths: string[]): Promise<void>
@@ -116,6 +118,7 @@ export const API_METHODS = [
   'tags',
   'commitDetails',
   'commitDiff',
+  'fileHistory',
   'copyText',
   'diff',
   'stage',
