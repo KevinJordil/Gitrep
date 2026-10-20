@@ -23,7 +23,8 @@
       "output": "dist"
     },
     "files": [
-      "out/**"
+      "out/**",
+      "resources/**"
     ],
     "linux": {
       "target": "dir",

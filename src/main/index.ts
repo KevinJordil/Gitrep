@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import icon from '../../resources/icon.png?asset'
 import { API_METHODS, type Api, type IpcResult } from '../shared/api'
 import type { Config, ConflictHunk, GraphScope, InteractiveRebaseRequest, MergeRequest, RepoEntry } from '../shared/types'
 import * as assist from './assist'
@@ -231,6 +232,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     title: 'GitRep',
+    icon,
     backgroundColor: '#0d0f13',
     autoHideMenuBar: true,
     // Test support: GITREP_HIDDEN=1 keeps the window hidden (end-to-end runs).
