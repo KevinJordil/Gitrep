@@ -4,6 +4,7 @@ import { api } from './api'
 import { Dialog } from './Dialog'
 import { DiffView } from './DiffView'
 import { errorText, relativeDate } from './format'
+import { FileIcon, StatusBadge } from './FileIcon'
 import { Icon } from './icons'
 import type { RunOp, RunOutcome } from './model'
 import { useToast } from './toast'
@@ -25,8 +26,6 @@ function useStashFiles(repo: string, stash: Stash): FileChange[] | null {
   }, [repo, stash.sha, stash.untracked, notify])
   return files
 }
-
-const letter = (f: FileChange) => (f.status === '?' ? 'N' : f.status)
 
 interface ViewProps {
   repo: string
@@ -53,7 +52,8 @@ export function StashView({ repo, stash, version, run, onBack }: ViewProps) {
       <nav className="file-chips" aria-label="Files in the stash">
         {files?.map((f) => (
           <button key={`${f.status}:${f.path}`} className={`fchip ${f === file ? 'on' : ''}`} aria-pressed={f === file} onClick={() => setPicked(f.path)}>
-            <span className={`st st-${letter(f)}`}>{letter(f)}</span>
+            <StatusBadge status={f.status} />
+            <FileIcon path={f.path} />
             <span>{f.path}</span>
             {f.add ? <span className="add-n">+{f.add}</span> : null}
             {f.del ? <span className="del-n">−{f.del}</span> : null}

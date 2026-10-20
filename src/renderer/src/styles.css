@@ -46,6 +46,56 @@
   --warn-bg: #2f2615;
   --warn-bd: #6a5426;
   --warn-fg: #f3dcae;
+  /* change status badges */
+  --status-added: var(--green);
+  --status-modified: var(--amber);
+  --status-deleted: var(--red);
+  --status-renamed: var(--accent);
+  --status-untracked: var(--green);
+  --status-conflicted: var(--red);
+  /* file type icons */
+  --icon-c: #519aba;
+  --icon-h: #a074c4;
+  --icon-cpp: #519aba;
+  --icon-hpp: #a074c4;
+  --icon-java: #e06c5a;
+  --icon-kotlin: #b99cf7;
+  --icon-js: #e8d44d;
+  --icon-ts: #4daafc;
+  --icon-jsx: #61dafb;
+  --icon-tsx: #4daafc;
+  --icon-python: #6aa5d8;
+  --icon-go: #00add8;
+  --icon-rust: #e3884f;
+  --icon-shell: #8dc149;
+  --icon-json: #e8d44d;
+  --icon-yaml: #c586c0;
+  --icon-toml: #c4c4c4;
+  --icon-xml: #e3884f;
+  --icon-html: #e3884f;
+  --icon-css: #6aa5d8;
+  --icon-sql: #e8b24a;
+  --icon-markdown: #6aa5d8;
+  --icon-text: #a8a8a8;
+  --icon-cmake: #8dc149;
+  --icon-make: #e3884f;
+  --icon-docker: #4daafc;
+  --icon-image: #b99cf7;
+  --icon-pdf: #f47a72;
+  --icon-archive: #e8b24a;
+  --icon-lock: #a8a8a8;
+  --icon-git: #f05033;
+  --icon-license: #e8d44d;
+  --icon-file: #a8a8a8;
+  --icon-groovy: #6aa5d8;
+  --icon-ini: #a8a8a8;
+  --icon-env: #e8d44d;
+  --icon-config: #a8a8a8;
+  --icon-csharp: #a074c4;
+  --icon-ruby: #e06c5a;
+  --icon-php: #b99cf7;
+  --icon-swift: #e3884f;
+  --icon-vue: #8dc149;
   --sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --mono: 'Geist Mono Variable', ui-monospace, monospace;
   color-scheme: dark;
@@ -143,10 +193,14 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 .file.sel { background: var(--hover); box-shadow: inset 2px 0 0 var(--accent); }
 .file .path { flex: 1; min-width: 0; height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st { width: 18px; height: 18px; flex: none; border-radius: 4px; display: grid; place-items: center; font: 600 11px var(--mono); }
-.st-M, .st-T, .st-R, .st-C { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
-.st-A, .st-N { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
-.st-D { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
-.st-U { color: var(--danger-fg); background: color-mix(in srgb, var(--red) 25%, transparent); }
+.st-added { color: var(--status-added); background: color-mix(in srgb, var(--status-added) 14%, transparent); }
+.st-modified { color: var(--status-modified); background: color-mix(in srgb, var(--status-modified) 14%, transparent); }
+.st-deleted { color: var(--status-deleted); background: color-mix(in srgb, var(--status-deleted) 14%, transparent); }
+.st-renamed { color: var(--status-renamed); background: color-mix(in srgb, var(--status-renamed) 14%, transparent); }
+.st-untracked { color: var(--status-untracked); background: color-mix(in srgb, var(--status-untracked) 14%, transparent); }
+.st-conflicted { color: var(--danger-fg); background: color-mix(in srgb, var(--status-conflicted) 25%, transparent); }
+.ficon { width: 20px; height: 18px; flex: none; display: grid; place-items: center; font: 700 11px/1 var(--mono); letter-spacing: -0.3px; }
+.ficon.long { font-size: 8.5px; letter-spacing: -0.6px; }
 .fbtn { width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--line); background: var(--raised); display: grid; place-items: center; color: var(--muted); flex: none; }
 .commit-form { border-top: 1px solid var(--line); padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; background: var(--raised); }
 .commit-head { display: flex; align-items: center; justify-content: space-between; }

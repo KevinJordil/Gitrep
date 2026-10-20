@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ConflictFile, ConflictSuggestion, OperationInfo, RepoStatus } from '../../shared/types'
 import { api } from './api'
 import { errorText, splitPath } from './format'
+import { FileIcon, StatusBadge } from './FileIcon'
 import { Icon } from './icons'
 import type { RunOp, RunOutcome, Selection } from './model'
 import { applySuggestions, blocksOf, edit, hunkOf, newDraft, takeAll, takeSide, textOf, type Draft, type Origin } from './resolve'
@@ -297,7 +298,8 @@ export function OperationPanel({ repo, status, info, path, busy, runOutcome, onP
         const [dir, name] = splitPath(f.path)
         return (
           <div key={f.path} className={`file ${conflict ? 'conflict' : ''} ${conflict && f.path === path ? 'sel' : ''}`}>
-            <span className={`st ${conflict ? 'st-U' : 'st-A'}`}>{conflict ? '!' : '✓'}</span>
+            {conflict ? <StatusBadge status="U" /> : <span className="st st-added" title="Resolved">✓</span>}
+            <FileIcon path={f.path} />
             <button className="path" onClick={() => (conflict ? onPath(f.path) : onSelect({ path: f.path, side: 'staged' }))}>
               <span className="faint">{dir}</span>
               {name}

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { launchFixture, openRepo, type Fixture } from './fixtures'
 
@@ -83,4 +83,18 @@ test('commit form: a tall summary field and a six-line description that grows ve
   await expect(description).toHaveAttribute('rows', '6')
   expect(await description.evaluate((e) => getComputedStyle(e).resize)).toBe('vertical')
   await expect(v.locator('.commit-form')).not.toContainText(/required|optional/i)
+})
+
+test('file rows: a status badge with its tooltip and an icon of the file type', async () => {
+  writeFileSync(join(fx.beta, 'main.c'), 'int main(void) { return 0; }\n')
+  const file = (name: string) => v.locator('aside.right .file', { hasText: name })
+  await expect(file('main.c')).toBeVisible()
+  await expect(file('file.txt').locator('.st')).toHaveText('M')
+  await expect(file('file.txt').locator('.st')).toHaveAttribute('title', 'Modified')
+  await expect(file('notes.txt').locator('.st')).toHaveText('U')
+  await expect(file('notes.txt').locator('.st')).toHaveAttribute('title', 'Untracked')
+  await expect(file('file.txt').locator('.ficon')).toHaveText('≡')
+  await expect(file('main.c').locator('.ficon')).toHaveText('C')
+  await expect(file('main.c').locator('.ficon')).toHaveCSS('color', 'rgb(81, 154, 186)') // --icon-c
+  await page.screenshot({ path: 'e2e-artifacts/file-icons.png' })
 })

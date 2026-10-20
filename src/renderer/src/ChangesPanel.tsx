@@ -2,6 +2,7 @@ import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { DiffSide, FileChange, RepoStatus } from '../../shared/types'
 import { api } from './api'
 import { errorText, splitPath } from './format'
+import { FileIcon, StatusBadge } from './FileIcon'
 import { Icon } from './icons'
 import type { RunOp, Selection } from './model'
 import { useToast } from './toast'
@@ -200,10 +201,10 @@ function FileGroup({ title, files, side, selection, onSelect, action, hint, butt
         const [dir, name] = splitPath(f.path)
         const target: DiffSide = side === 'staged' ? 'staged' : f.status === '?' ? 'untracked' : 'unstaged'
         const selected = selection?.path === f.path && selection.side === target
-        const letter = f.status === '?' ? 'N' : f.status
         return (
           <div key={`${side}:${f.path}`} className={`file ${selected ? 'sel' : ''}`} title={f.origPath ? `${f.origPath} → ${f.path}` : f.path}>
-            <span className={`st st-${letter}`}>{letter}</span>
+            <StatusBadge status={f.status} />
+            <FileIcon path={f.path} />
             <button className="path" disabled={!onSelect} onClick={() => onSelect?.({ path: f.path, side: target })}>
               <span className="faint">{dir}</span>
               {name}

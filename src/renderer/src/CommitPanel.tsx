@@ -3,6 +3,7 @@ import type { CommitDetails, Explanation } from '../../shared/types'
 import { api } from './api'
 import { colorFor, errorText, initials, laneColor, splitPath } from './format'
 import { RefPill } from './Graph'
+import { FileIcon, StatusBadge } from './FileIcon'
 import { Icon } from './icons'
 import type { Focus, Selection } from './model'
 import { useToast } from './toast'
@@ -122,7 +123,8 @@ export function CommitPanel({ repo, sha, autoExplain, selection, colors, remoteN
           const [dir, name] = splitPath(f.path)
           return (
             <button key={f.path} className={`file ${selection?.commit === sha && selection.path === f.path ? 'sel' : ''}`} title={f.path} onClick={() => onSelect({ path: f.path, commit: sha })}>
-              <span className={`st st-${f.status}`}>{f.status}</span>
+              <StatusBadge status={f.status} />
+              <FileIcon path={f.path} />
               <span className="path">
                 <span className="faint">{dir}</span>
                 {name}
