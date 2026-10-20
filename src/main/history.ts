@@ -1,7 +1,7 @@
-import { FILE_HISTORY_LIMIT, type CommitDetails, type FileCommit, type FileDiff, type Tag } from '../shared/types'
+import { FILE_HISTORY_LIMIT, type Blame, type CommitDetails, type FileCommit, type FileDiff, type Tag } from '../shared/types'
 import { parseDiff } from './diff'
 import { git } from './git'
-import { FILE_LOG_FORMAT, LOG_FORMAT, parseCommitFiles, parseFileLog, parseLog, parseTags, TAG_FORMAT } from './parse'
+import { FILE_LOG_FORMAT, LOG_FORMAT, parseBlame, parseCommitFiles, parseFileLog, parseLog, parseTags, TAG_FORMAT } from './parse'
 import { insideRepo, RO } from './repo'
 
 // Every revision coming from the renderer goes through here: no option injection, must name an existing commit.
@@ -49,4 +49,22 @@ export async function getFileHistory(repo: string, path: string, rev: string | n
   if (!start) return []
   const args = ['-c', 'log.follow=false', 'log', `-n${FILE_HISTORY_LIMIT}`, '-z', '--numstat', '-M', ...(follow ? ['--follow'] : []), `--format=${FILE_LOG_FORMAT}`, start, '--', path]
   return parseFileLog(await git(repo, [...RO, ...args]), path)
+}
+
+// Limit: bigger files are not blamed (git blame's time grows with the file size times its history).
+const MAX_BLAME_BYTES = 4 * 1024 * 1024
+const MAX_BLAME_LINES = 50_000
+
+// Who last changed each line of `path` as of `rev` (null: HEAD), parsed once. git follows renames of the whole file.
+export async function getBlame(repo: string, rev: string | null, path: string): Promise<Blame> {
+  insideRepo(repo, path)
+  const sha = await resolveCommit(repo, rev ?? 'HEAD')
+  const size = await git(repo, [...RO, 'cat-file', '-s', `${sha}:${path}`]).catch((e: Error) => {
+    throw /Not a valid object name|does not exist|exists on disk, but not in/.test(e.message) ? new Error(`${path} does not exist in ${sha.slice(0, 7)}`) : e
+  })
+  if (Number(size) > MAX_BLAME_BYTES) throw new Error(`${path} is too large to blame (${(Number(size) / 1048576).toFixed(1)} MB, the limit is 4 MB)`)
+  const blame = parseBlame(await git(repo, [...RO, 'blame', '--porcelain', '--no-ignore-revs-file', sha, '--', path]))
+  if (blame.lines.length > MAX_BLAME_LINES) throw new Error(`This file is too long to blame here (${blame.lines.length} lines).`)
+  if (blame.lines.some((l) => l.includes('\0'))) throw new Error(`${path} is a binary file: nothing to blame`)
+  return { sha, path, ...blame }
 }

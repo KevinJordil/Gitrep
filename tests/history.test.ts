@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { git } from '../src/main/git'
-import { getCommitDetails, getCommitDiff, getFileHistory, getTags, resolveCommit } from '../src/main/history'
+import { getBlame, getCommitDetails, getCommitDiff, getFileHistory, getTags, resolveCommit } from '../src/main/history'
 import { commitAll, lines, makeRepo, write } from './helpers'
 
 describe('resolveCommit', () => {
@@ -140,5 +140,50 @@ describe('getCommitDiff of a renamed file', () => {
     expect((await getCommitDiff(repo, 'HEAD', 'docs/new.txt'))!.isNew).toBe(true)
     await expect(getCommitDiff(repo, 'HEAD', 'docs/new.txt', '../old.txt')).rejects.toThrow('outside the repository')
     await expect(getCommitDiff(repo, 'HEAD', 'docs/new.txt', '')).rejects.toThrow('outside the repository')
+  })
+})
+
+describe('getBlame', () => {
+  const shas = (repo: string, ...revs: string[]) => Promise.all(revs.map(async (r) => (await git(repo, ['rev-parse', r])).trim()))
+
+  it('names the commit of each line through the rename, with each commit once', async () => {
+    const repo = await renamedRepo()
+    const [move, edit, unrelated, add] = await shas(repo, 'HEAD', 'HEAD~1', 'HEAD~2', 'HEAD~3')
+    const b = await getBlame(repo, null, 'docs/new.txt')
+    expect([b.sha, b.path, b.lines.length, b.lines[1]]).toEqual([move, 'docs/new.txt', 10, 'two'])
+    expect(b.chunks).toEqual([
+      { sha: add, start: 1, count: 1 },
+      { sha: edit, start: 2, count: 1 },
+      { sha: add, start: 3, count: 6 },
+      { sha: move, start: 9, count: 1 },
+      { sha: add, start: 10, count: 1 }
+    ])
+    expect(b.commits[edit]).toMatchObject({ author: 'Test User', email: 'test@example.com', subject: 'edit old', previous: { sha: unrelated, path: 'old.txt' } })
+    expect(b.commits[move].previous).toEqual({ sha: edit, path: 'old.txt' })
+    expect(b.commits[add].previous).toBeNull()
+  })
+
+  it('blames at a revision and refuses missing and binary files, bad paths and revisions', async () => {
+    const repo = await renamedRepo()
+    expect((await getBlame(repo, 'HEAD~1', 'old.txt')).lines).toHaveLength(10)
+    await expect(getBlame(repo, 'HEAD~1', 'docs/new.txt')).rejects.toThrow('docs/new.txt does not exist in')
+    await expect(getBlame(repo, '--all', 'old.txt')).rejects.toThrow('Invalid revision')
+    await expect(getBlame(repo, null, '../old.txt')).rejects.toThrow('outside the repository')
+    await write(repo, 'bin.dat', 'a\0b\n')
+    await commitAll(repo, 'binary')
+    await expect(getBlame(repo, null, 'bin.dat')).rejects.toThrow('binary file')
+  })
+})
+
+describe('getBlame robustness', () => {
+  it('ignores a missing blame.ignoreRevsFile, keeps CRLF, refuses too large files and passes other git errors', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'crlf.txt', 'a\r\nb\r\n')
+    await write(repo, 'big.txt', 'x'.repeat(4 * 1024 * 1024 + 1))
+    await commitAll(repo, 'files')
+    await git(repo, ['config', 'blame.ignoreRevsFile', 'missing.txt'])
+    expect((await getBlame(repo, null, 'crlf.txt')).lines).toEqual(['a\r', 'b\r'])
+    await expect(getBlame(repo, null, 'big.txt')).rejects.toThrow('too large to blame')
+    await expect(getBlame(repo, null, 'nope.txt')).rejects.toThrow('does not exist in')
   })
 })

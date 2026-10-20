@@ -75,6 +75,31 @@ export interface FileCommit extends Commit {
   del: number
 }
 
+// A commit named by a blame. previous: its parent and the file's path there ("Blame at parent"); null when it created the lines.
+export interface BlameCommit {
+  sha: string
+  author: string
+  email: string
+  date: number // author date, unix seconds
+  subject: string
+  previous: { sha: string; path: string } | null
+}
+
+// Consecutive lines last changed by one commit. start: 1-based line number.
+export interface BlameChunk {
+  sha: string
+  start: number
+  count: number
+}
+
+export interface Blame {
+  sha: string // the commit blamed
+  path: string
+  lines: string[]
+  chunks: BlameChunk[] // in file order, every line in exactly one
+  commits: Record<string, BlameCommit>
+}
+
 export interface CommitDetails extends Commit {
   body: string // message without the subject line
   files: FileChange[] // against the first parent

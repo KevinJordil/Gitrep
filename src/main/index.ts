@@ -156,6 +156,7 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   commitDetails: forRepo(history.getCommitDetails),
   commitDiff: forRepo((p, sha: string, path: string, oldPath?: string | null) => history.getCommitDiff(p, sha, path, oldPath == null ? null : String(oldPath))),
   fileHistory: forRepo((p, path: string, rev: string | null, follow: boolean) => history.getFileHistory(p, String(path), rev === null ? null : String(rev), !!follow)),
+  blame: forRepo((p, rev: string | null, path: string) => history.getBlame(p, rev === null ? null : String(rev), String(path))),
   copyText: async (text) => clipboard.writeText(String(text)),
   diff: forRepo(repo.getDiff),
   stage: forRepo(repo.stage),

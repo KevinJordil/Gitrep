@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBranches, parseCommitFiles, parseFileLog, parseLog, parseNumstat, parseStatus, parseTags } from '../src/main/parse'
+import { parseBlame, parseBranches, parseCommitFiles, parseFileLog, parseLog, parseNumstat, parseStatus, parseTags } from '../src/main/parse'
 
 const nul = (...parts: string[]) => parts.join('\0') + '\0'
 
@@ -124,5 +124,54 @@ describe('parseFileLog', () => {
       ['x\x1ey', 'c.txt']
     ])
     expect(parseFileLog('\x1ejunk\0\n1\t0\tz\0', 'z')).toEqual([])
+  })
+})
+
+describe('parseBlame', () => {
+  const a = 'a'.repeat(40)
+  const b = 'b'.repeat(40)
+  const head = (n: number) => [`${a} 1 1 ${n}`, 'author Ada', 'author-mail <ada@example.com>', 'author-time 100', 'summary s', 'filename f']
+
+  it('reads every line with its commit, each commit once, and merges adjacent lines into chunks', () => {
+    const out = [
+      `${a} 1 1 2`, 'author Ada', 'author-mail <ada@example.com>', 'author-time 100', 'author-tz +0000', 'committer Ada', 'summary first', 'boundary', 'filename old.c', '\tone',
+      `${a} 2 2`, '\ttwo',
+      `${b} 3 3 1`, 'author Bob', 'author-mail <bob@example.com>', 'author-time 200', 'summary second line', `previous ${a} old name.c`, 'filename new.c', '\t\tthree',
+      `${a} 3 4 1`, '\tfour',
+      ''
+    ].join('\n')
+    expect(parseBlame(out)).toEqual({
+      lines: ['one', 'two', '\tthree', 'four'],
+      chunks: [
+        { sha: a, start: 1, count: 2 },
+        { sha: b, start: 3, count: 1 },
+        { sha: a, start: 4, count: 1 }
+      ],
+      commits: {
+        [a]: { sha: a, author: 'Ada', email: 'ada@example.com', date: 100, subject: 'first', previous: null },
+        [b]: { sha: b, author: 'Bob', email: 'bob@example.com', date: 200, subject: 'second line', previous: { sha: a, path: 'old name.c' } }
+      }
+    })
+    expect(parseBlame('')).toEqual({ lines: [], chunks: [], commits: {} })
+  })
+
+  it('keeps control characters and header-looking text in a line as content', () => {
+    const out = [...head(2), '\tx\x1b[31m\x07\r', `${a} 2 2`, `\t${b} 9 9 1`, ''].join('\n')
+    expect(parseBlame(out).lines).toEqual(['x\x1b[31m\x07\r', `${b} 9 9 1`])
+  })
+
+  it('skips unknown header fields', () => {
+    const out = [`${a} 1 1 1`, 'author Ada', 'ignored', 'unblamable', 'future-field x', 'summary s', '\tx', ''].join('\n')
+    expect(parseBlame(out)).toMatchObject({ lines: ['x'], commits: { [a]: { author: 'Ada', subject: 's' } } })
+  })
+
+  it('refuses malformed output', () => {
+    const bad = (s: string) => expect(() => parseBlame(s)).toThrow('Unexpected blame output')
+    bad('\tno header\n')
+    bad(`${'z'.repeat(40)} 1 1 1\n\tx\n`)
+    bad(`${'a'.repeat(7)} 1 1 1\n\tx\n`)
+    bad(`${a} 1 1 1\nprevious nothex path\n\tx\n`)
+    bad(`${a} 1 1 1\nauthor-time soon\n\tx\n`)
+    bad(`${a} 1 1 2\n\tx\n`) // announced two lines, got one
   })
 })

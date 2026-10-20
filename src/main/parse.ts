@@ -1,4 +1,4 @@
-import type { Branch, Commit, FileChange, FileCommit, FileStatus, RepoStatus, Stash, Tag } from '../shared/types'
+import type { Blame, BlameChunk, BlameCommit, Branch, Commit, FileChange, FileCommit, FileStatus, RepoStatus, Stash, Tag } from '../shared/types'
 
 // Parses `git status --porcelain=v2 --branch -z`.
 export function parseStatus(out: string): Omit<RepoStatus, 'operation'> {
@@ -93,6 +93,65 @@ export function parseFileLog(out: string, path: string): FileCommit[] {
     current = oldPath ?? file
   }
   return commits
+}
+
+// Parses `git blame --porcelain`: per line a header "<sha> <orig line> <line> [<count>]", the commit's fields the first
+// time it appears, then "\t<content>". Adjacent lines of one commit form one chunk. The content comes from the file of
+// a possibly hostile repository, so a malformed header, group or known field throws; unknown header fields (ignored,
+// unblamable, future ones) are skipped.
+const SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+
+export function parseBlame(out: string): Pick<Blame, 'lines' | 'chunks' | 'commits'> {
+  const bad = (why: string): never => {
+    throw new Error(`Unexpected blame output (${why})`)
+  }
+  const lines: string[] = []
+  const chunks: BlameChunk[] = []
+  const commits: Record<string, BlameCommit> = {}
+  let c: BlameCommit | null = null
+  let awaitingContent = false
+  let pending = 0 // lines still to come in the announced group
+  const rows = out.split('\n')
+  if (rows[rows.length - 1] === '') rows.pop()
+  for (const row of rows) {
+    if (c && awaitingContent) {
+      if (row.startsWith('\t')) {
+        lines.push(row.slice(1))
+        awaitingContent = false
+        pending--
+        const last = chunks[chunks.length - 1]
+        if (last?.sha === c.sha) last.count++
+        else chunks.push({ sha: c.sha, start: lines.length, count: 1 })
+        continue
+      }
+      const space = row.indexOf(' ')
+      const key = space < 0 ? row : row.slice(0, space)
+      const value = space < 0 ? '' : row.slice(space + 1)
+      if (key === 'author') c.author = value
+      else if (key === 'author-mail') c.email = value.replace(/^<|>$/g, '')
+      else if (key === 'author-time') {
+        if (!/^\d+$/.test(value)) bad('author time')
+        c.date = Number(value)
+      } else if (key === 'summary') c.subject = value
+      else if (key === 'previous') {
+        const at = value.indexOf(' ')
+        if (at < 0 || !SHA.test(value.slice(0, at)) || at === value.length - 1) bad('previous')
+        c.previous = { sha: value.slice(0, at), path: value.slice(at + 1) }
+      }
+      continue
+    }
+    const header = /^([0-9a-f]+) \d+ (\d+)(?: (\d+))?$/.exec(row)
+    if (!header || !SHA.test(header[1]) || Number(header[2]) !== lines.length + 1) bad('header')
+    const [, sha, , count] = header!
+    if (count !== undefined) {
+      if (pending !== 0 || Number(count) < 1) bad('group')
+      pending = Number(count)
+    } else if (pending <= 0) bad('group')
+    c = commits[sha] ??= { sha, author: '', email: '', date: 0, subject: '', previous: null }
+    awaitingContent = true
+  }
+  if (awaitingContent || pending !== 0) bad('truncated')
+  return { lines, chunks, commits }
 }
 
 export const BRANCH_FORMAT = '%(refname)%1f%(HEAD)%1f%(upstream:short)%1f%(upstream:track)%1f%(objectname)%1f%(committerdate:unix)'
