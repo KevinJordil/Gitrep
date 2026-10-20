@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Branch, Commit, GraphScope, OperationInfo, RepoStatus, ResetMode, Stash, Tag, UndoState } from '../../shared/types'
+import type { Branch, Commit, GraphScope, OperationInfo, RepoStatus, ResetMode, Settings, Stash, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
 import { CommitMenu, type CommitAction } from './CommitMenu'
@@ -28,10 +28,13 @@ const CONFLICTS = 'Stopped on conflicts: resolve each file, then click Continue'
 interface Props {
   path: string
   active: boolean
+  settings: Settings
+  onSettings: (patch: Partial<Settings>) => void
   onBranch: (path: string, label: string) => void
 }
 
-export function RepoView({ path, active, onBranch }: Props) {
+export function RepoView({ path, active, settings, onSettings, onBranch }: Props) {
+  const { activeDays } = settings
   const notify = useToast()
   const [status, setStatus] = useState<RepoStatus | null>(null)
   const [log, setLog] = useState<Commit[]>([])
@@ -88,7 +91,7 @@ export function RepoView({ path, active, onBranch }: Props) {
     const id = ++request.current
     await refreshStatus(true)
     try {
-      const [l, b, t, s, u] = await Promise.all([api.log(path, scope), api.branches(path), api.tags(path), api.stashes(path), api.undoState(path)])
+      const [l, b, t, s, u] = await Promise.all([api.log(path, scope, activeDays), api.branches(path), api.tags(path), api.stashes(path), api.undoState(path)])
       if (id !== request.current) return // a newer load started; its result wins
       setLog(same(l))
       setBranches(same(b))
@@ -98,7 +101,7 @@ export function RepoView({ path, active, onBranch }: Props) {
     } catch (e) {
       report(e)
     }
-  }, [path, scope, refreshStatus, report])
+  }, [path, scope, activeDays, refreshStatus, report])
 
   // A deleted branch must not stay isolated or hidden.
   useEffect(() => {
@@ -437,9 +440,11 @@ export function RepoView({ path, active, onBranch }: Props) {
                 focus={focus}
                 branches={branches}
                 scope={scope}
+                activeDays={activeDays}
                 remoteNames={remoteNames}
                 onFocus={focusOn}
                 onScope={setScope}
+                onActiveDays={(days) => onSettings({ activeDays: days })}
                 onMenu={openMenu}
                 onDrop={openDrop}
               />

@@ -19,6 +19,7 @@ export interface Fixture {
   app: ElectronApplication
   page: Page
   git: (repo: string, ...args: string[]) => string
+  gitAt: (daysAgo: number, repo: string, ...args: string[]) => string // with author and committer dates `daysAgo` days back
   close: () => Promise<void>
 }
 
@@ -35,6 +36,10 @@ export async function launchFixture(): Promise<Fixture> {
   )
   const env = { ...process.env, GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: '1' }
   const git = (repo: string, ...args: string[]) => execFileSync('git', args, { cwd: repo, env, encoding: 'utf8' })
+  const gitAt = (daysAgo: number, repo: string, ...args: string[]) => {
+    const date = `@${Math.round(Date.now() / 1000 - daysAgo * 86400)} +0000`
+    return execFileSync('git', args, { cwd: repo, env: { ...env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date }, encoding: 'utf8' })
+  }
 
   const work = join(root, 'work')
   mkdirSync(work)
@@ -115,7 +120,7 @@ export async function launchFixture(): Promise<Fixture> {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))
   await page.waitForLoadState('domcontentloaded')
   return {
-    root, alpha, beta, gamma, remote, terminalLog, app, page, git,
+    root, alpha, beta, gamma, remote, terminalLog, app, page, git, gitAt,
     close: async () => {
       await app.close().catch(() => undefined)
       rmSync(root, { recursive: true, force: true })

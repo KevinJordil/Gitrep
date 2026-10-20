@@ -127,6 +127,7 @@ test('reset main soft, then hard after confirmation', async () => {
 })
 
 test('keyboard: Shift+F10 opens the menu, ArrowRight enters the reset submenu, Escape returns focus to the row', async () => {
+  await v.getByLabel('Branches shown').selectOption('days:0') // after the hard reset, "second alpha" is only on tag v-menu
   const r = row('second alpha')
   await r.focus()
   await page.keyboard.press('Shift+F10')

@@ -67,6 +67,9 @@ export function RefPill({ text, color, remoteNames, branches = [], onDrop }: Pil
   )
 }
 
+// The usual choices, plus a value set by hand in the config file.
+const dayChoices = (current: number) => [...new Set([30, 90, current])].filter((d) => d > 0).sort((a, b) => a - b)
+
 const SEARCH_FIELDS: [SearchField, string][] = [
   ['all', 'All fields'],
   ['message', 'Message'],
@@ -164,14 +167,16 @@ interface Props {
   focus: Focus
   branches: Branch[]
   scope: GraphScope
+  activeDays: number // 0 = every branch
   remoteNames: ReadonlySet<string>
   onFocus: (f: Focus) => void
   onScope: (s: GraphScope) => void
+  onActiveDays: (days: number) => void
   onMenu: (c: Commit, x: number, y: number) => void // must be stable (useCallback)
   onDrop: DropBranch // must be stable (useCallback)
 }
 
-export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, remoteNames, onFocus, onScope, onMenu, onDrop }: Props) {
+export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, activeDays, remoteNames, onFocus, onScope, onActiveDays, onMenu, onDrop }: Props) {
   const list = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
@@ -277,8 +282,19 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
           ))}
         </select>
         {!scope.only && (
-          <select className="select" aria-label="Branches shown" value="" onChange={(e) => e.target.value && onScope({ only: e.target.value, hidden: [] })}>
-            <option value="">All branches</option>
+          // "days:N" cannot be a branch name (git refuses ':' in ref names).
+          <select
+            className="select"
+            aria-label="Branches shown"
+            value={`days:${activeDays}`}
+            onChange={(e) => (e.target.value.startsWith('days:') ? onActiveDays(Number(e.target.value.slice(5))) : onScope({ only: e.target.value, hidden: [] }))}
+          >
+            {dayChoices(activeDays).map((d) => (
+              <option key={d} value={`days:${d}`}>
+                Active branches ({d} days)
+              </option>
+            ))}
+            <option value="days:0">All branches</option>
             {branches.map((b) => (
               <option key={`${b.remote}:${b.name}`} value={b.name}>
                 Only {b.name}

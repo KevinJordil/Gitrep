@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Config } from '../../shared/types'
+import type { Config, Settings } from '../../shared/types'
 import { api } from './api'
 import { Dashboard } from './Dashboard'
 import { errorText } from './format'
@@ -81,6 +81,7 @@ export function App() {
     }
   }
   const onBranch = useCallback((path: string, label: string) => setBranches((b) => (b[path] === label ? b : { ...b, [path]: label })), [])
+  const updateSettings = useCallback((patch: Partial<Settings>) => void api.updateSettings(patch).then(reload, (e: unknown) => notify('error', errorText(e))), [reload, notify])
 
   const toastList = (
     <div className="toasts" role="status">
@@ -144,7 +145,7 @@ export function App() {
         {active === 'dashboard' && <Dashboard repoCount={config.repos.length} onOpen={(p) => void openTab(p)} onAdd={() => void addRepos()} onChanged={() => void reload()} />}
         {config.openTabs.map((p) => (
           <div key={p} className="repo" style={{ display: active === p ? 'flex' : 'none' }}>
-            <RepoView path={p} active={active === p} onBranch={onBranch} />
+            <RepoView path={p} active={active === p} settings={config.settings} onSettings={updateSettings} onBranch={onBranch} />
           </div>
         ))}
         {toastList}
