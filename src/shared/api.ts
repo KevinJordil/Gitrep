@@ -2,6 +2,7 @@ import type {
   Branch,
   Commit,
   CommitDetails,
+  ConflictFile,
   Config,
   DiffSide,
   Explanation,
@@ -13,6 +14,7 @@ import type {
   MergeAdvice,
   MergePreview,
   MergeRequest,
+  OperationInfo,
   OpOutcome,
   RepoEntry,
   RepoStatus,
@@ -62,6 +64,12 @@ export interface Api {
   reset(repo: string, sha: string, mode: ResetMode): Promise<void>
   continueOperation(repo: string): Promise<OpOutcome>
   abortOperation(repo: string): Promise<void>
+  skipOperation(repo: string): Promise<OpOutcome>
+  operationInfo(repo: string): Promise<OperationInfo>
+  conflictFile(repo: string, path: string): Promise<ConflictFile>
+  resolveFile(repo: string, path: string, content: string): Promise<void>
+  resolveSide(repo: string, path: string, side: 'ours' | 'theirs'): Promise<void>
+  handOver(repo: string): Promise<void> // opens Claude Code in a terminal with the conflict's context
   mergePreview(repo: string, source: string, target: string): Promise<MergePreview>
   integrate(repo: string, req: MergeRequest): Promise<OpOutcome>
   stashes(repo: string): Promise<Stash[]>
@@ -120,6 +128,12 @@ export const API_METHODS = [
   'reset',
   'continueOperation',
   'abortOperation',
+  'skipOperation',
+  'operationInfo',
+  'conflictFile',
+  'resolveFile',
+  'resolveSide',
+  'handOver',
   'mergePreview',
   'integrate',
   'stashes',

@@ -7,6 +7,7 @@ import { API_METHODS, type Api, type IpcResult } from '../shared/api'
 import type { Config, GraphScope, MergeRequest, RepoEntry } from '../shared/types'
 import * as claude from './claude'
 import { addRepo, loadConfig, removeRepo, saveConfig } from './config'
+import * as conflicts from './conflicts'
 import { git, gitDir } from './git'
 import * as history from './history'
 import * as journal from './journal'
@@ -122,6 +123,10 @@ async function setWatched(paths: string[]): Promise<void> {
   }
 }
 
+async function handOver(path: string): Promise<void> {
+  await conflicts.handOver(path, await claude.resolveClaude(config.settings.claudePath || undefined))
+}
+
 async function addRepos(): Promise<RepoEntry[]> {
   const options: OpenDialogOptions = { title: 'Add git repositories', properties: ['openDirectory', 'multiSelections'] }
   const res = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
@@ -180,6 +185,12 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   reset: forRepo(ops.resetTo),
   continueOperation: forRepo(ops.continueOperation),
   abortOperation: forRepo(ops.abortOperation),
+  skipOperation: forRepo(ops.skipOperation),
+  operationInfo: forRepo(conflicts.getOperationInfo),
+  conflictFile: forRepo(conflicts.getConflictFile),
+  resolveFile: forRepo(conflicts.resolveFile),
+  resolveSide: forRepo(conflicts.resolveSide),
+  handOver: forRepo(handOver),
   mergePreview: forRepo(ops.mergePreview),
   integrate: forRepo((p, req: MergeRequest) => ops.integrate(p, { ...req, autostash: !!req?.autostash })),
   stashes: forRepo(stash.getStashes),

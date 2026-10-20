@@ -79,7 +79,7 @@ export async function unstage(repo: string, paths: string[]): Promise<void> {
   })
 }
 
-function insideRepo(repo: string, path: string): string {
+export function insideRepo(repo: string, path: string): string {
   const root = resolve(repo)
   const full = resolve(root, path)
   if (!full.startsWith(root + sep) || relative(root, full).split(sep)[0] === '.git') throw new Error(`Path outside the repository: ${path}`)

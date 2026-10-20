@@ -189,3 +189,32 @@ export interface UndoState {
   undo: string | null
   redo: string | null
 }
+
+// One side of a conflict, by name: a branch, a commit, or the stash. detail: sha and role ("checked out", "being merged"…).
+export interface ConflictSide {
+  name: string
+  detail: string
+}
+
+export interface RebaseStep {
+  sha: string
+  subject: string
+  state: 'done' | 'current' | 'todo' // current: the step git stopped on
+}
+
+// The operation git stopped in (null: conflicts left by a stash apply), its two sides and, for a rebase, its steps.
+export interface OperationInfo {
+  operation: RepoOperation
+  ours: ConflictSide // upper side: stage 2, HEAD (during a rebase: the branch rebased onto)
+  theirs: ConflictSide // lower side: stage 3, what is merged, picked or replayed
+  steps: RebaseStep[]
+}
+
+// text: the file with its conflict markers; binary or deleted (one side deleted it) files are resolved by taking a side.
+export interface ConflictFile {
+  path: string
+  kind: 'text' | 'binary' | 'deleted'
+  text: string
+  ours: boolean // the upper side still has the file
+  theirs: boolean
+}

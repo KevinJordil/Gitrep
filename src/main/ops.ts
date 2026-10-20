@@ -122,6 +122,14 @@ export async function continueOperation(repo: string): Promise<OpOutcome> {
   })
 }
 
+// Drops the commit a rebase stopped on and goes on with the next ones.
+export async function skipOperation(repo: string): Promise<OpOutcome> {
+  return serialized(repo, async () => {
+    if ((await getStatus(repo)).operation !== 'rebase') throw new Error('Only a rebase can skip a commit')
+    return resumed(repo, () => mayConflict(repo, ['rebase', '--skip']))
+  })
+}
+
 export async function abortOperation(repo: string): Promise<void> {
   await serialized(repo, async () => {
     const op = (await getStatus(repo)).operation
