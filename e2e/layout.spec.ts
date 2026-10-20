@@ -98,3 +98,12 @@ test('file rows: a status badge with its tooltip and an icon of the file type', 
   await expect(file('main.c').locator('.ficon')).toHaveCSS('color', 'rgb(81, 154, 186)') // --icon-c
   await page.screenshot({ path: 'e2e-artifacts/file-icons.png' })
 })
+
+test('diffs are syntax highlighted', async () => {
+  await v.locator('aside.right .file', { hasText: 'main.c' }).locator('.path').click()
+  const keyword = v.locator('.lines .t span', { hasText: 'return' })
+  await expect(keyword).toHaveCSS('color', 'rgb(124, 188, 244)') // --syn-kw
+  await expect(v.locator('.lines .t span', { hasText: 'int' }).first()).toHaveCSS('color', 'rgb(78, 201, 176)') // --syn-ty
+  await expect(v.locator('.lines .line.add .t')).toHaveText('int main(void) { return 0; }')
+  await page.screenshot({ path: 'e2e-artifacts/highlighted-diff.png' })
+})

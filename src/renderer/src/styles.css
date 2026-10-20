@@ -46,6 +46,14 @@
   --warn-bg: #2f2615;
   --warn-bd: #6a5426;
   --warn-fg: #f3dcae;
+  /* syntax colors in diffs */
+  --syn-kw: #7cbcf4;
+  --syn-ty: #4ec9b0;
+  --syn-str: #e8a888;
+  --syn-num: #bfd8b0;
+  --syn-com: #92ba80;
+  --syn-pp: #dba2d6;
+  --syn-fn: #e8e3ae;
   /* change status badges */
   --status-added: var(--green);
   --status-modified: var(--amber);

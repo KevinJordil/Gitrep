@@ -28,7 +28,8 @@ describe('theme tokens', () => {
     ['ctx-t', 'panel'],
     ['on-primary', 'primary'],
     ['claude-fg', 'claude-bg'],
-    ['warn-fg', 'warn-bg']
+    ['warn-fg', 'warn-bg'],
+    ...['kw', 'ty', 'str', 'num', 'com', 'pp', 'fn'].flatMap((s) => ['panel', 'add-bg', 'del-bg'].map((bg): [string, string] => [`syn-${s}`, bg]))
   ]
   it.each(pairs)('%s on %s reaches WCAG AA (4.5:1)', (fg, bg) => {
     expect(tokens[fg], fg).toBeDefined()

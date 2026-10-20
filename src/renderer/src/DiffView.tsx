@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { DiffSide, FileDiff, Hunk, LineAction } from '../../shared/types'
 import { api } from './api'
 import { changeGroups, errorText, splitPath } from './format'
+import { langFor } from './fileTypes'
+import type { Token } from './highlight'
 import { Icon } from './icons'
 import type { RunOp, Selection } from './model'
 import { useToast } from './toast'
@@ -26,6 +28,7 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
   const [diff, setDiff] = useState<FileDiff | null | undefined>(undefined)
   const [picked, setPicked] = useState<Record<number, number[]>>({})
   const [showAll, setShowAll] = useState(false)
+  const colored = useHighlight(diff, path)
 
   useEffect(() => {
     let alive = true
@@ -121,7 +124,7 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
                 </button>
               )}
             </div>
-            <Lines hunk={h} index={i} partial={partial} verb={primaryVerb} icon={primary === 'stage' ? 'plus' : 'minus'} picked={picked[i] ?? []} onToggle={toggle} onGroup={(lines) => void apply(primary, i, lines)} />
+            <Lines hunk={h} index={i} tokens={colored?.[i]} partial={partial} verb={primaryVerb} icon={primary === 'stage' ? 'plus' : 'minus'} picked={picked[i] ?? []} onToggle={toggle} onGroup={(lines) => void apply(primary, i, lines)} />
           </section>
         ))}
         {shown.length < hunks.length && (
@@ -155,9 +158,40 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
   )
 }
 
+// Syntax colors of the diff, computed after the plain diff is shown; null until then, or without a grammar.
+function useHighlight(diff: FileDiff | null | undefined, path: string): (Token[] | null)[][] | null {
+  const [done, setDone] = useState<{ diff: FileDiff; lines: (Token[] | null)[][] } | null>(null)
+  useEffect(() => {
+    const lang = langFor(path)
+    if (!diff || diff.binary || !lang) return
+    let alive = true
+    // Shiki loads with the first diff, not at startup. A grammar that fails to load leaves the diff plain.
+    import('./highlight')
+      .then((m) => m.highlightDiff(diff.hunks, lang))
+      .then((lines) => alive && lines && setDone({ diff, lines }), () => undefined)
+    return () => {
+      alive = false
+    }
+  }, [diff, path])
+  return done && done.diff === diff ? done.lines : null
+}
+
+function Code({ tokens }: { tokens: Token[] }) {
+  return (
+    <>
+      {tokens.map((t, i) => (
+        <span key={i} style={t.color || t.italic ? { color: t.color, fontStyle: t.italic ? 'italic' : undefined } : undefined}>
+          {t.text}
+        </span>
+      ))}
+    </>
+  )
+}
+
 interface LinesProps {
   hunk: Hunk
   index: number
+  tokens?: (Token[] | null)[] // syntax colors of each line, when ready
   partial: boolean
   verb: string
   icon: 'plus' | 'minus'
@@ -166,7 +200,7 @@ interface LinesProps {
   onGroup: (lines: number[]) => void
 }
 
-function Lines({ hunk, index, partial, verb, icon, picked, onToggle, onGroup }: LinesProps) {
+function Lines({ hunk, index, tokens, partial, verb, icon, picked, onToggle, onGroup }: LinesProps) {
   const groupAt = new Map(changeGroups(hunk.lines).map((g) => [g[0], g]))
   const sel = new Set(picked)
   return (
@@ -186,7 +220,7 @@ function Lines({ hunk, index, partial, verb, icon, picked, onToggle, onGroup }: 
             <span className="no">{l.oldNo ?? ''}</span>
             <span className="no">{l.newNo ?? ''}</span>
             <span className="sg">{l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ''}</span>
-            <span className="t">{l.text}</span>
+            <span className="t">{tokens?.[i] ? <Code tokens={tokens[i]!} /> : l.text}</span>
           </div>
         )
       })}
