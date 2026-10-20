@@ -14,6 +14,7 @@ import type {
   FileChange,
   FileCommit,
   FileDiff,
+  ForgeInfo,
   ForgeKind,
   GeneratedMessage,
   GraphScope,
@@ -24,6 +25,7 @@ import type {
   MergeRequest,
   OperationInfo,
   OpOutcome,
+  PostStep,
   RebasePlan,
   RebaseProposal,
   RepoEntry,
@@ -108,6 +110,8 @@ export interface Api {
   saveAccount(host: string, kind: ForgeKind, url: string, token: string): Promise<AccountInfo> // tests the token, stores it only when it works
   testAccount(host: string): Promise<AccountInfo>
   removeAccount(host: string): Promise<void>
+  forgeInfo(repo: string, branch: string): Promise<ForgeInfo | null> // null: the branch's remote is not on a forge
+  postReviewStep(repo: string, branch: string, head: string, draft: boolean, step: PostStep): Promise<void>
   onRepoChanged(cb: (repo: string) => void): () => void
 }
 
@@ -184,7 +188,9 @@ export const API_METHODS = [
   'accounts',
   'saveAccount',
   'testAccount',
-  'removeAccount'
+  'removeAccount',
+  'forgeInfo',
+  'postReviewStep'
 ] as const satisfies readonly InvokeMethod[]
 
 // Compile-time guard: every invoke method must be listed above.

@@ -323,3 +323,36 @@ export interface AccountInfo {
   url: string
   user: string | null // the user name the token belongs to, from the last connection test
 }
+
+// The open merge request (GitLab) or pull request (GitHub) whose source is the branch.
+export interface ForgeRequest {
+  number: number // GitLab iid (!n), GitHub number (#n)
+  title: string
+  author: string
+  target: string // target branch name, as on the forge
+  url: string // its web page
+  head: string // the head commit the forge has
+}
+
+// Where a branch's remote lives and what is open there. kind null: a host the app does not know, the user picks.
+export interface ForgeInfo {
+  host: string
+  kind: ForgeKind | null
+  project: string // GitLab group/subgroup/project, GitHub owner/repo
+  url: string // the account's instance address, else the one proposed for the remote
+  account: AccountInfo | null
+  request: ForgeRequest | null
+  error: string | null // the lookup failed (network, token): shown, the review still works
+}
+
+// One inline comment, on the new side (newLine), the old side of a deleted line (oldLine only), or a context line (both).
+export interface ReviewComment {
+  path: string
+  oldPath: string
+  newLine: number | null
+  oldLine: number | null
+  body: string
+}
+
+// What one call posts. GitLab: comments, the summary note, then publish when drafting. GitHub: comments and a summary review, or one pending review.
+export type PostStep = { kind: 'summary'; body: string } | { kind: 'comment'; comment: ReviewComment } | { kind: 'publish' } | { kind: 'review'; body: string; comments: ReviewComment[] }

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import icon from '../../resources/icon.png?asset'
 import { API_METHODS, type Api, type IpcResult } from '../shared/api'
-import type { Config, ConflictHunk, GraphScope, InteractiveRebaseRequest, MergeRequest, RepoEntry } from '../shared/types'
+import type { Config, ConflictHunk, GraphScope, InteractiveRebaseRequest, MergeRequest, PostStep, RepoEntry } from '../shared/types'
 import * as accounts from './accounts'
 import * as assist from './assist'
 import * as claude from './claude'
@@ -18,6 +18,7 @@ import { codeCommand, run as launch, terminalCommand } from './launch'
 import * as ops from './ops'
 import * as rebase from './rebase'
 import * as repo from './repo'
+import * as requests from './requests'
 import { smoke } from './smoke'
 import * as stash from './stash'
 import * as undo from './undo'
@@ -57,6 +58,8 @@ const hostArg = (h: unknown) => {
   if (!isHost(h)) throw new Error(`Invalid host: ${String(h)}`)
   return h
 }
+
+const forgeContext = (): requests.ForgeContext => ({ accountsFile, vault, chosen: config.settings.forgeHosts })
 
 const isRegistered = (path: string) => config.repos.some((r) => r.path === path)
 const claudeOptions = (): claude.ClaudeOptions => ({ model: config.settings.claudeModel, claudePath: config.settings.claudePath || undefined })
@@ -231,7 +234,9 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   accounts: async () => accounts.listAccounts(accountsFile),
   saveAccount: (host, kind, url, token) => accounts.saveAccount(accountsFile, vault, String(host), kind, String(url), String(token)),
   testAccount: (host) => accounts.testAccount(accountsFile, vault, hostArg(host)),
-  removeAccount: async (host) => accounts.removeAccount(accountsFile, hostArg(host))
+  removeAccount: async (host) => accounts.removeAccount(accountsFile, hostArg(host)),
+  forgeInfo: forRepo((p, branch: string) => requests.forgeInfo(p, String(branch), forgeContext())),
+  postReviewStep: forRepo((p, branch: string, head: string, draft: boolean, step: PostStep) => requests.postStep(p, String(branch), String(head), !!draft, step, forgeContext()))
 }
 
 for (const name of API_METHODS) {
