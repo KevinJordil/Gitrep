@@ -34,7 +34,9 @@ export function ChangesPanel({ repo, status, selection, onSelect, run, busy }: P
   const discard = (files: FileChange[]) => {
     const what = files.length === 1 ? files[0].path : `${files.length} files`
     if (!window.confirm(`Permanently discard the changes to ${what}?`)) return
-    void run('discard', () => api.discard(repo, files))
+    void run('discard', async () => {
+      if (!(await api.discard(repo, files))) notify('info', 'Discarded. Too large to be undone.')
+    })
   }
 
   const fill = (message: string) => {

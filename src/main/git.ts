@@ -15,7 +15,8 @@ export class GitError extends Error {
 }
 
 export interface RunOptions {
-  input?: string
+  input?: string | Buffer
+  raw?: boolean // stdout as bytes (patches must round-trip non-UTF-8 files)
   env?: Record<string, string>
   okCodes?: number[]
 }
@@ -24,18 +25,20 @@ export interface RunOptions {
 // GIT_LITERAL_PATHSPECS: paths from the renderer are never pathspec magic (`*`, `:(top)`...).
 const BASE_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o ConnectTimeout=10', LC_ALL: 'C', GIT_LITERAL_PATHSPECS: '1' }
 
-export function git(cwd: string, args: string[], opts: RunOptions = {}): Promise<string> {
+export function git(cwd: string, args: string[], opts: RunOptions & { raw: true }): Promise<Buffer>
+export function git(cwd: string, args: string[], opts?: RunOptions): Promise<string>
+export function git(cwd: string, args: string[], opts: RunOptions = {}): Promise<string | Buffer> {
   return new Promise((resolve, reject) => {
     const child = execFile(
       'git',
       // User configs may change diff prefixes (mnemonicPrefix, noprefix): the parsers need a/ b/. showSignature would prepend gpg output to log records.
       ['-c', 'core.quotePath=false', '-c', 'diff.mnemonicPrefix=false', '-c', 'diff.noprefix=false', '-c', 'log.showSignature=false', ...args],
-      { cwd, env: { ...process.env, ...BASE_ENV, ...opts.env }, maxBuffer: 256 * 1024 * 1024, encoding: 'utf8' },
+      { cwd, env: { ...process.env, ...BASE_ENV, ...opts.env }, maxBuffer: 256 * 1024 * 1024, encoding: opts.raw ? 'buffer' : 'utf8' },
       (err, stdout, stderr) => {
         if (!err) return resolve(stdout)
         const code = typeof err.code === 'number' ? err.code : null
         if (code !== null && opts.okCodes?.includes(code)) return resolve(stdout)
-        reject(new GitError(args, stderr || err.message, code))
+        reject(new GitError(args, String(stderr) || err.message, code))
       }
     )
     // git may exit before reading stdin (EPIPE); the exit callback reports the real failure.

@@ -16,6 +16,9 @@ export type MoveMode = 'soft' | 'mixed' | 'keep' | 'hard'
 export type Step =
   | { kind: 'refs'; before: Snapshot; after: Snapshot; mode: MoveMode; saved?: string }
   | { kind: 'ref'; ref: string; before: string | null; after: string | null } // a tag
+  | { kind: 'stash'; pushed: boolean; sha: string; message: string; untracked: boolean } // a push, or a pop on a clean tree
+  | { kind: 'stash-drop'; sha: string; subject: string }
+  | { kind: 'patch'; patch: Buffer } // discarded changes: undo applies the patch, redo reverses it
 
 export interface Entry {
   label: string
@@ -38,11 +41,15 @@ function historyOf(repo: string): History {
   return h
 }
 
+const MAX_PATCH_BYTES = 100 * 1024 * 1024 // Limit: saved patches across a repo's history; oldest steps fall off
+const patchBytes = (h: History) => [...h.undo, ...h.redo].reduce((n, e) => n + (e.step.kind === 'patch' ? e.step.patch.length : 0), 0)
+
 export function record(repo: string, label: string, step: Step): void {
   const h = historyOf(repo)
   h.undo.push({ label, step })
   if (h.undo.length > MAX_ENTRIES) h.undo.shift()
   h.redo = []
+  while (h.undo.length > 1 && patchBytes(h) > MAX_PATCH_BYTES) h.undo.shift()
   h.pending = undefined
 }
 

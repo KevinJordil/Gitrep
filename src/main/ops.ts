@@ -5,7 +5,7 @@ import { aborted, record, resumed, tracked } from './journal'
 import { getBranches, getStatus, RO } from './repo'
 
 // Conflict hunks keep the common ancestor: easier to resolve by hand.
-const DIFF3 = ['-c', 'merge.conflictStyle=diff3']
+export const DIFF3 = ['-c', 'merge.conflictStyle=diff3']
 // --continue and friends must never wait for an editor nobody can see.
 const NO_EDITOR = { GIT_EDITOR: 'true' }
 const RESET_MODES: readonly ResetMode[] = ['soft', 'mixed', 'hard']

@@ -39,7 +39,7 @@ export interface Api {
   diff(repo: string, path: string, side: DiffSide): Promise<FileDiff | null>
   stage(repo: string, paths: string[]): Promise<void>
   unstage(repo: string, paths: string[]): Promise<void>
-  discard(repo: string, files: FileChange[]): Promise<void>
+  discard(repo: string, files: FileChange[]): Promise<boolean> // false: could not be journaled, history cleared
   applyLines(repo: string, file: FileDiff, hunk: number, lines: number[] | null, action: LineAction): Promise<void>
   commit(repo: string, message: string, amend: boolean): Promise<void>
   lastMessage(repo: string): Promise<string>

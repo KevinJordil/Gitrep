@@ -1,6 +1,7 @@
 import { git, serialized } from './git'
 import { changedBranches, clear, peek, shift, snapshot, type Snapshot, type Step } from './journal'
-import { ensureIdle } from './ops'
+import { DIFF3, ensureIdle } from './ops'
+import { findStash, pushStash } from './stash'
 
 // HEAD or a ref is no longer where the journal left it: something else changed the repository.
 class Stale extends Error {}
@@ -70,12 +71,48 @@ async function apply(repo: string, step: Step, dir: 'undo' | 'redo'): Promise<st
     if (from.head.branch === to.head.branch && from.head.sha === to.head.sha) return ''
     return `${to.head.branch ?? 'HEAD'} ${dir === 'undo' ? 'is back at' : 'is at'} ${short(to.head.sha)}`
   }
-  const [old, next] = dir === 'undo' ? [step.after, step.before] : [step.before, step.after]
-  const current = (await git(repo, ['rev-parse', '-q', '--verify', step.ref], { okCodes: [1] })).trim() || null
-  if (current !== old) throw new Stale()
-  await git(repo, next ? ['update-ref', step.ref, next, old ?? ''] : ['update-ref', '-d', step.ref, old!])
+  if (step.kind === 'ref') {
+    const [old, next] = dir === 'undo' ? [step.after, step.before] : [step.before, step.after]
+    const current = (await git(repo, ['rev-parse', '-q', '--verify', step.ref], { okCodes: [1] })).trim() || null
+    if (current !== old) throw new Stale()
+    await git(repo, next ? ['update-ref', step.ref, next, old ?? ''] : ['update-ref', '-d', step.ref, old!])
+  } else if (step.kind === 'stash') {
+    // Undo of a push pops it, undo of a pop pushes the changes again (a new stash: its SHA is kept for redo).
+    if (step.pushed === (dir === 'undo')) {
+      const { ref } = await stashRef(repo, step.sha)
+      // --index brings the staged state back; plain pop when the index no longer applies.
+      await git(repo, [...DIFF3, 'stash', 'pop', '--index', ref]).catch(() => git(repo, [...DIFF3, 'stash', 'pop', ref]))
+    } else {
+      await assertSameAsStash(repo, step.sha, step.untracked, step.pushed)
+      step.sha = (await pushStash(repo, step.message, step.untracked)) || stale()
+    }
+  } else if (step.kind === 'stash-drop') {
+    if (dir === 'undo') await git(repo, ['stash', 'store', '-m', step.subject, step.sha])
+    else await git(repo, ['stash', 'drop', (await stashRef(repo, step.sha)).ref])
+  } else {
+    await git(repo, ['apply', '--binary', '--recount', '--whitespace=nowarn', ...(dir === 'redo' ? ['-R'] : []), '-'], { input: step.patch })
+  }
   return ''
 }
+
+// Re-stashing takes the whole work tree: refuse when it holds more than the stash did (after a pop: nothing staged; before a push: the stash's own index).
+async function assertSameAsStash(repo: string, sha: string, untracked: boolean, pushed: boolean): Promise<void> {
+  const changed = new Error('Your work tree changed since the pop: stash it yourself or undo is not possible.')
+  if ((await git(repo, ['diff', '--cached', '--name-only', ...(pushed ? [`${sha}^2`] : [])])).trim() || (await git(repo, ['diff', '--name-only', sha])).trim()) throw changed
+  const now = (await git(repo, ['ls-files', '-z', '--others', '--exclude-standard'])).split('\0').filter(Boolean).sort()
+  const saved = untracked ? (await git(repo, ['ls-tree', '-r', '-z', '--name-only', `${sha}^3`])).split('\0').filter(Boolean).sort() : []
+  if (pushed && !untracked) return // a push without -u leaves the untracked files alone
+  if (now.join('\0') !== saved.join('\0')) throw changed
+  for (const f of now) {
+    const [have, want] = await Promise.all([git(repo, ['hash-object', '--', f]), git(repo, ['rev-parse', `${sha}^3:${f}`])])
+    if (have.trim() !== want.trim()) throw changed
+  }
+}
+
+const stale = (): never => {
+  throw new Stale()
+}
+const stashRef = (repo: string, sha: string) => findStash(repo, sha).catch(stale)
 
 async function replay(repo: string, dir: 'undo' | 'redo'): Promise<string> {
   return serialized(repo, async () => {

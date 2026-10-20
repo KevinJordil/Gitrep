@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs'
+import { stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, relative, resolve, sep } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { GRAPH_LIMIT, type Branch, type Commit, type DiffSide, type FileChange, type FileDiff, type GraphScope, type LineAction, type OpOutcome, type RepoStatus, type RepoSummary } from '../shared/types'
 import { buildPatch, parseDiff } from './diff'
 import { currentOperation, git, serialized } from './git'
-import { tracked } from './journal'
+import { clear, record, tracked } from './journal'
 import { mayConflict } from './ops'
 import { BRANCH_FORMAT, LOG_FORMAT, parseBranches, parseLog, parseNumstat, parseStatus } from './parse'
 
@@ -85,16 +86,49 @@ function insideRepo(repo: string, path: string): string {
   return full
 }
 
-export async function discard(repo: string, files: FileChange[]): Promise<void> {
+const PATCH = ['diff', '--binary', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames']
+const MAX_UNDO_PATCH = 20 * 1024 * 1024 // Limit: bigger discards cannot be undone
+
+// A tracked file deleted in the work tree weighs what HEAD holds.
+const size = (repo: string, f: string) =>
+  stat(join(repo, f)).then(
+    (s) => s.size,
+    () => git(repo, ['cat-file', '-s', `HEAD:${f}`], { okCodes: [128] }).then((o) => Number(o.trim()) || 0, () => 0)
+  )
+
+// The changes a discard is about to drop, as a binary patch undo can re-apply (untracked files included).
+// Bytes, not text: files that are not UTF-8 must come back identical. Null when too big to keep, checked before capturing.
+async function discardPatch(repo: string, known: string[], untracked: string[]): Promise<Buffer | null> {
+  const extra: string[] = []
+  for (const path of untracked) extra.push(...(await git(repo, ['ls-files', '-z', '--others', '--exclude-standard', '--', path])).split('\0').filter(Boolean))
+  let bytes = 0
+  for (const f of [...known, ...extra]) bytes += await size(repo, f)
+  if (bytes > MAX_UNDO_PATCH) return null
+  const parts = known.length ? [await git(repo, [...PATCH, '--', ...known], { raw: true })] : []
+  for (const f of extra) parts.push(await git(repo, [...PATCH, '--no-index', '--', '/dev/null', f], { raw: true, okCodes: [1] }))
+  return Buffer.concat(parts)
+}
+
+// Resolves to false when the discard could not be journaled: the history is cleared so that Undo never reverses something older.
+export async function discard(repo: string, files: FileChange[]): Promise<boolean> {
   for (const f of files) insideRepo(repo, f.path)
-  await serialized(repo, async () => {
+  return serialized(repo, async () => {
     // Never trust the renderer's status: use the real one, skip paths that are not unstaged.
     const real = new Map((await getStatus(repo)).unstaged.map((f) => [f.path, f.status]))
     const targets = files.filter((f) => real.has(f.path)).map((f) => ({ path: f.path, status: real.get(f.path), full: insideRepo(repo, f.path) }))
-    const tracked = targets.filter((t) => t.status !== '?').map((t) => t.path)
-    if (tracked.length) await git(repo, ['restore', '--worktree', '--', ...tracked])
+    const known = targets.filter((t) => t.status !== '?').map((t) => t.path)
+    const untracked = targets.filter((t) => t.status === '?').map((t) => t.path)
+    const patch = await discardPatch(repo, known, untracked)
+    if (known.length) await git(repo, ['restore', '--worktree', '--', ...known])
     // git clean keeps ignored files inside untracked folders.
-    for (const t of targets) if (t.status === '?') await git(repo, ['clean', '-f', '-d', '--', t.path])
+    for (const path of untracked) await git(repo, ['clean', '-f', '-d', '--', path])
+    if (!targets.length) return true
+    if (!patch?.length) {
+      clear(repo)
+      return false
+    }
+    record(repo, `Discard changes to ${targets.length === 1 ? targets[0].path : `${targets.length} files`}`, { kind: 'patch', patch })
+    return true
   })
 }
 
@@ -109,6 +143,7 @@ export async function applyLines(repo: string, file: FileDiff, hunk: number, lin
         ? ['apply', '--recount', '--whitespace=nowarn', '-R', '-']
         : ['apply', '--cached', '--recount', '--whitespace=nowarn', ...(action === 'unstage' ? ['-R'] : []), '-']
     await git(repo, args, { input: patch })
+    if (action === 'discard') record(repo, `Discard lines in ${fresh.newPath}`, { kind: 'patch', patch: Buffer.from(patch) })
   })
 }
 

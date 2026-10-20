@@ -4,9 +4,10 @@ import { describe, expect, it } from 'vitest'
 import { git } from '../src/main/git'
 import { undoState } from '../src/main/journal'
 import { abortOperation, checkoutCommit, cherryPick, continueOperation, createBranch, createTag, deleteBranch, integrate, resetTo } from '../src/main/ops'
-import { commit, getStatus, pull, stage, switchBranch } from '../src/main/repo'
+import { applyLines, commit, discard, getDiff, getStatus, pull, stage, switchBranch } from '../src/main/repo'
+import { getStashes, stashApply, stashDrop, stashPush } from '../src/main/stash'
 import { redo, undo } from '../src/main/undo'
-import { commitAll, makeRepo, tempDir, write } from './helpers'
+import { commitAll, lines, makeRepo, tempDir, write } from './helpers'
 
 const rev = async (repo: string, r = 'HEAD') => (await git(repo, ['rev-parse', r])).trim()
 const branchOf = async (repo: string) => (await git(repo, ['branch', '--show-current'])).trim()
@@ -267,5 +268,133 @@ describe('saved changes and pull', () => {
     await stage(repo, ['a.txt'])
     expect(await continueOperation(repo)).toBe('done')
     expect(undoState(repo).undo).toBe('Pull')
+  })
+})
+
+describe('undo of stashes and discards', () => {
+  it('undoes a stash push by popping it, and redoes it', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'wip\n')
+    await write(repo, 'new.txt', 'new\n')
+    await stashPush(repo, 'try', true)
+    await undo(repo)
+    expect(await getStashes(repo)).toEqual([])
+    expect(await read(repo, 'new.txt')).toBe('new\n')
+    await redo(repo)
+    expect((await getStashes(repo)).map((s) => s.message)).toEqual(['try'])
+    expect((await getStatus(repo)).unstaged).toEqual([])
+  })
+
+  it('undoes a drop, keeping the same stash', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'wip\n')
+    await stashPush(repo, '', false)
+    const [s] = await getStashes(repo)
+    await stashDrop(repo, s.sha)
+    expect(await undo(repo)).toBe(`Drop stash "${s.message}" undone`)
+    expect(await getStashes(repo)).toEqual([s])
+    await redo(repo)
+    expect(await getStashes(repo)).toEqual([])
+  })
+
+  it('undoes a pop made on a clean tree by stashing the changes again', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'wip\n')
+    await stashPush(repo, 'named', false)
+    const [s] = await getStashes(repo)
+    await stashApply(repo, s.sha, true)
+    expect(undoState(repo).undo).toBe('Pop stash "named"')
+    await undo(repo)
+    expect((await getStashes(repo)).map((x) => x.message)).toEqual(['named'])
+    expect(await read(repo, 'a.txt')).toBe('main\n')
+    await redo(repo)
+    expect(await read(repo, 'a.txt')).toBe('wip\n')
+    expect(await getStashes(repo)).toEqual([])
+  })
+
+  it('does not journal a pop made over other local changes', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'wip\n')
+    await stashPush(repo, 'x', false)
+    const [s] = await getStashes(repo)
+    await write(repo, 'other.txt', 'mine\n')
+    await stashApply(repo, s.sha, true)
+    expect(undoState(repo).undo).toBe('Stash "x"')
+  })
+
+  it('brings back discarded files, untracked ones included, and discards them again on redo', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'changed\n')
+    await write(repo, 'dir/n.bin', 'x\0y')
+    await discard(repo, [{ path: 'a.txt', status: 'M' }, { path: 'dir/', status: '?' }])
+    expect((await getStatus(repo)).unstaged).toEqual([])
+    expect(await undo(repo)).toBe('Discard changes to 2 files undone')
+    expect(await read(repo, 'a.txt')).toBe('changed\n')
+    expect(await read(repo, 'dir/n.bin')).toBe('x\0y')
+    await redo(repo)
+    expect((await getStatus(repo)).unstaged).toEqual([])
+  })
+
+  it('brings back discarded lines', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'f.txt', lines(10))
+    await commitAll(repo, 'base')
+    await write(repo, 'f.txt', lines(10, (i) => (i === 2 ? 'two' : `line ${i}`)))
+    const diff = (await getDiff(repo, 'f.txt', 'unstaged'))!
+    await applyLines(repo, diff, 0, null, 'discard')
+    expect(await read(repo, 'f.txt')).toBe(lines(10))
+    await undo(repo)
+    expect(await read(repo, 'f.txt')).toBe(lines(10, (i) => (i === 2 ? 'two' : `line ${i}`)))
+  })
+
+  it('restores non-UTF-8 files byte for byte', async () => {
+    const repo = await setup()
+    const latin = Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]) // "café" in Latin-1
+    await writeFile(join(repo, 'a.txt'), latin)
+    await writeFile(join(repo, 'l.txt'), latin)
+    await discard(repo, [{ path: 'a.txt', status: 'M' }, { path: 'l.txt', status: '?' }])
+    await undo(repo)
+    expect(await readFile(join(repo, 'a.txt'))).toEqual(latin)
+    expect(await readFile(join(repo, 'l.txt'))).toEqual(latin)
+  })
+
+  it('clears the history when a discard is too big to be undone', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'wip\n')
+    await stashPush(repo, 'x', false)
+    await writeFile(join(repo, 'big.bin'), Buffer.alloc(21 * 1024 * 1024, 1))
+    expect(await discard(repo, [{ path: 'big.bin', status: '?' }])).toBe(false)
+    expect(undoState(repo)).toEqual({ undo: null, redo: null })
+  })
+
+  it('refuses to undo a pop when the work tree changed since', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'wip\n')
+    await stashPush(repo, 'x', false)
+    await stashApply(repo, (await getStashes(repo))[0].sha, true)
+    await write(repo, 'later.txt', 'more\n')
+    await expect(undo(repo)).rejects.toThrow('work tree changed since the pop')
+    expect(await getStashes(repo)).toEqual([])
+    expect(undoState(repo).undo).toBe('Pop stash "x"')
+  })
+
+  it('undoes a stash push keeping the staged state', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'wip\n')
+    await stage(repo, ['a.txt'])
+    await stashPush(repo, '', false)
+    await undo(repo)
+    expect((await getStatus(repo)).staged.map((f) => f.path)).toEqual(['a.txt'])
+  })
+
+  it('redoes a stash push after undo restored the staged state', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'wip\n')
+    await stage(repo, ['a.txt'])
+    await stashPush(repo, 'k', false)
+    await undo(repo)
+    await redo(repo)
+    expect((await getStashes(repo)).map((s) => s.message)).toEqual(['k'])
+    expect((await getStatus(repo)).staged).toEqual([])
   })
 })
