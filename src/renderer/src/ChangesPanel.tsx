@@ -1,6 +1,7 @@
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { MAX_INSTRUCTIONS, type DiffSide, type FileChange, type RepoStatus } from '../../shared/types'
 import { api } from './api'
+import { fileMenuProps } from './FileMenu'
 import { errorText, splitPath } from './format'
 import { FileIcon, StatusBadge } from './FileIcon'
 import { Dialog } from './Dialog'
@@ -17,13 +18,14 @@ interface Props {
   selection: Selection | null
   onSelect: (s: Selection) => void
   onConflict: (path: string) => void // opens the conflict view on that file
+  onFileMenu: (path: string, rev: null, x: number, y: number) => void
   run: RunOp
   busy: string | null
 }
 
 const pathsOf = (files: FileChange[]) => files.flatMap((f) => (f.origPath ? [f.path, f.origPath] : [f.path]))
 
-export function ChangesPanel({ repo, name, instructions, onInstructions, status, selection, onSelect, onConflict, run, busy }: Props) {
+export function ChangesPanel({ repo, name, instructions, onInstructions, status, selection, onSelect, onConflict, onFileMenu, run, busy }: Props) {
   const notify = useToast()
   const [summary, setSummary] = useState('')
   const [body, setBody] = useState('')
@@ -111,7 +113,7 @@ export function ChangesPanel({ repo, name, instructions, onInstructions, status,
       </div>
       <div className="scroll">
         {conflicted.length > 0 && (
-          <FileGroup title="Conflicts" files={conflicted} side="unstaged" selection={null} onSelect={(s) => onConflict(s.path)} hint="Click a file to resolve it, or stage it as it is." buttons={stageBtn} />
+          <FileGroup title="Conflicts" files={conflicted} side="unstaged" selection={null} onSelect={(s) => onConflict(s.path)} onMenu={onFileMenu} hint="Click a file to resolve it, or stage it as it is." buttons={stageBtn} />
         )}
         <FileGroup
           title="Unstaged"
@@ -119,6 +121,7 @@ export function ChangesPanel({ repo, name, instructions, onInstructions, status,
           side="unstaged"
           selection={selection}
           onSelect={onSelect}
+          onMenu={onFileMenu}
           action={unstaged.length ? { label: 'Stage all', run: () => void run('stage', () => api.stage(repo, pathsOf(unstaged))) } : undefined}
           buttons={(f) => (
             <>
@@ -135,6 +138,7 @@ export function ChangesPanel({ repo, name, instructions, onInstructions, status,
           side="staged"
           selection={selection}
           onSelect={onSelect}
+          onMenu={onFileMenu}
           action={staged.length ? { label: 'Unstage all', run: () => void run('unstage', () => api.unstage(repo, pathsOf(staged))) } : undefined}
           buttons={(f) => (
             <button className="fbtn" aria-label={`Unstage ${f.path}`} title="Unstage" onClick={() => void run('unstage', () => api.unstage(repo, pathsOf([f])))}>
@@ -224,12 +228,13 @@ interface GroupProps {
   side: 'staged' | 'unstaged'
   selection: Selection | null
   onSelect?: (s: Selection) => void
+  onMenu: (path: string, rev: null, x: number, y: number) => void // the file menu (history); not for untracked files
   action?: { label: string; run: () => void }
   hint?: string
   buttons: (f: FileChange) => ReactNode
 }
 
-function FileGroup({ title, files, side, selection, onSelect, action, hint, buttons }: GroupProps) {
+function FileGroup({ title, files, side, selection, onSelect, onMenu, action, hint, buttons }: GroupProps) {
   return (
     <section className="fgroup">
       <div className="fgroup-head">
@@ -248,7 +253,7 @@ function FileGroup({ title, files, side, selection, onSelect, action, hint, butt
         const target: DiffSide = side === 'staged' ? 'staged' : f.status === '?' ? 'untracked' : 'unstaged'
         const selected = selection?.path === f.path && selection.side === target
         return (
-          <div key={`${side}:${f.path}`} className={`file ${selected ? 'sel' : ''}`} title={f.origPath ? `${f.origPath} → ${f.path}` : f.path}>
+          <div key={`${side}:${f.path}`} className={`file ${selected ? 'sel' : ''}`} title={f.origPath ? `${f.origPath} → ${f.path}` : f.path} {...(f.status === '?' ? {} : fileMenuProps((x, y) => onMenu(f.path, null, x, y)))}>
             <StatusBadge status={f.status} />
             <FileIcon path={f.path} />
             <button className="path" disabled={!onSelect} onClick={() => onSelect?.({ path: f.path, side: target })}>

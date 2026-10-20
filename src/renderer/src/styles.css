@@ -548,3 +548,25 @@ mark.cur { background: var(--amber); color: var(--on-c); }
 body.resizing { user-select: none; cursor: col-resize; }
 .commit-form input.field { height: 42px; font-size: 14px; }
 .commit-form textarea.field { min-height: 72px; max-height: 50vh; font-size: 13px; resize: vertical; }
+
+/* file history */
+.head-btn { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.file-menu { width: 240px; }
+.fh-panel { overflow: hidden; }
+.fh-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.fh-title { display: flex; align-items: baseline; justify-content: space-between; }
+.fh-card { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; background: var(--raised); }
+.fh-subject { font-weight: 600; line-height: 1.35; }
+.fh-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.fh-card .cp-explain { padding: 0; border: none; }
+.fh-list { list-style: none; margin: 0; padding: 8px; flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.fh-item { width: 100%; display: flex; gap: 10px; padding: 8px; border-radius: 7px; }
+.fh-item:hover { background: var(--raised); }
+.fh-item.sel { background: var(--hover); box-shadow: inset 2px 0 0 var(--accent); }
+.fh-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fh-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fh-meta { display: flex; gap: 8px; font-size: 12px; color: var(--faint); overflow: hidden; white-space: nowrap; }
+.fh-meta .sha { color: var(--accent); }
+.fh-counts { flex: none; display: flex; flex-direction: column; align-items: flex-end; }
+.head-btn:hover, .head-btn:focus-visible { background: var(--raised); color: var(--text); }
+.fh-list.loading { opacity: 0.5; }

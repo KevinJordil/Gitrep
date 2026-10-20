@@ -17,13 +17,15 @@ interface Props {
   version: number
   onBack: () => void
   run: RunOp
-  hideHead?: boolean // the parent shows its own header (stash view)
+  hideHead?: boolean // the parent shows its own header (stash view, file history)
+  onFile?: (path: string, rev: string | null) => void // opens the file's history (from this commit, or from HEAD)
 }
 
-export function DiffView({ repo, selection, version, onBack, run, hideHead = false }: Props) {
+export function DiffView({ repo, selection, version, onBack, run, hideHead = false, onFile }: Props) {
   const notify = useToast()
   const { path } = selection
   const commit = selection.commit ?? null // a file of a commit: read-only
+  const oldPath = selection.commit ? (selection.oldPath ?? null) : null
   const side: DiffSide = selection.side ?? 'unstaged'
   const [diff, setDiff] = useState<FileDiff | null | undefined>(undefined)
   const [picked, setPicked] = useState<Record<number, number[]>>({})
@@ -32,7 +34,7 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
 
   useEffect(() => {
     let alive = true
-    const load = commit ? api.commitDiff(repo, commit, path) : api.diff(repo, path, side)
+    const load = commit ? api.commitDiff(repo, commit, path, oldPath) : api.diff(repo, path, side)
     load
       .then((d) => {
         if (!alive) return
@@ -47,7 +49,7 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
     return () => {
       alive = false
     }
-  }, [repo, path, side, commit, version, notify])
+  }, [repo, path, side, commit, oldPath, version, notify])
 
   const partial = !commit && !!diff && !diff.binary && !diff.isNew && !diff.isDeleted && side !== 'untracked'
   const primary: LineAction = side === 'staged' ? 'unstage' : 'stage'
@@ -102,11 +104,22 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
             {name}
           </span>
           {commit ? <span className="badge grey">{commit.slice(0, 7)}</span> : <span className={`badge ${side === 'staged' ? 'blue' : 'amber'}`}>{SIDE_LABEL[side]}</span>}
+          <div className="grow" />
+          {onFile && side !== 'untracked' && (
+            <button className="head-btn" onClick={() => onFile(path, commit)}>
+              File history
+            </button>
+          )}
         </div>
       )}
       <div className="diff-body">
         {diff === undefined && <span className="faint">Loading…</span>}
         {diff === null && <span className="faint">No changes to display.</span>}
+        {diff && diff.oldPath !== diff.newPath && (
+          <div className="banner">
+            Renamed from <span className="mono">{diff.oldPath}</span>
+          </div>
+        )}
         {diff?.binary && <div className="banner">Binary file: no preview.</div>}
         {diff && !diff.binary && !partial && !commit && <div className="banner">This file can only be staged as a whole: use the buttons in the right panel.</div>}
         {shown.map(({ h, i }) => (

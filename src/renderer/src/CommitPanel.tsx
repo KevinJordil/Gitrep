@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { CommitDetails, Explanation } from '../../shared/types'
 import { api } from './api'
+import { fileMenuProps } from './FileMenu'
 import { colorFor, errorText, initials, laneColor, splitPath } from './format'
 import { RefPill } from './Graph'
 import { FileIcon, StatusBadge } from './FileIcon'
@@ -17,13 +18,12 @@ interface Props {
   remoteNames: ReadonlySet<string>
   onSelect: (s: Selection) => void
   onFocus: (f: Focus) => void
+  onFileMenu: (path: string, rev: string, x: number, y: number) => void
 }
 
-export function CommitPanel({ repo, sha, autoExplain, selection, colors, remoteNames, onSelect, onFocus }: Props) {
+export function CommitPanel({ repo, sha, autoExplain, selection, colors, remoteNames, onSelect, onFocus, onFileMenu }: Props) {
   const notify = useToast()
   const [details, setDetails] = useState<CommitDetails | null>(null)
-  const [explanation, setExplanation] = useState<Explanation | null>(null)
-  const [thinking, setThinking] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -35,21 +35,6 @@ export function CommitPanel({ repo, sha, autoExplain, selection, colors, remoteN
       alive = false
     }
   }, [repo, sha, notify])
-
-  const explain = async () => {
-    setThinking(true)
-    try {
-      setExplanation(await api.explainCommit(repo, sha))
-    } catch (e) {
-      notify('error', errorText(e))
-    } finally {
-      setThinking(false)
-    }
-  }
-  // Opened from the context menu's "Explain with Claude" (the panel is re-created for each request).
-  useEffect(() => {
-    if (autoExplain) void explain()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const copy = () =>
     api
@@ -103,18 +88,7 @@ export function CommitPanel({ repo, sha, autoExplain, selection, colors, remoteN
           </span>
         )}
       </div>
-      <div className="cp-explain">
-        <button className="btn-claude" disabled={thinking} onClick={() => void explain()}>
-          {thinking ? <span className="spin" /> : <Icon name="sparkle" size={14} />}
-          {thinking ? 'Claude is reading…' : 'Explain this commit'}
-        </button>
-        {explanation && (
-          <div className="claude-box">
-            {explanation.text}
-            {explanation.excluded.length > 0 && <span className="note"> Not sent (sensitive): {explanation.excluded.join(', ')}.</span>}
-          </div>
-        )}
-      </div>
+      <Explain repo={repo} sha={sha} auto={autoExplain} />
       <div className="cp-files">
         <span className="cp-files-title">
           {details.files.length} file{details.files.length === 1 ? '' : 's'} changed{merge ? ' (against the first parent)' : ''}
@@ -122,7 +96,13 @@ export function CommitPanel({ repo, sha, autoExplain, selection, colors, remoteN
         {details.files.map((f) => {
           const [dir, name] = splitPath(f.path)
           return (
-            <button key={f.path} className={`file ${selection?.commit === sha && selection.path === f.path ? 'sel' : ''}`} title={f.path} onClick={() => onSelect({ path: f.path, commit: sha })}>
+            <button
+              key={f.path}
+              className={`file ${selection?.commit === sha && selection.path === f.path ? 'sel' : ''}`}
+              title={f.path}
+              onClick={() => onSelect({ path: f.path, commit: sha })}
+              {...fileMenuProps((x, y) => onFileMenu(f.path, sha, x, y))}
+            >
               <StatusBadge status={f.status} />
               <FileIcon path={f.path} />
               <span className="path">
@@ -136,5 +116,42 @@ export function CommitPanel({ repo, sha, autoExplain, selection, colors, remoteN
         })}
       </div>
     </aside>
+  )
+}
+
+// "Explain this commit": asks Claude on click, or at once when `auto` (key it by sha: the answer belongs to one commit).
+export function Explain({ repo, sha, auto = false }: { repo: string; sha: string; auto?: boolean }) {
+  const notify = useToast()
+  const [explanation, setExplanation] = useState<Explanation | null>(null)
+  const [thinking, setThinking] = useState(false)
+
+  const explain = async () => {
+    setThinking(true)
+    try {
+      setExplanation(await api.explainCommit(repo, sha))
+    } catch (e) {
+      notify('error', errorText(e))
+    } finally {
+      setThinking(false)
+    }
+  }
+  // Opened from the context menu's "Explain with Claude" (the panel is re-created for each request).
+  useEffect(() => {
+    if (auto) void explain()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="cp-explain">
+      <button className="btn-claude" disabled={thinking} onClick={() => void explain()}>
+        {thinking ? <span className="spin" /> : <Icon name="sparkle" size={14} />}
+        {thinking ? 'Claude is reading…' : 'Explain this commit'}
+      </button>
+      {explanation && (
+        <div className="claude-box">
+          {explanation.text}
+          {explanation.excluded.length > 0 && <span className="note"> Not sent (sensitive): {explanation.excluded.join(', ')}.</span>}
+        </div>
+      )}
+    </div>
   )
 }

@@ -70,7 +70,7 @@ test('commit details: message, files, read-only diff, Explain with Claude, copy 
   await panel.getByRole('button', { name: 'Copy the full SHA' }).click()
   const sha = fx.git(fx.alpha, 'rev-parse', 'feature/y').trim()
   await expect.poll(() => fx.app.evaluate(({ clipboard }) => clipboard.readText())).toBe(sha)
-  await v.getByRole('button', { name: 'History' }).click()
+  await v.getByRole('button', { name: 'History', exact: true }).click()
   await expect(row('feat: y')).toHaveClass(/sel/)
   await panel.getByRole('button', { name: 'Close the commit details' }).click()
   await expect(v.locator('.right-head')).toContainText('Changes')

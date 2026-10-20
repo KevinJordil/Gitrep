@@ -8,6 +8,8 @@ import { ConflictView, OperationPanel } from './ConflictView'
 import { PromptDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import type { DropBranch } from './dnd'
+import { FileHistory } from './FileHistory'
+import { FileMenu, type FileMenuTarget } from './FileMenu'
 import { errorText } from './format'
 import { Graph } from './Graph'
 import { ancestorsOf, layoutGraph, type GraphNode } from './graph'
@@ -61,6 +63,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const [scope, setScope] = useState<GraphScope>(ALL)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [menu, setMenu] = useState<{ commit: Commit; x: number; y: number; branchActions?: { name: string; items: RefItem[] } } | null>(null)
+  const [fileMenu, setFileMenu] = useState<FileMenuTarget | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
   const [drop, setDrop] = useState<{ source: Branch; target: Branch; x: number; y: number } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -305,6 +308,9 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     setMenu({ commit, x, y, branchActions: { name: b.name, items } })
   }
   const closeMenu = useCallback(() => setMenu(null), [])
+  const openFileMenu = useCallback((p: string, rev: string | null, x: number, y: number) => setFileMenu({ path: p, rev, x, y }), [])
+  const closeFileMenu = useCallback(() => setFileMenu(null), [])
+  const openFile = useCallback((p: string, rev: string | null) => focusOn({ kind: 'file', path: p, rev }), [focusOn])
   const openDrop = useCallback<DropBranch>((source, target, x, y) => setDrop({ source, target, x, y }), [])
   const closeDrop = useCallback(() => setDrop(null), [])
   // A rebase that stopped on conflicts has already moved to the conflict view: leave it there.
@@ -466,10 +472,13 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
         {focus.kind === 'rebase' ? (
           // Takes the center and the right panel.
           <InteractiveRebase key={`${focus.branch}:${focus.upstream}`} repo={path} branch={focus.branch} upstream={focus.upstream} status={status} busy={busy} runOutcome={runOutcome} onClose={closeRebase} />
+        ) : focus.kind === 'file' ? (
+          // Takes the center and the right panel too.
+          <FileHistory key={`${focus.path}:${focus.rev}`} repo={path} path={focus.path} rev={focus.rev} version={version} run={run} onFocus={focusOn} />
         ) : (
           <section className="center">
             {selection ? (
-              <DiffView key={`${selection.path}:${selection.side ?? selection.commit}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} />
+              <DiffView key={`${selection.path}:${selection.side ?? selection.commit}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} onFile={openFile} />
             ) : stash ? (
               <StashView key={stash.sha} repo={path} stash={stash} version={version} run={run} onBack={() => focusOn({ kind: 'wip' })} />
             ) : inConflicts && info ? (
@@ -499,17 +508,18 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
             )}
           </section>
         )}
-        {focus.kind === 'rebase' ? null : stash ? (
+        {focus.kind === 'rebase' || focus.kind === 'file' ? null : stash ? (
           <StashPanel key={stash.sha} repo={path} stash={stash} branch={status?.branch ?? null} busy={busy} run={run} runOutcome={runOutcome} onNewBranch={() => stashBranch(stash)} />
         ) : inConflicts && status && info ? (
           <OperationPanel repo={path} status={status} info={info} path={conflictPath} busy={busy} runOutcome={runOutcome} onPath={(p) => focusOn({ kind: 'conflicts', path: p })} onSelect={setSelection} />
         ) : focus.kind === 'commit' ? (
-          <CommitPanel key={`${focus.sha}:${focus.explain ?? ''}`} repo={path} sha={focus.sha} autoExplain={!!focus.explain} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} />
+          <CommitPanel key={`${focus.sha}:${focus.explain ?? ''}`} repo={path} sha={focus.sha} autoExplain={!!focus.explain} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} onFileMenu={openFileMenu} />
         ) : (
-          <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} run={run} busy={busy} />
+          <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} onFileMenu={openFileMenu} run={run} busy={busy} />
         )}
       </div>
       {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
+      {fileMenu && <FileMenu target={fileMenu} onHistory={() => openFile(fileMenu.path, fileMenu.rev)} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
       {dialog}
     </>
