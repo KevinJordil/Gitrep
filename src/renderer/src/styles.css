@@ -139,6 +139,9 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 .tab-branch { font: 11px var(--mono); color: var(--faint); }
 .tab-close { width: 20px; height: 20px; border-radius: 4px; display: grid; place-items: center; color: var(--faint); flex: none; }
 .tab-close:hover { background: var(--hover); }
+.tab .tab-close { opacity: 0; transition: opacity 0.12s; }
+.tab:hover .tab-close, .tab:focus-within .tab-close { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .tab .tab-close { transition: none; } }
 .iconbtn { width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); flex: none; }
 
 /* toolbar */

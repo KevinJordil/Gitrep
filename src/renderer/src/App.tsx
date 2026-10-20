@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Config, Settings } from '../../shared/types'
 import { api } from './api'
 import { Dashboard } from './Dashboard'
+import { Dialog } from './Dialog'
 import { errorText } from './format'
 import { Icon, Logo } from './icons'
 import { RepoView } from './RepoView'
@@ -21,6 +22,7 @@ export function App() {
   const [active, setActive] = useState('dashboard')
   const [branches, setBranches] = useState<Record<string, string>>({})
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [closing, setClosing] = useState<string | null>(null)
   const configRef = useRef<Config | null>(null)
   const queue = useRef<Promise<void>>(Promise.resolve())
 
@@ -139,7 +141,7 @@ export function App() {
                   <span>{nameOf(p)}</span>
                   <span className="tab-branch">{branches[p] ?? ''}</span>
                 </button>
-                <button className="tab-close" aria-label={`Close ${nameOf(p)}`} onClick={() => void closeTab(p)}>
+                <button className="tab-close" aria-label={`Close ${nameOf(p)}`} onClick={() => setClosing(p)}>
                   <Icon name="close" size={12} stroke={2} />
                 </button>
               </div>
@@ -155,6 +157,20 @@ export function App() {
             <RepoView path={p} active={active === p} settings={config.settings} onSettings={updateSettings} onBranch={onBranch} />
           </div>
         ))}
+        {closing && (
+          <Dialog
+            title={`Close ${nameOf(closing)}?`}
+            submit="Close tab"
+            onSubmit={() => {
+              const p = closing
+              setClosing(null)
+              void closeTab(p)
+            }}
+            onClose={() => setClosing(null)}
+          >
+            <p className="note">The repository stays on the dashboard. You can open it again from there.</p>
+          </Dialog>
+        )}
         {toastList}
       </div>
     </ToastContext.Provider>
