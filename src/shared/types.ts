@@ -166,6 +166,7 @@ export interface Settings {
   rightWidth: number // px, resizable
   commitInstructions: string // free text added to the commit message prompt, all repositories
   graphColumns: { graph: number; author: number; date: number; sha: number } // px, resizable in the history header
+  forgeHosts: Record<string, ForgeKind> // the forge of a host the app could not recognize, as the user said
 }
 
 export interface Config {
@@ -311,4 +312,14 @@ export interface InteractiveRebaseRequest {
 export interface RebaseProposal {
   items: RebaseItem[] // oldest first
   explanation: string
+}
+
+export type ForgeKind = 'gitlab' | 'github'
+
+// A forge account as the renderer sees it: never the token. host: the host of the remotes it serves; url: the web address of the instance.
+export interface AccountInfo {
+  host: string
+  kind: ForgeKind
+  url: string
+  user: string | null // the user name the token belongs to, from the last connection test
 }

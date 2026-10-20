@@ -14,13 +14,13 @@ describe('config', () => {
     saveConfig(file, { ...DEFAULT_CONFIG, repos: [{ path: '/r/a', name: 'a' }] })
     expect(loadConfig(file).repos).toEqual([{ path: '/r/a', name: 'a' }])
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 } })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {} })
   })
 
   it('resets hand-edited settings that fail validation to their defaults', async () => {
     const file = join(await tempDir(), 'config.json')
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { sidebarWidth: 'abc', activeDays: 'x', rightWidth: 5, claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 } })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {} })
   })
 
   it('backs up a corrupt file instead of losing it', async () => {
@@ -125,5 +125,10 @@ describe('config', () => {
     writeFileSync(file, JSON.stringify({ repos: [null, 5, { path: '/x' }, { path: '/a', name: 'a', commitInstructions: 5 }], openTabs: ['/a', null, 3], settings: {} }))
     expect(loadConfig(file).repos).toEqual([{ path: '/a', name: 'a' }])
     expect(loadConfig(file).openTabs).toEqual(['/a'])
+  })
+
+  it('accepts the forge chosen for a host, refuses bad hosts and unknown forges', () => {
+    expect(applySettings(DEFAULT_CONFIG, { forgeHosts: { 'code.x.ch': 'gitlab', 'git.y.ch': 'github' } }).settings.forgeHosts).toEqual({ 'code.x.ch': 'gitlab', 'git.y.ch': 'github' })
+    for (const forgeHosts of [{ 'code.x.ch': 'bitbucket' }, { '-x': 'gitlab' }, { 'a b': 'github' }, ['gitlab'], null, 'x']) expect(() => applySettings(DEFAULT_CONFIG, { forgeHosts } as never)).toThrow('Invalid setting: forgeHosts')
   })
 })

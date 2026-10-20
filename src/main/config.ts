@@ -1,8 +1,9 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
 import { DEFAULT_GRAPH_COLUMNS, MAX_INSTRUCTIONS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LANES_MIN, type Config, type Settings } from '../shared/types'
+import { isHost } from './forge'
 
-export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: DEFAULT_GRAPH_COLUMNS, commitInstructions: '' } }
+export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: DEFAULT_GRAPH_COLUMNS, commitInstructions: '', forgeHosts: {} } }
 
 export function loadConfig(file: string): Config {
   let raw: string
@@ -60,13 +61,17 @@ const isColumns = (v: unknown) => {
   })
 }
 
+const isForgeHosts = (v: unknown) =>
+  !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length <= 200 && Object.entries(v).every(([host, kind]) => isHost(host) && (kind === 'gitlab' || kind === 'github'))
+
 // The settings the app changes itself, with their validation; the others (Claude model and path) are edited in the file.
 const EDITABLE: Partial<Record<keyof Settings, (v: unknown) => boolean>> = {
   activeDays: (v) => Number.isInteger(v) && (v as number) >= 0,
   sidebarWidth: (v) => isWidth(v),
   rightWidth: (v) => isWidth(v),
   graphColumns: isColumns,
-  commitInstructions: isInstructions
+  commitInstructions: isInstructions,
+  forgeHosts: isForgeHosts
 }
 
 export function applySettings(cfg: Config, patch: Partial<Settings>): Config {

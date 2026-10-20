@@ -1,15 +1,17 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell, type OpenDialogOptions } from 'electron'
 import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import icon from '../../resources/icon.png?asset'
 import { API_METHODS, type Api, type IpcResult } from '../shared/api'
 import type { Config, ConflictHunk, GraphScope, InteractiveRebaseRequest, MergeRequest, RepoEntry } from '../shared/types'
+import * as accounts from './accounts'
 import * as assist from './assist'
 import * as claude from './claude'
 import { addRepo, applyRepoSettings, applySettings, loadConfig, removeRepo, saveConfig } from './config'
 import * as conflicts from './conflicts'
 import { git, gitDir } from './git'
+import { isHost } from './forge'
 import * as history from './history'
 import * as journal from './journal'
 import { codeCommand, run as launch, terminalCommand } from './launch'
@@ -27,6 +29,7 @@ if (process.env.GITREP_USER_DATA) app.setPath('userData', process.env.GITREP_USE
 if (!app.requestSingleInstanceLock()) app.exit(0)
 
 const configFile = join(app.getPath('userData'), 'config.json')
+const accountsFile = join(app.getPath('userData'), 'accounts.json') // forge tokens, encrypted; never in config.json
 let config: Config = loadConfig(configFile)
 let win: BrowserWindow | null = null
 const fetchErrors = new Map<string, string>()
@@ -36,6 +39,23 @@ const pending = new Map<string, NodeJS.Timeout>()
 function setConfig(next: Config): void {
   config = next
   saveConfig(configFile, config)
+}
+
+// Linux without a keyring falls back to a fixed key ("basic_text"): that is not encryption, refuse it.
+const vault: accounts.Vault = {
+  unavailable: () =>
+    !safeStorage.isEncryptionAvailable()
+      ? 'Encryption is not available on this computer: tokens cannot be stored.'
+      : process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text'
+        ? 'No system keyring (GNOME Keyring or KWallet) is running: tokens cannot be stored encrypted.'
+        : null,
+  encrypt: (text) => safeStorage.encryptString(text),
+  decrypt: (data) => safeStorage.decryptString(data)
+}
+
+const hostArg = (h: unknown) => {
+  if (!isHost(h)) throw new Error(`Invalid host: ${String(h)}`)
+  return h
 }
 
 const isRegistered = (path: string) => config.repos.some((r) => r.path === path)
@@ -207,7 +227,11 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   undoState: forRepo(async (p) => journal.undoState(p)),
   undo: forRepo(undo.undo),
   redo: forRepo(undo.redo),
-  setWatched
+  setWatched,
+  accounts: async () => accounts.listAccounts(accountsFile),
+  saveAccount: (host, kind, url, token) => accounts.saveAccount(accountsFile, vault, String(host), kind, String(url), String(token)),
+  testAccount: (host) => accounts.testAccount(accountsFile, vault, hostArg(host)),
+  removeAccount: async (host) => accounts.removeAccount(accountsFile, hostArg(host))
 }
 
 for (const name of API_METHODS) {

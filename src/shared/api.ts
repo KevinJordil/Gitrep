@@ -1,4 +1,5 @@
 import type {
+  AccountInfo,
   Blame,
   Branch,
   Commit,
@@ -13,6 +14,7 @@ import type {
   FileChange,
   FileCommit,
   FileDiff,
+  ForgeKind,
   GeneratedMessage,
   GraphScope,
   InteractiveRebaseRequest,
@@ -102,6 +104,10 @@ export interface Api {
   undo(repo: string): Promise<string> // resolves to the message to show
   redo(repo: string): Promise<string>
   setWatched(repos: string[]): Promise<void>
+  accounts(): Promise<AccountInfo[]>
+  saveAccount(host: string, kind: ForgeKind, url: string, token: string): Promise<AccountInfo> // tests the token, stores it only when it works
+  testAccount(host: string): Promise<AccountInfo>
+  removeAccount(host: string): Promise<void>
   onRepoChanged(cb: (repo: string) => void): () => void
 }
 
@@ -174,7 +180,11 @@ export const API_METHODS = [
   'redo',
   'setWatched',
   'updateSettings',
-  'updateRepoSettings'
+  'updateRepoSettings',
+  'accounts',
+  'saveAccount',
+  'testAccount',
+  'removeAccount'
 ] as const satisfies readonly InvokeMethod[]
 
 // Compile-time guard: every invoke method must be listed above.
