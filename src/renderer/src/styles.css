@@ -410,3 +410,5 @@ mark.cur { background: var(--amber); color: var(--bg); }
 .note.err { color: var(--red); }
 .ri-cancel { flex: 1; height: 38px; border-radius: 8px; background: transparent; color: var(--muted); text-align: center; }
 .ri-start { flex: 2; }
+.side-more { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 8px; border-radius: 6px; color: var(--faint); font-size: 12px; }
+.side-more:hover { background: var(--hover); color: var(--muted); }

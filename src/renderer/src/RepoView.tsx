@@ -412,6 +412,7 @@ export function RepoView({ path, active, settings, onSettings, onBranch }: Props
           colors={colors}
           focus={focus}
           scope={scope}
+          activeDays={activeDays}
           onFocus={focusOn}
           onScope={setScope}
           onDrop={openDrop}
