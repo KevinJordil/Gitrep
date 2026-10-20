@@ -14,6 +14,8 @@ import type {
   FileChange,
   FileCommit,
   FileDiff,
+  FixRequest,
+  FixResult,
   ForgeInfo,
   ForgeKind,
   GeneratedMessage,
@@ -118,6 +120,7 @@ export interface Api {
   postReviewStep(repo: string, branch: string, head: string, draft: boolean, step: PostStep): Promise<void>
   reviewScope(repo: string, branch: string, base: string): Promise<ReviewScope>
   startReview(repo: string, req: ReviewRequest): Promise<Review> // asks Claude; nothing is written
+  prepareFixes(repo: string, branch: string, fixes: FixRequest[]): Promise<FixResult> // unstaged changes, one undo step
   onRepoChanged(cb: (repo: string) => void): () => void
 }
 
@@ -198,7 +201,8 @@ export const API_METHODS = [
   'forgeInfo',
   'postReviewStep',
   'reviewScope',
-  'startReview'
+  'startReview',
+  'prepareFixes'
 ] as const satisfies readonly InvokeMethod[]
 
 // Compile-time guard: every invoke method must be listed above.

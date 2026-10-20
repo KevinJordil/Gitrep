@@ -4,12 +4,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import icon from '../../resources/icon.png?asset'
 import { API_METHODS, type Api, type IpcResult } from '../shared/api'
-import type { Config, ConflictHunk, GraphScope, InteractiveRebaseRequest, MergeRequest, PostStep, RepoEntry, ReviewRequest } from '../shared/types'
+import type { Config, ConflictHunk, FixRequest, GraphScope, InteractiveRebaseRequest, MergeRequest, PostStep, RepoEntry, ReviewRequest } from '../shared/types'
 import * as accounts from './accounts'
 import * as assist from './assist'
 import * as claude from './claude'
 import { addRepo, applyRepoSettings, applySettings, loadConfig, removeRepo, saveConfig } from './config'
 import * as conflicts from './conflicts'
+import * as fixes from './fixes'
 import { git, gitDir } from './git'
 import { isHost } from './forge'
 import * as history from './history'
@@ -239,7 +240,8 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   forgeInfo: forRepo((p, branch: string) => requests.forgeInfo(p, String(branch), forgeContext())),
   postReviewStep: forRepo((p, branch: string, head: string, draft: boolean, step: PostStep) => requests.postStep(p, String(branch), String(head), !!draft, step, forgeContext())),
   reviewScope: forRepo((p, branch: string, base: string) => review.reviewScope(p, String(branch), String(base))),
-  startReview: forRepo((p, req: ReviewRequest) => review.startReview(p, req, claudeOptions()))
+  startReview: forRepo((p, req: ReviewRequest) => review.startReview(p, req, claudeOptions())),
+  prepareFixes: forRepo((p, branch: string, list: FixRequest[]) => fixes.prepareFixes(p, String(branch), list))
 }
 
 for (const name of API_METHODS) {

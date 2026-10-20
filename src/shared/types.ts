@@ -418,3 +418,18 @@ export interface ReviewRequest {
   base: string
   prompt: ReviewPrompt
 }
+
+// A kept fix: replaces lines line..endLine of the working file, only when they still read `original`.
+export interface FixRequest {
+  id: number // the finding
+  path: string
+  line: number
+  endLine: number
+  original: string[]
+  lines: string[]
+}
+
+export interface FixResult {
+  applied: number[] // finding ids
+  skipped: { id: number; path: string; reason: string }[]
+}
