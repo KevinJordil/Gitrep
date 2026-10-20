@@ -1,6 +1,6 @@
 # GitRep
 
-Local multi-repo git client (Electron + React). A dashboard of all your repositories; a commit graph of every branch with search, isolate/hide, commit details and a context menu (checkout, branch, tag, cherry-pick, revert, reset); stashes; drag a branch onto another to merge, rebase or fast-forward, with conflict prediction; undo and redo of every operation; a conflict editor (both sides named, block by block, editable result, rebase steps) with resolutions proposed by Claude or handed over to Claude Code in a terminal; diffs with staging per file, hunk or line; and commit, merge and stash messages, commit explanations and merge advice suggested by Claude.
+Local multi-repo git client (Electron + React). A dashboard of all your repositories; a commit graph of every branch with search, isolate/hide, commit details and a context menu (checkout, branch, tag, cherry-pick, revert, reset); stashes; drag a branch onto another to merge, rebase or fast-forward, with conflict prediction; interactive rebase (reorder, reword, squash, fixup, drop, with a plan proposed by Claude) and push with `--force-with-lease` after a rewrite; undo and redo of every operation; a conflict editor (both sides named, block by block, editable result, rebase steps) with resolutions proposed by Claude or handed over to Claude Code in a terminal; diffs with staging per file, hunk or line; and commit, merge and stash messages, commit explanations and merge advice suggested by Claude.
 
 ## Run
 
@@ -12,7 +12,7 @@ Local multi-repo git client (Electron + React). A dashboard of all your reposito
 
 ## Undo
 
-Undo (toolbar or Ctrl+Z) reverts the last operation done in GitRep, Redo (toolbar, Ctrl+Shift+Z or Ctrl+Y) replays it: commits and amends, checkouts, branch creation and deletion, tags, cherry-picks, reverts, resets (a hard reset brings the discarded local changes back), merges, rebases, fast-forwards, pulls, stash push / pop / drop and discarded changes. The history is kept in memory, per repository, and is lost when GitRep quits. Undo never overwrites local changes (`git reset --keep`) and refuses when the repository was changed outside GitRep since: the history of that repository is then cleared.
+Undo (toolbar or Ctrl+Z) reverts the last operation done in GitRep, Redo (toolbar, Ctrl+Shift+Z or Ctrl+Y) replays it: commits and amends, checkouts, branch creation and deletion, tags, cherry-picks, reverts, resets (a hard reset brings the discarded local changes back), merges, rebases (interactive ones too), fast-forwards, pulls, stash push / pop / drop and discarded changes. The history is kept in memory, per repository, and is lost when GitRep quits. Undo never overwrites local changes (`git reset --keep`) and refuses when the repository was changed outside GitRep since: the history of that repository is then cleared.
 
 ## Install in the GNOME launcher
 

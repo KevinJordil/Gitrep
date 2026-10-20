@@ -10,8 +10,9 @@ import { DiffView } from './DiffView'
 import type { DropBranch } from './dnd'
 import { errorText } from './format'
 import { Graph } from './Graph'
-import { layoutGraph, type GraphNode } from './graph'
+import { ancestorsOf, layoutGraph, type GraphNode } from './graph'
 import { Icon, type IconName } from './icons'
+import { InteractiveRebase } from './InteractiveRebase'
 import { MergeMenu } from './MergeMenu'
 import type { Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
@@ -254,18 +255,20 @@ export function RepoView({ path, active, onBranch }: Props) {
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return
       const key = e.key.toLowerCase()
       const dir = key === 'z' ? (e.shiftKey ? 'redo' : 'undo') : key === 'y' && !e.shiftKey ? 'redo' : null
-      if (!dir || (e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable], dialog') || document.querySelector('dialog[open], [role="dialog"], [role="menu"]')) return
+      if (!dir || focus.kind === 'rebase' || (e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable], dialog') || document.querySelector('dialog[open], [role="dialog"], [role="menu"]')) return
       e.preventDefault()
       if (!busy && undo[dir]) replay(dir)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, busy, undo, replay])
+  }, [active, busy, undo, replay, focus.kind])
 
   const openMenu = useCallback((commit: Commit, x: number, y: number) => setMenu({ commit, x, y }), [])
   const closeMenu = useCallback(() => setMenu(null), [])
   const openDrop = useCallback<DropBranch>((source, target, x, y) => setDrop({ source, target, x, y }), [])
   const closeDrop = useCallback(() => setDrop(null), [])
+  // A rebase that stopped on conflicts has already moved to the conflict view: leave it there.
+  const closeRebase = useCallback(() => setFocus((f) => (f.kind === 'rebase' ? { kind: 'wip' } : f)), [])
   const closeDialog = () => setDialog(null)
 
   const newBranch = (at: string, label: string) =>
@@ -300,6 +303,7 @@ export function RepoView({ path, active, onBranch }: Props) {
     else if (a === 'revert') void runOutcome('revert', () => api.revert(path, c.sha), `Reverted ${short}`)
     else if (a === 'copy') api.copyText(c.sha).then(() => notify('info', `Copied ${short}`), (e: unknown) => notify('error', errorText(e)))
     else if (a === 'explain') focusOn({ kind: 'commit', sha: c.sha, explain: Date.now() })
+    else if (a === 'rebase-i') focusOn({ kind: 'rebase', branch: target, upstream: c.sha })
     else {
       const mode = a.slice('reset-'.length) as ResetMode
       if (mode === 'hard' && !window.confirm(`Reset ${target} to ${short} and discard all uncommitted changes? Undo (Ctrl+Z) brings them back while GitRep is open.`)) return
@@ -313,6 +317,7 @@ export function RepoView({ path, active, onBranch }: Props) {
   const nodes = useMemo<GraphNode[]>(() => (hasWip ? [{ sha: WIP, parents: head ? [head] : [], wip: true }, ...log] : log), [log, hasWip, head])
   const rows = useMemo(() => layoutGraph(nodes), [nodes])
   const colors = useMemo(() => new Map(nodes.map((n, i) => [n.sha, rows[i].color])), [nodes, rows])
+  const ancestors = useMemo(() => ancestorsOf(head, log), [head, log])
   const remoteNames = useMemo(() => new Set(branches.filter((b) => b.remote).map((b) => b.name)), [branches])
   const staged = status?.staged.length ?? 0
   const wipLabel = hasWip ? `${changes} modified file${changes === 1 ? '' : 's'}${staged ? ` · ${staged} staged` : ''}` : null
@@ -344,6 +349,18 @@ export function RepoView({ path, active, onBranch }: Props) {
       }
       notify('info', `Branch ${b.name} deleted`)
     })
+  // After a rewrite (interactive rebase, amend) git rejects the push as non-fast-forward: ask, then push with a lease.
+  const push = () =>
+    void run('push', async () => {
+      try {
+        await api.push(path)
+      } catch (e) {
+        if (!errorText(e).includes('non-fast-forward')) throw e
+        if (!window.confirm(`${status?.branch ?? 'This branch'} has diverged from its remote. Force push with lease?`)) return
+        await api.push(path, true)
+      }
+      notify('info', 'Push complete')
+    })
 
   return (
     <>
@@ -357,7 +374,7 @@ export function RepoView({ path, active, onBranch }: Props) {
         <div className="tsep" />
         <ToolButton icon="fetch" label="Fetch" busy={busy === 'fetch'} disabled={!!busy} onClick={() => void run('fetch', () => api.fetch(path), 'Fetch complete')} />
         <ToolButton icon="pull" label="Pull" count={status?.behind ? `↓${status.behind}` : ''} busy={busy === 'pull'} disabled={!!busy} onClick={() => void runOutcome('pull', () => api.pull(path), 'Pull complete')} />
-        <ToolButton icon="push" label="Push" count={status?.ahead ? `↑${status.ahead}` : ''} busy={busy === 'push'} disabled={!!busy} onClick={() => void run('push', () => api.push(path), 'Push complete')} />
+        <ToolButton icon="push" label="Push" count={status?.ahead ? `↑${status.ahead}` : ''} busy={busy === 'push'} disabled={!!busy} onClick={push} />
         <div className="tsep" />
         <ToolButton icon="branch" label="Branch" busy={busy === 'branch'} disabled={!!busy || !head} onClick={() => head && newBranch(head, status?.branch ?? head.slice(0, 7))} />
         <ToolButton icon="stash" label="Stash" busy={busy === 'stash'} disabled={!!busy || !hasWip || !head} onClick={() => status && setDialog(<StashDialog repo={path} status={status} run={run} onClose={closeDialog} />)} />
@@ -398,33 +415,38 @@ export function RepoView({ path, active, onBranch }: Props) {
           onDelete={deleteBranch}
           onSwitch={(b) => void run('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)}
         />
-        <section className="center">
-          {selection ? (
-            <DiffView key={`${selection.path}:${selection.side ?? selection.commit}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} />
-          ) : stash ? (
-            <StashView key={stash.sha} repo={path} stash={stash} version={version} run={run} onBack={() => focusOn({ kind: 'wip' })} />
-          ) : inConflicts && info ? (
-            <ConflictView repo={path} path={conflictPath} info={info} draft={conflictPath ? drafts[conflictPath] : undefined} version={version} busy={busy} run={run} onDraft={onDraft} />
-          ) : (
-            <Graph
-              repoName={path.split('/').pop() ?? path}
-              active={active}
-              commits={log}
-              rows={rows}
-              wip={wipLabel}
-              head={head}
-              focus={focus}
-              branches={branches}
-              scope={scope}
-              remoteNames={remoteNames}
-              onFocus={focusOn}
-              onScope={setScope}
-              onMenu={openMenu}
-              onDrop={openDrop}
-            />
-          )}
-        </section>
-        {stash ? (
+        {focus.kind === 'rebase' ? (
+          // Takes the center and the right panel.
+          <InteractiveRebase key={`${focus.branch}:${focus.upstream}`} repo={path} branch={focus.branch} upstream={focus.upstream} status={status} busy={busy} runOutcome={runOutcome} onClose={closeRebase} />
+        ) : (
+          <section className="center">
+            {selection ? (
+              <DiffView key={`${selection.path}:${selection.side ?? selection.commit}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} />
+            ) : stash ? (
+              <StashView key={stash.sha} repo={path} stash={stash} version={version} run={run} onBack={() => focusOn({ kind: 'wip' })} />
+            ) : inConflicts && info ? (
+              <ConflictView repo={path} path={conflictPath} info={info} draft={conflictPath ? drafts[conflictPath] : undefined} version={version} busy={busy} run={run} onDraft={onDraft} />
+            ) : (
+              <Graph
+                repoName={path.split('/').pop() ?? path}
+                active={active}
+                commits={log}
+                rows={rows}
+                wip={wipLabel}
+                head={head}
+                focus={focus}
+                branches={branches}
+                scope={scope}
+                remoteNames={remoteNames}
+                onFocus={focusOn}
+                onScope={setScope}
+                onMenu={openMenu}
+                onDrop={openDrop}
+              />
+            )}
+          </section>
+        )}
+        {focus.kind === 'rebase' ? null : stash ? (
           <StashPanel key={stash.sha} repo={path} stash={stash} branch={status?.branch ?? null} busy={busy} run={run} runOutcome={runOutcome} onNewBranch={() => stashBranch(stash)} />
         ) : inConflicts && status && info ? (
           <OperationPanel repo={path} status={status} info={info} path={conflictPath} busy={busy} runOutcome={runOutcome} onPath={(p) => focusOn({ kind: 'conflicts', path: p })} onSelect={setSelection} />
@@ -434,8 +456,8 @@ export function RepoView({ path, active, onBranch }: Props) {
           <ChangesPanel repo={path} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} run={run} busy={busy} />
         )}
       </div>
-      {menu && <CommitMenu commit={menu.commit} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
-      {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onClose={closeDrop} />}
+      {menu && <CommitMenu commit={menu.commit} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
+      {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
       {dialog}
     </>
   )

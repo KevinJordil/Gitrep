@@ -80,6 +80,20 @@ export function layoutGraph(nodes: GraphNode[]): GraphRow[] {
   })
 }
 
+// Strict ancestors of `head` among the loaded commits: where "Rebase interactively from here" is possible.
+export function ancestorsOf(head: string | null, commits: Commit[]): Set<string> {
+  const parents = new Map(commits.map((c) => [c.sha, c.parents]))
+  const out = new Set<string>()
+  const todo = [...((head && parents.get(head)) || [])]
+  while (todo.length) {
+    const sha = todo.pop()!
+    if (out.has(sha)) continue
+    out.add(sha)
+    todo.push(...(parents.get(sha) ?? []))
+  }
+  return out
+}
+
 export type SearchField = 'all' | 'message' | 'author' | 'sha'
 
 // Indexes of the commits matching the query (case-insensitive; SHA matches by prefix).

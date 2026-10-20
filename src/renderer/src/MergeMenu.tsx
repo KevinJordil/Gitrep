@@ -14,12 +14,13 @@ interface Props {
   x: number
   y: number
   runOutcome: RunOutcome
+  onInteractive: () => void // opens the interactive rebase of target onto source
   onClose: () => void // must be stable (useCallback)
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-export function MergeMenu({ repo, source, target, status, x, y, runOutcome, onClose }: Props) {
+export function MergeMenu({ repo, source, target, status, x, y, runOutcome, onInteractive, onClose }: Props) {
   const notify = useToast()
   const ref = useRef<HTMLDivElement>(null)
   const [preview, setPreview] = useState<MergePreview | null>(null)
@@ -91,6 +92,16 @@ export function MergeMenu({ repo, source, target, status, x, y, runOutcome, onCl
       desc: local === 0 ? 'Nothing to replay: use fast-forward' : `Replays your ${plural(local, 'commit')} on top of ${source.name} · linear history${checkout}`,
       disabled: !preview || upToDate || local === 0,
       run: () => go('rebase', `${target.name} rebased onto ${source.name}`)
+    },
+    {
+      icon: 'rebaseI',
+      title: `Interactive rebase onto ${source.name}…`,
+      desc: local === 0 ? 'Nothing to replay' : 'Pick, reorder or squash your commits first',
+      disabled: !preview || local === 0,
+      run: () => {
+        onClose()
+        onInteractive()
+      }
     },
     {
       icon: 'ff',

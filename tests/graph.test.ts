@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Commit } from '../src/shared/types'
-import { layoutGraph, searchCommits, splitMatch, type GraphNode } from '../src/renderer/src/graph'
+import { ancestorsOf, layoutGraph, searchCommits, splitMatch, type GraphNode } from '../src/renderer/src/graph'
 
 const n = (sha: string, ...parents: string[]): GraphNode => ({ sha, parents })
 const seg = (kind: 'through' | 'top' | 'bottom', from: number, to: number, color: number, dashed = false) => ({ kind, from, to, color, dashed })
@@ -71,5 +71,14 @@ describe('splitMatch', () => {
     expect(splitMatch('fix(OTA): raise', 'ota')).toEqual(['fix(', 'OTA', '): raise'])
     expect(splitMatch('nothing', 'ota')).toBeNull()
     expect(splitMatch('x', '')).toBeNull()
+  })
+})
+
+describe('ancestorsOf', () => {
+  it('lists the strict ancestors of HEAD through every parent, not HEAD itself nor other branches', () => {
+    const c = (sha: string, ...parents: string[]) => ({ sha, parents }) as Commit
+    const log = [c('m', 'a', 'f'), c('x', 'a'), c('f', 'r'), c('a', 'r'), c('r')]
+    expect([...ancestorsOf('m', log)].sort()).toEqual(['a', 'f', 'r'])
+    expect(ancestorsOf(null, log).size).toBe(0)
   })
 })

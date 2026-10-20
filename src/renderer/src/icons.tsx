@@ -32,7 +32,9 @@ const PATHS = {
   copy: ['M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z', 'M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3'],
   undo: ['M9 14 4 9l5-5', 'M4 9h11a5 5 0 0 1 0 10h-3'],
   redo: ['m15 14 5-5-5-5', 'M20 9H9a5 5 0 0 0 0 10h3'],
-  trash: ['M4 7h16', 'M10 11v6M14 11v6', 'M6 7l1 13h10l1-13', 'M9 7V4h6v3']
+  trash: ['M4 7h16', 'M10 11v6M14 11v6', 'M6 7l1 13h10l1-13', 'M9 7V4h6v3'],
+  rebaseI: ['M4 6h16M4 12h10M4 18h6', 'M17 15l3 3-3 3'],
+  grip: ['M9 6h.01M9 12h.01M9 18h.01', 'M15 6h.01M15 12h.01M15 18h.01']
 } as const
 
 export type IconName = keyof typeof PATHS

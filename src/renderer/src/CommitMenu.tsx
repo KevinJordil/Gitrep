@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { Commit, ResetMode } from '../../shared/types'
 
-export type CommitAction = 'checkout' | 'branch' | 'tag' | 'cherry-pick' | 'revert' | 'copy' | 'explain' | `reset-${ResetMode}`
+export type CommitAction = 'checkout' | 'branch' | 'tag' | 'cherry-pick' | 'revert' | 'copy' | 'explain' | 'rebase-i' | `reset-${ResetMode}`
 
 const RESETS: [ResetMode, string, string][] = [
   ['soft', 'Soft', 'Keeps the changes, staged'],
@@ -15,11 +15,12 @@ interface Props {
   y: number
   branch: string | null // checked-out branch, null when detached
   head: string | null
+  canRebase: boolean // a strict ancestor of HEAD on a checked-out branch
   onAction: (a: CommitAction) => void
   onClose: () => void // must be stable (useCallback)
 }
 
-export function CommitMenu({ commit, x, y, branch, head, onAction, onClose }: Props) {
+export function CommitMenu({ commit, x, y, branch, head, canRebase, onAction, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [sub, setSub] = useState(false)
   const target = branch ?? 'HEAD'
@@ -120,6 +121,7 @@ export function CommitMenu({ commit, x, y, branch, head, onAction, onClose }: Pr
           </div>
         )}
       </div>
+      {item('Rebase interactively from here…', 'rebase-i', '', !canRebase)}
       <div className="menu-sep" role="separator" />
       {item('Copy SHA', 'copy', 'Ctrl C')}
       {item('Explain with Claude', 'explain')}
