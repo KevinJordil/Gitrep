@@ -49,7 +49,8 @@ export const GRAPH_LIMIT = 2000
 export const GRAPH_COLUMN_MIN = 48 // px, the Author, Date and SHA columns of the history
 export const GRAPH_COLUMN_MAX = 480
 export const MAX_INSTRUCTIONS = 4000 // characters of a commit message instructions text
-export const DEFAULT_GRAPH_COLUMNS = { author: 150, date: 110, sha: 70 }
+export const GRAPH_LANES_MIN = 40 // px, the graph (lanes) column when set by hand; 0 = automatic
+export const DEFAULT_GRAPH_COLUMNS = { graph: 0, author: 150, date: 110, sha: 70 }
 
 export interface Tag {
   name: string
@@ -121,7 +122,7 @@ export interface Settings {
   sidebarWidth: number // px, resizable
   rightWidth: number // px, resizable
   commitInstructions: string // free text added to the commit message prompt, all repositories
-  graphColumns: { author: number; date: number; sha: number } // px, resizable in the history header
+  graphColumns: { graph: number; author: number; date: number; sha: number } // px, resizable in the history header
 }
 
 export interface Config {

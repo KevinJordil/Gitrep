@@ -180,14 +180,14 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 .row:hover { background: var(--row-hover); }
 .row.sel { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
 .row.wip.sel { background: var(--raised); box-shadow: inset 2px 0 0 var(--amber); }
-.lanes { flex: none; }
+.lanes { flex: none; width: var(--col-graph); } /* the svg keeps its drawn width as attribute; a narrower column clips it */
 .row .msg { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; }
 .row .msg .s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .graph { display: contents; }
 .c-author { width: var(--col-author); display: flex; align-items: center; gap: 7px; color: var(--muted); overflow: hidden; white-space: nowrap; }
 .c-date { width: var(--col-date); color: var(--faint); white-space: nowrap; }
 .c-sha { width: var(--col-sha); text-align: right; font: 12px var(--mono); color: var(--faint); }
-.cols > .c-author, .cols > .c-date, .cols > .c-sha { position: relative; overflow: visible; }
+.cols > .c-msg, .cols > .c-author, .cols > .c-date, .cols > .c-sha { position: relative; overflow: visible; }
 .col-handle { position: absolute; left: -4px; top: -6px; bottom: -6px; width: 7px; cursor: col-resize; touch-action: none; z-index: 2; }
 .cols:hover .col-handle { background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; }
 .col-handle:hover, .col-handle:focus-visible, body.resizing .col-handle:active { background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat; outline: none; }

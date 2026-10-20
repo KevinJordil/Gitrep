@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { DEFAULT_GRAPH_COLUMNS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LIMIT, type Branch, type Commit, type GraphScope, type Settings } from '../../shared/types'
+import { DEFAULT_GRAPH_COLUMNS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LANES_MIN, GRAPH_LIMIT, type Branch, type Commit, type GraphScope, type Settings } from '../../shared/types'
 import { colorFor, initials, laneColor, parseRef, relativeDate } from './format'
 import { dragBranch, dropOnBranch, type DropBranch } from './dnd'
 import { searchCommits, splitMatch, type GraphRow, type SearchField, type Segment } from './graph'
@@ -74,21 +74,24 @@ const when = (t: number) => new Date(t * 1000).toLocaleString('en-GB')
 const dateTitle = (c: Commit) => (c.committed === c.date ? when(c.committed) : `Committed ${when(c.committed)}\nWritten ${when(c.date)}`)
 
 type Columns = Settings['graphColumns']
-const COLUMN_LABEL: Record<keyof Columns, string> = { author: 'Author', date: 'Date', sha: 'SHA' }
-const clampColumn = (w: number) => Math.min(GRAPH_COLUMN_MAX, Math.max(GRAPH_COLUMN_MIN, Math.round(w)))
+const COLUMN_LABEL: Record<keyof Columns, string> = { graph: 'graph', author: 'Author', date: 'Date', sha: 'SHA' }
+const clampColumn = (min: number) => (w: number) => Math.min(GRAPH_COLUMN_MAX, Math.max(min, Math.round(w)))
 
 // The handle on the left edge of a header cell: it resizes the column to its right (dragging left widens it).
-// While dragging only the CSS variable on .graph changes.
-function ColumnHandle({ column, width, onSave }: { column: keyof Columns; width: number; onSave: (w: number) => Promise<boolean> }) {
+// The graph handle sits left of the Message cell and sizes the lanes column to its left (dragging right widens it);
+// its reset (0) is the automatic width `auto`. While dragging only the CSS variable on .graph changes.
+function ColumnHandle({ column, width, auto = 0, onSave }: { column: keyof Columns; width: number; auto?: number; onSave: (w: number) => Promise<boolean> }) {
+  const lanes = column === 'graph'
+  const min = lanes ? GRAPH_LANES_MIN : GRAPH_COLUMN_MIN
   const ref = useRef<HTMLDivElement>(null)
   const handlers = useResizeHandle({
     width,
-    clamp: clampColumn,
-    dir: -1,
+    clamp: clampColumn(min),
+    dir: lanes ? 1 : -1,
     step: 8,
     bigStep: 32,
     defaultWidth: DEFAULT_GRAPH_COLUMNS[column],
-    apply: (w) => ref.current?.closest<HTMLElement>('.graph')?.style.setProperty(`--col-${column}`, `${w}px`),
+    apply: (w) => ref.current?.closest<HTMLElement>('.graph')?.style.setProperty(`--col-${column}`, `${w || auto}px`),
     onSave
   })
   return (
@@ -99,7 +102,7 @@ function ColumnHandle({ column, width, onSave }: { column: keyof Columns; width:
       aria-orientation="vertical"
       aria-label={`Resize the ${COLUMN_LABEL[column]} column`}
       aria-valuenow={width}
-      aria-valuemin={GRAPH_COLUMN_MIN}
+      aria-valuemin={min}
       aria-valuemax={GRAPH_COLUMN_MAX}
       tabIndex={0}
       title="Drag to resize, double-click to reset"
@@ -224,7 +227,8 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
   const [query, setQuery] = useState('')
   const [field, setField] = useState<SearchField>('all')
   const [cur, setCur] = useState(0)
-  const width = graphWidth(rows)
+  const auto = graphWidth(rows)
+  const width = columns.graph || auto
   const offset = wip ? 1 : 0
   const focused = focus.kind === 'commit' ? focus.sha : null
   const select = useCallback((sha: string) => onFocus({ kind: 'commit', sha }), [onFocus])
@@ -262,7 +266,7 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
     return () => window.removeEventListener('keydown', onKey)
   }, [active])
 
-  const vars = { '--col-author': `${columns.author}px`, '--col-date': `${columns.date}px`, '--col-sha': `${columns.sha}px` } as CSSProperties
+  const vars = { '--col-graph': `${width}px`, '--col-author': `${columns.author}px`, '--col-date': `${columns.date}px`, '--col-sha': `${columns.sha}px` } as CSSProperties
   const handle = (c: keyof Columns) => <ColumnHandle column={c} width={columns[c]} onSave={(w) => onColumns({ ...columns, [c]: w })} />
   return (
     <div className="graph" style={vars}>
@@ -348,8 +352,11 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
         )}
         <span className="faint">{commits.length >= GRAPH_LIMIT ? `Last ${GRAPH_LIMIT}` : `${commits.length} commit${commits.length === 1 ? '' : 's'}`}</span>
       </div>
-      <div className="cols" style={{ paddingLeft: width }}>
-        <span style={{ flex: 1 }}>Message</span>
+      <div className="cols" style={{ paddingLeft: 'var(--col-graph)' }}>
+        <span className="c-msg" style={{ flex: 1 }}>
+          <ColumnHandle column="graph" width={width} auto={auto} onSave={(w) => onColumns({ ...columns, graph: w })} />
+          Message
+        </span>
         <span className="c-author">
           {handle('author')}Author
         </span>
@@ -363,7 +370,7 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
       <div className="scroll graph-rows" ref={list}>
         {wip && rows[0] && (
           <div className={`row wip ${focus.kind === 'wip' ? 'sel' : ''}`} role="button" tabIndex={0} aria-pressed={focus.kind === 'wip'} onClick={() => onFocus({ kind: 'wip' })} onKeyDown={(e) => e.key === 'Enter' && onFocus({ kind: 'wip' })}>
-            <Lanes row={rows[0]} width={width} dot="wip" selected={false} />
+            <Lanes row={rows[0]} width={auto} dot="wip" selected={false} />
             <span className="msg">
               <span className="wip-tag">WIP</span>
               <span className="s muted">{wip}</span>
@@ -378,7 +385,7 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
             key={c.sha}
             commit={c}
             row={rows[i + offset]}
-            width={width}
+            width={auto}
             head={c.sha === head}
             selected={c.sha === focused}
             remoteNames={remoteNames}

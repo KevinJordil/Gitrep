@@ -1,6 +1,6 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
-import { DEFAULT_GRAPH_COLUMNS, MAX_INSTRUCTIONS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, type Config, type Settings } from '../shared/types'
+import { DEFAULT_GRAPH_COLUMNS, MAX_INSTRUCTIONS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LANES_MIN, type Config, type Settings } from '../shared/types'
 
 export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: DEFAULT_GRAPH_COLUMNS, commitInstructions: '' } }
 
@@ -15,6 +15,8 @@ export function loadConfig(file: string): Config {
   try {
     const parsed = JSON.parse(raw) as Partial<Config>
     const settings = { ...structuredClone(DEFAULT_CONFIG.settings), ...parsed.settings }
+    const gc = settings.graphColumns as Record<string, unknown> | null
+    if (gc && typeof gc === 'object' && !Array.isArray(gc) && Object.keys(gc).length === 3 && !('graph' in gc)) settings.graphColumns = { graph: 0, ...gc } as Settings['graphColumns'] // saved before the graph column existed
     for (const [key, valid] of Object.entries(EDITABLE)) if (!valid(settings[key as keyof Settings])) Object.assign(settings, { [key]: structuredClone(DEFAULT_CONFIG.settings[key as keyof Settings]) })
     const repos = (Array.isArray(parsed.repos) ? parsed.repos : [])
       .filter((r) => typeof r?.path === 'string' && typeof r.name === 'string')
@@ -51,7 +53,11 @@ const isInstructions = (v: unknown) => typeof v === 'string' && v.length <= MAX_
 const isColumns = (v: unknown) => {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false
   const keys = Object.keys(v)
-  return keys.length === 3 && Object.keys(DEFAULT_GRAPH_COLUMNS).every((k) => keys.includes(k) && Number.isInteger(Reflect.get(v, k)) && Reflect.get(v, k) >= GRAPH_COLUMN_MIN && Reflect.get(v, k) <= GRAPH_COLUMN_MAX)
+  return keys.length === 4 && Object.keys(DEFAULT_GRAPH_COLUMNS).every((k) => {
+    const n = Reflect.get(v, k)
+    const auto = k === 'graph' && n === 0 // the lanes column: 0 = automatic
+    return keys.includes(k) && Number.isInteger(n) && (auto || (n >= (k === 'graph' ? GRAPH_LANES_MIN : GRAPH_COLUMN_MIN) && n <= GRAPH_COLUMN_MAX))
+  })
 }
 
 // The settings the app changes itself, with their validation; the others (Claude model and path) are edited in the file.
