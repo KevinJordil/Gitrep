@@ -166,10 +166,13 @@ export async function pull(repo: string): Promise<OpOutcome> {
   return serialized(repo, () => tracked(repo, 'Pull', 'keep', () => mayConflict(repo, ['pull', '--autostash'])))
 }
 
-export async function push(repo: string): Promise<void> {
+// force: after a rewrite (amend, rebase). --force-with-lease and --force-if-includes refuse when the remote got
+// commits this repository has not seen, even after a background fetch.
+export async function push(repo: string, force = false): Promise<void> {
   const s = await getStatus(repo)
   if (!s.branch) throw new Error('Detached HEAD: nothing to push')
-  await serialized(repo, () => git(repo, s.upstream ? ['push'] : ['push', '-u', 'origin', s.branch!]))
+  const lease = force ? ['--force-with-lease', '--force-if-includes'] : []
+  await serialized(repo, () => git(repo, s.upstream ? ['push', ...lease] : ['push', ...lease, '-u', 'origin', s.branch!]))
 }
 
 export async function switchBranch(repo: string, name: string, remote: boolean): Promise<void> {

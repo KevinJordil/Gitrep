@@ -218,3 +218,41 @@ export interface ConflictFile {
   ours: boolean // the upper side still has the file
   theirs: boolean
 }
+
+export interface RebaseCommit {
+  sha: string
+  subject: string
+  body: string
+  author: string
+  date: number // unix seconds
+}
+
+// What an interactive rebase of `branch` onto `onto` replays.
+export interface RebasePlan {
+  branch: string
+  onto: string // sha
+  ontoLabel: string // a branch at onto, else its short sha
+  commits: RebaseCommit[] // newest first
+  pushed: number // how many of them are already on a remote (a force push will be needed)
+}
+
+export type RebaseAction = 'pick' | 'reword' | 'squash' | 'fixup' | 'drop'
+
+// squash and fixup meld into the previous kept commit; squash keeps both messages. message: the new one (reword).
+export interface RebaseItem {
+  sha: string
+  action: RebaseAction
+  message?: string
+}
+
+export interface InteractiveRebaseRequest {
+  branch: string
+  upstream: string
+  items: RebaseItem[] // oldest first, in the new order
+  autostash: boolean
+}
+
+export interface RebaseProposal {
+  items: RebaseItem[] // oldest first
+  explanation: string
+}

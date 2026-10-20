@@ -17,9 +17,9 @@ export async function ensureIdle(repo: string): Promise<void> {
 }
 
 // Stopping on conflicts is not a failure: git left conflicted files and the banner offers continue/abort.
-export async function mayConflict(repo: string, args: string[]): Promise<OpOutcome> {
+export async function mayConflict(repo: string, args: string[], env: Record<string, string> = {}): Promise<OpOutcome> {
   try {
-    await git(repo, [...DIFF3, ...args], { env: NO_EDITOR })
+    await git(repo, [...DIFF3, ...args], { env: { ...NO_EDITOR, ...env } })
     // --autostash re-applying onto the result can conflict while git still exits 0.
     return (await getStatus(repo)).conflicted.length ? 'conflicts' : 'done'
   } catch (e) {

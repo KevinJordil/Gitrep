@@ -1,8 +1,10 @@
 import { hasConflictMarkers } from '../shared/conflicts'
-import type { Confidence, ConflictHunk, ConflictSuggestion } from '../shared/types'
-import { askClaude, isSensitive, MAX_DIFF_CHARS, type ClaudeOptions } from './claude'
+import type { Confidence, ConflictHunk, ConflictSuggestion, RebaseAction, RebaseCommit, RebaseItem, RebaseProposal } from '../shared/types'
+import { askClaude, filterNumstat, isSensitive, MAX_DIFF_CHARS, type ClaudeOptions } from './claude'
 import { getOperationInfo } from './conflicts'
-import { getStatus } from './repo'
+import { git } from './git'
+import { rebaseCommits, validateItems } from './rebase'
+import { getStatus, RO } from './repo'
 
 const MAX_HUNKS = 50
 const CONFIDENCE: readonly Confidence[] = ['high', 'medium', 'low']
@@ -80,4 +82,76 @@ export async function suggestConflict(repo: string, path: string, hunks: Conflic
   if (input.length > MAX_DIFF_CHARS) throw new Error('This conflict is too large to send to Claude: resolve it here or hand it over to Claude Code.')
   const out = await askClaude(opts, CONFLICT_SYSTEM_PROMPT, `Resolve the ${hunks.length} conflict${hunks.length === 1 ? '' : 's'} provided on stdin.`, input)
   return parseSuggestions(out, hunks.length)
+}
+
+export const REBASE_SYSTEM_PROMPT = [
+  'You plan interactive git rebases that tidy a branch before it is shared.',
+  'You get the commits of the branch, oldest first, with their message and the files they change.',
+  'Output the new todo list, oldest first, one line per commit, every commit exactly once:',
+  'pick <sha> <subject>  keeps the commit',
+  'reword <sha> <new subject>  keeps it with a clearer subject',
+  'squash <sha>  melds it into the previous kept commit, keeping both messages',
+  'fixup <sha>  melds it into the previous kept commit, dropping its message',
+  'drop <sha>  removes it (debug code, work reverted later)',
+  'You may reorder lines, for example to put a fix right after the commit it fixes. The first line must be pick or reword. Match the style of the recent subjects.',
+  'Then a line with only ---, then two or three sentences explaining the plan.',
+  'No markdown, no code fences.'
+].join('\n')
+
+const ACTION_LINE = /^(pick|reword|squash|fixup|drop)\s+([0-9a-f]{4,40})\b\s*(.*)$/
+
+// Claude's todo list mapped onto the commits (oldest first); every commit exactly once, else an error.
+export function parseRebasePlan(out: string, commits: RebaseCommit[]): RebaseProposal {
+  const invalid = () => new Error("Claude's plan does not use every commit exactly once: try again")
+  const [todo, ...rest] = out.split(/^---\s*$/m)
+  const items: RebaseItem[] = []
+  for (const line of todo.split('\n')) {
+    const m = ACTION_LINE.exec(line.trim())
+    if (!m) continue
+    const found = commits.filter((c) => c.sha.startsWith(m[2]))
+    if (found.length !== 1 || items.some((i) => i.sha === found[0].sha)) throw invalid()
+    const c = found[0]
+    const subject = m[3].trim()
+    const action = m[1] as RebaseAction
+    if (action !== 'reword') items.push({ sha: c.sha, action })
+    else if (subject && subject !== c.subject) items.push({ sha: c.sha, action, message: c.body ? `${subject}\n\n${c.body}` : subject })
+    else items.push({ sha: c.sha, action: 'pick' })
+  }
+  if (items.length !== commits.length) throw invalid()
+  validateItems(commits, items)
+  return { items, explanation: rest.join('---').trim() }
+}
+
+// A rebase plan for the branch, applied by the renderer to its list for review. Commit contents are not sent: messages and file stats only.
+export async function proposeRebase(repo: string, branch: string, upstream: string, opts: ClaudeOptions): Promise<RebaseProposal> {
+  const plan = await rebaseCommits(repo, String(branch), String(upstream))
+  const oldest = [...plan.commits].reverse()
+  const [recent, ...stats] = await Promise.all([
+    git(repo, [...RO, 'log', '-20', '--format=%s', plan.onto]),
+    ...oldest.map((c) => git(repo, [...RO, 'diff-tree', '-r', '--no-commit-id', '--numstat', '--no-renames', c.sha]))
+  ])
+  const files = (numstat: string) =>
+    filterNumstat(numstat)
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => {
+        const [add, del, ...path] = l.split('\t')
+        return path.length ? `${path.join('\t')} (+${add} -${del})` : l
+      })
+      .join(', ')
+  const input = [
+    'Recent commit subjects before the branch (style reference):',
+    recent.split('\n').filter(Boolean).map((s) => `- ${s}`).join('\n') || '(none)',
+    '',
+    `Commits of ${plan.branch} after ${plan.ontoLabel}, oldest first:`,
+    ...oldest.flatMap((c, i) => [
+      '',
+      `commit ${c.sha.slice(0, 7)} ${c.subject}`,
+      ...(c.body ? [`  message: ${c.body.split('\n').filter((l) => l.trim()).slice(0, 20).join(' / ')}`] : []),
+      `  files: ${files(stats[i]) || '(none shown)'}`
+    ])
+  ].join('\n')
+  if (input.length > MAX_DIFF_CHARS) throw new Error('Too many commits to send to Claude: plan this rebase by hand')
+  const out = await askClaude(opts, REBASE_SYSTEM_PROMPT, 'Plan the interactive rebase of the commits provided on stdin.', input)
+  return parseRebasePlan(out, plan.commits)
 }

@@ -12,12 +12,15 @@ import type {
   FileDiff,
   GeneratedMessage,
   GraphScope,
+  InteractiveRebaseRequest,
   LineAction,
   MergeAdvice,
   MergePreview,
   MergeRequest,
   OperationInfo,
   OpOutcome,
+  RebasePlan,
+  RebaseProposal,
   RepoEntry,
   RepoStatus,
   RepoSummary,
@@ -55,7 +58,7 @@ export interface Api {
   fetch(repo: string): Promise<void>
   fetchAll(): Promise<void>
   pull(repo: string): Promise<OpOutcome>
-  push(repo: string): Promise<void>
+  push(repo: string, force?: boolean): Promise<void> // force: --force-with-lease --force-if-includes
   switchBranch(repo: string, name: string, remote: boolean): Promise<void>
   checkoutCommit(repo: string, sha: string): Promise<void>
   createBranch(repo: string, name: string, at: string, checkout: boolean): Promise<void>
@@ -73,6 +76,9 @@ export interface Api {
   resolveSide(repo: string, path: string, side: 'ours' | 'theirs'): Promise<void>
   handOver(repo: string): Promise<void> // opens Claude Code in a terminal with the conflict's context
   suggestConflict(repo: string, path: string, hunks: ConflictHunk[]): Promise<(ConflictSuggestion | null)[]>
+  rebaseCommits(repo: string, branch: string, upstream: string): Promise<RebasePlan>
+  interactiveRebase(repo: string, req: InteractiveRebaseRequest): Promise<OpOutcome>
+  proposeRebase(repo: string, branch: string, upstream: string): Promise<RebaseProposal>
   mergePreview(repo: string, source: string, target: string): Promise<MergePreview>
   integrate(repo: string, req: MergeRequest): Promise<OpOutcome>
   stashes(repo: string): Promise<Stash[]>
@@ -138,6 +144,9 @@ export const API_METHODS = [
   'resolveSide',
   'handOver',
   'suggestConflict',
+  'rebaseCommits',
+  'interactiveRebase',
+  'proposeRebase',
   'mergePreview',
   'integrate',
   'stashes',

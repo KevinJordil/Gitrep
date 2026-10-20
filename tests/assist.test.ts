@@ -2,11 +2,11 @@ import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseSuggestions, suggestConflict } from '../src/main/assist'
+import { parseRebasePlan, parseSuggestions, proposeRebase, suggestConflict } from '../src/main/assist'
 import { MAX_DIFF_CHARS } from '../src/main/claude'
 import { git } from '../src/main/git'
 import { integrate } from '../src/main/ops'
-import type { ConflictHunk } from '../src/shared/types'
+import type { ConflictHunk, RebaseCommit } from '../src/shared/types'
 import { commitAll, makeRepo, tempDir, write } from './helpers'
 
 // Prints a canned answer; keeps the arguments and stdin it got.
@@ -80,5 +80,51 @@ describe('suggestConflict', () => {
     const { dir, opts } = await fakeClaude(ANSWER)
     await expect(suggestConflict(repo, 'a.txt', [{ ...HUNK, ours: ['x'.repeat(MAX_DIFF_CHARS)] }], opts)).rejects.toThrow('too large to send to Claude')
     expect(existsSync(join(dir, 'args'))).toBe(false)
+  })
+})
+
+describe('proposeRebase', () => {
+  // main: base. feature: c1 (a.txt), c2 (b.txt and .env), c3 (fixes a.txt).
+  async function branch() {
+    const repo = await makeRepo()
+    await write(repo, 'a.txt', 'base\n')
+    await commitAll(repo, 'base')
+    await git(repo, ['switch', '-q', '-c', 'feature'])
+    await write(repo, 'a.txt', '1\n')
+    await commitAll(repo, 'c1')
+    await write(repo, 'b.txt', 'b\n')
+    await write(repo, '.env', 'TOKEN=1\n')
+    await git(repo, ['add', '-A'])
+    await git(repo, ['commit', '-q', '-m', 'c2', '-m', 'Adds b.'])
+    await write(repo, 'a.txt', '1 fixed\n')
+    await commitAll(repo, 'c3')
+    await git(repo, ['switch', '-q', 'main'])
+    return { repo, shas: (await git(repo, ['rev-list', '--reverse', 'main..feature'])).trim().split('\n') }
+  }
+
+  it('sends messages and file stats oldest first, without sensitive files, and maps the plan onto the commits', async () => {
+    const { repo, shas } = await branch()
+    const answer = [`pick ${shas[0].slice(0, 7)} c1`, `fixup ${shas[2].slice(0, 9)} c3`, `reword ${shas[1].slice(0, 7)} feat: add b`, '---', 'Fold the fix into c1.'].join('\n')
+    const { dir, opts } = await fakeClaude(answer)
+    expect(await proposeRebase(repo, 'feature', 'main', opts)).toEqual({
+      items: [
+        { sha: shas[0], action: 'pick' },
+        { sha: shas[2], action: 'fixup' },
+        { sha: shas[1], action: 'reword', message: 'feat: add b\n\nAdds b.' }
+      ],
+      explanation: 'Fold the fix into c1.'
+    })
+    const stdin = await readFile(join(dir, 'stdin'), 'utf8')
+    expect(stdin).toContain(`commit ${shas[1].slice(0, 7)} c2\n  message: Adds b.\n  files: b.txt (+1 -0)`)
+    expect(stdin.indexOf(`commit ${shas[0].slice(0, 7)}`)).toBeLessThan(stdin.indexOf(`commit ${shas[2].slice(0, 7)}`))
+    expect(stdin).not.toContain('.env')
+  })
+
+  it('refuses a plan that skips, repeats or misorders commits', () => {
+    const commits: RebaseCommit[] = ['aaaa1111', 'bbbb2222'].map((sha, i) => ({ sha, subject: `c${i}`, body: '', author: 'A', date: 0 }))
+    expect(() => parseRebasePlan('pick aaaa1 c0\n---\nx', commits)).toThrow("Claude's plan does not use every commit exactly once: try again")
+    expect(() => parseRebasePlan('pick aaaa1 c0\npick aaaa c0\n---\nx', commits)).toThrow('exactly once')
+    expect(() => parseRebasePlan('fixup bbbb c1\npick aaaa c0\n---\nx', commits)).toThrow('The first commit cannot be squashed or fixed up')
+    expect(parseRebasePlan('reword bbbb c1\npick aaaa c0', commits)).toEqual({ items: [{ sha: 'bbbb2222', action: 'pick' }, { sha: 'aaaa1111', action: 'pick' }], explanation: '' })
   })
 })

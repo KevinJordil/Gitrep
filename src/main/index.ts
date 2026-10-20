@@ -4,7 +4,7 @@ import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { API_METHODS, type Api, type IpcResult } from '../shared/api'
-import type { Config, ConflictHunk, GraphScope, MergeRequest, RepoEntry } from '../shared/types'
+import type { Config, ConflictHunk, GraphScope, InteractiveRebaseRequest, MergeRequest, RepoEntry } from '../shared/types'
 import * as assist from './assist'
 import * as claude from './claude'
 import { addRepo, loadConfig, removeRepo, saveConfig } from './config'
@@ -13,6 +13,7 @@ import { git, gitDir } from './git'
 import * as history from './history'
 import * as journal from './journal'
 import * as ops from './ops'
+import * as rebase from './rebase'
 import * as repo from './repo'
 import { smoke } from './smoke'
 import * as stash from './stash'
@@ -175,7 +176,7 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   fetch: forRepo(fetchOne),
   fetchAll,
   pull: forRepo(repo.pull),
-  push: forRepo(repo.push),
+  push: forRepo((p, force: boolean) => repo.push(p, !!force)),
   switchBranch: forRepo(repo.switchBranch),
   checkoutCommit: forRepo(ops.checkoutCommit),
   createBranch: forRepo((p, name: string, at: string, checkout: boolean) => ops.createBranch(p, name, at, !!checkout)),
@@ -193,6 +194,9 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   resolveSide: forRepo(conflicts.resolveSide),
   handOver: forRepo(handOver),
   suggestConflict: forRepo((p, path: string, hunks: ConflictHunk[]) => assist.suggestConflict(p, path, hunks, claudeOptions())),
+  rebaseCommits: forRepo((p, branch: string, upstream: string) => rebase.rebaseCommits(p, String(branch), String(upstream))),
+  interactiveRebase: forRepo((p, req: InteractiveRebaseRequest) => rebase.interactiveRebase(p, { ...req, autostash: !!req?.autostash })),
+  proposeRebase: forRepo((p, branch: string, upstream: string) => assist.proposeRebase(p, branch, upstream, claudeOptions())),
   mergePreview: forRepo(ops.mergePreview),
   integrate: forRepo((p, req: MergeRequest) => ops.integrate(p, { ...req, autostash: !!req?.autostash })),
   stashes: forRepo(stash.getStashes),
