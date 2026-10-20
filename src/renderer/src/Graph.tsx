@@ -1,10 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { GRAPH_LIMIT, type Branch, type Commit, type GraphScope } from '../../shared/types'
+import { DEFAULT_GRAPH_COLUMNS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LIMIT, type Branch, type Commit, type GraphScope, type Settings } from '../../shared/types'
 import { colorFor, initials, laneColor, parseRef, relativeDate } from './format'
 import { dragBranch, dropOnBranch, type DropBranch } from './dnd'
 import { searchCommits, splitMatch, type GraphRow, type SearchField, type Segment } from './graph'
 import { Icon } from './icons'
 import type { Focus } from './model'
+import { useResizeHandle } from './useResize'
 
 const ROW_H = 34
 const MID = ROW_H / 2
@@ -71,6 +72,41 @@ export function RefPill({ text, color, remoteNames, branches = [], onDrop }: Pil
 const when = (t: number) => new Date(t * 1000).toLocaleString('en-GB')
 // The column shows when the commit landed (the graph's order); a rebase keeps the older author date.
 const dateTitle = (c: Commit) => (c.committed === c.date ? when(c.committed) : `Committed ${when(c.committed)}\nWritten ${when(c.date)}`)
+
+type Columns = Settings['graphColumns']
+const COLUMN_LABEL: Record<keyof Columns, string> = { author: 'Author', date: 'Date', sha: 'SHA' }
+const clampColumn = (w: number) => Math.min(GRAPH_COLUMN_MAX, Math.max(GRAPH_COLUMN_MIN, Math.round(w)))
+
+// The handle on the left edge of a header cell: it resizes the column to its right (dragging left widens it).
+// While dragging only the CSS variable on .graph changes.
+function ColumnHandle({ column, width, onSave }: { column: keyof Columns; width: number; onSave: (w: number) => Promise<boolean> }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const handlers = useResizeHandle({
+    width,
+    clamp: clampColumn,
+    dir: -1,
+    step: 8,
+    bigStep: 32,
+    defaultWidth: DEFAULT_GRAPH_COLUMNS[column],
+    apply: (w) => ref.current?.closest<HTMLElement>('.graph')?.style.setProperty(`--col-${column}`, `${w}px`),
+    onSave
+  })
+  return (
+    <div
+      ref={ref}
+      className="col-handle"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize the ${COLUMN_LABEL[column]} column`}
+      aria-valuenow={width}
+      aria-valuemin={GRAPH_COLUMN_MIN}
+      aria-valuemax={GRAPH_COLUMN_MAX}
+      tabIndex={0}
+      title="Drag to resize, double-click to reset"
+      {...handlers}
+    />
+  )
+}
 
 const dayChoices = (current: number) => [...new Set([30, 90, current])].filter((d) => d > 0).sort((a, b) => a - b)
 
@@ -173,6 +209,8 @@ interface Props {
   scope: GraphScope
   activeDays: number // 0 = every branch
   remoteNames: ReadonlySet<string>
+  columns: Columns
+  onColumns: (c: Columns) => Promise<boolean> // false when the save failed
   onFocus: (f: Focus) => void
   onScope: (s: GraphScope) => void
   onActiveDays: (days: number) => void
@@ -180,7 +218,7 @@ interface Props {
   onDrop: DropBranch // must be stable (useCallback)
 }
 
-export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, activeDays, remoteNames, onFocus, onScope, onActiveDays, onMenu, onDrop }: Props) {
+export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, activeDays, remoteNames, columns, onColumns, onFocus, onScope, onActiveDays, onMenu, onDrop }: Props) {
   const list = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
@@ -224,8 +262,10 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
     return () => window.removeEventListener('keydown', onKey)
   }, [active])
 
+  const vars = { '--col-author': `${columns.author}px`, '--col-date': `${columns.date}px`, '--col-sha': `${columns.sha}px` } as CSSProperties
+  const handle = (c: keyof Columns) => <ColumnHandle column={c} width={columns[c]} onSave={(w) => onColumns({ ...columns, [c]: w })} />
   return (
-    <>
+    <div className="graph" style={vars}>
       <div className="pane-head">
         <span className="pane-title">History</span>
         <span className="faint">{repoName}</span>
@@ -310,9 +350,15 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
       </div>
       <div className="cols" style={{ paddingLeft: width }}>
         <span style={{ flex: 1 }}>Message</span>
-        <span className="c-author">Author</span>
-        <span className="c-date">Date</span>
-        <span className="c-sha">SHA</span>
+        <span className="c-author">
+          {handle('author')}Author
+        </span>
+        <span className="c-date">
+          {handle('date')}Date
+        </span>
+        <span className="c-sha">
+          {handle('sha')}SHA
+        </span>
       </div>
       <div className="scroll graph-rows" ref={list}>
         {wip && rows[0] && (
@@ -348,6 +394,6 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
         ))}
         {commits.length === 0 && <span className="faint" style={{ padding: 14 }}>No commits yet.</span>}
       </div>
-    </>
+    </div>
   )
 }

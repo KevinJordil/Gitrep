@@ -46,6 +46,9 @@ export interface Branch {
 
 // Most commits the graph loads (`git log -n`).
 export const GRAPH_LIMIT = 2000
+export const GRAPH_COLUMN_MIN = 48 // px, the Author, Date and SHA columns of the history
+export const GRAPH_COLUMN_MAX = 480
+export const DEFAULT_GRAPH_COLUMNS = { author: 150, date: 110, sha: 70 }
 
 export interface Tag {
   name: string
@@ -115,6 +118,7 @@ export interface Settings {
   activeDays: number // the graph draws the branches committed to in the last N days; 0 = every branch
   sidebarWidth: number // px, resizable
   rightWidth: number // px, resizable
+  graphColumns: { author: number; date: number; sha: number } // px, resizable in the history header
 }
 
 export interface Config {

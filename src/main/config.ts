@@ -1,8 +1,8 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
-import type { Config, Settings } from '../shared/types'
+import { DEFAULT_GRAPH_COLUMNS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, type Config, type Settings } from '../shared/types'
 
-export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360 } }
+export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: DEFAULT_GRAPH_COLUMNS } }
 
 export function loadConfig(file: string): Config {
   let raw: string
@@ -14,8 +14,8 @@ export function loadConfig(file: string): Config {
   }
   try {
     const parsed = JSON.parse(raw) as Partial<Config>
-    const settings = { ...DEFAULT_CONFIG.settings, ...parsed.settings }
-    for (const [key, valid] of Object.entries(EDITABLE)) if (!valid(settings[key as keyof Settings])) Object.assign(settings, { [key]: DEFAULT_CONFIG.settings[key as keyof Settings] })
+    const settings = { ...structuredClone(DEFAULT_CONFIG.settings), ...parsed.settings }
+    for (const [key, valid] of Object.entries(EDITABLE)) if (!valid(settings[key as keyof Settings])) Object.assign(settings, { [key]: structuredClone(DEFAULT_CONFIG.settings[key as keyof Settings]) })
     return { ...structuredClone(DEFAULT_CONFIG), ...parsed, settings }
   } catch {
     copyFileSync(file, `${file}.corrupt`) // keep the user's repo list recoverable
@@ -42,11 +42,18 @@ export function removeRepo(cfg: Config, path: string): Config {
 
 const isWidth = (v: unknown) => Number.isInteger(v) && (v as number) >= 100 && (v as number) <= 2000
 
+const isColumns = (v: unknown) => {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false
+  const keys = Object.keys(v)
+  return keys.length === 3 && Object.keys(DEFAULT_GRAPH_COLUMNS).every((k) => keys.includes(k) && Number.isInteger(Reflect.get(v, k)) && Reflect.get(v, k) >= GRAPH_COLUMN_MIN && Reflect.get(v, k) <= GRAPH_COLUMN_MAX)
+}
+
 // The settings the app changes itself, with their validation; the others (Claude model and path) are edited in the file.
 const EDITABLE: Partial<Record<keyof Settings, (v: unknown) => boolean>> = {
   activeDays: (v) => Number.isInteger(v) && (v as number) >= 0,
   sidebarWidth: (v) => isWidth(v),
-  rightWidth: (v) => isWidth(v)
+  rightWidth: (v) => isWidth(v),
+  graphColumns: isColumns
 }
 
 export function applySettings(cfg: Config, patch: Partial<Settings>): Config {

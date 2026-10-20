@@ -25,7 +25,7 @@ The graph lists the commits newest first across branches (`git log --date-order`
 
 ## Configuration
 
-`~/.config/GitRep/config.json`: list of repositories, open tabs, `settings.claudeModel` (default `haiku`), `settings.claudePath` (empty = resolved through your shell), `settings.activeDays` (branches drawn by default: those with a commit in the last N days, 0 = all; default 30, set from the graph), `settings.sidebarWidth` and `settings.rightWidth` (pane widths in pixels, set by dragging their edges).
+`~/.config/GitRep/config.json`: list of repositories, open tabs, `settings.claudeModel` (default `haiku`), `settings.claudePath` (empty = resolved through your shell), `settings.activeDays` (branches drawn by default: those with a commit in the last N days, 0 = all; default 30, set from the graph), `settings.sidebarWidth` and `settings.rightWidth` (pane widths in pixels, set by dragging their edges) and `settings.graphColumns` (widths in pixels of the Author, Date and SHA columns of the history, 48 to 480, set by dragging the header separators).
 
 ## Sandbox
 

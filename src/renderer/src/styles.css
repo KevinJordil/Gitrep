@@ -183,9 +183,14 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 .lanes { flex: none; }
 .row .msg { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; }
 .row .msg .s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.c-author { width: 150px; display: flex; align-items: center; gap: 7px; color: var(--muted); overflow: hidden; white-space: nowrap; }
-.c-date { width: 110px; color: var(--faint); white-space: nowrap; }
-.c-sha { width: 70px; text-align: right; font: 12px var(--mono); color: var(--faint); }
+.graph { display: contents; }
+.c-author { width: var(--col-author); display: flex; align-items: center; gap: 7px; color: var(--muted); overflow: hidden; white-space: nowrap; }
+.c-date { width: var(--col-date); color: var(--faint); white-space: nowrap; }
+.c-sha { width: var(--col-sha); text-align: right; font: 12px var(--mono); color: var(--faint); }
+.cols > .c-author, .cols > .c-date, .cols > .c-sha { position: relative; overflow: visible; }
+.col-handle { position: absolute; left: -4px; top: -6px; bottom: -6px; width: 7px; cursor: col-resize; touch-action: none; z-index: 2; }
+.cols:hover .col-handle { background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; }
+.col-handle:hover, .col-handle:focus-visible, body.resizing .col-handle:active { background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat; outline: none; }
 /* a narrow center pane gives the author and date columns up before the message */
 @container (max-width: 760px) { .c-author { display: none; } }
 @container (max-width: 600px) { .c-date { display: none; } }

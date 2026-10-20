@@ -20,6 +20,13 @@ test.afterAll(async () => {
   await fx?.close()
 })
 
+// A screenshot with no focus ring and no hover.
+async function shot(name: string) {
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.mouse.move(600, 10)
+  await page.screenshot({ path: `e2e-artifacts/${name}.png` })
+}
+
 // Drags the handle sideways by dx with the mouse.
 async function drag(handle: Locator, dx: number) {
   const box = (await handle.boundingBox())!
@@ -58,9 +65,35 @@ test('the right panel resizes from its left edge', async () => {
   await drag(handle, -100)
   await expect.poll(() => widthOf(right)).toBe(460)
   await expect.poll(() => saved().rightWidth).toBe(460)
-  await handle.blur()
-  await page.mouse.move(600, 10)
-  await page.screenshot({ path: 'e2e-artifacts/resized-panes.png' })
+  await shot('resized-panes')
+})
+
+test('the history columns resize from the header, header and rows stay aligned; double-click resets', async () => {
+  await v.getByRole('separator', { name: 'Resize the right panel' }).dblclick() // a wide center pane shows the Author column
+  await expect.poll(() => widthOf(v.locator('aside.right'))).toBe(360)
+  const headCell = v.locator('.cols .c-author')
+  const rowCell = v.locator('.graph-rows .row:not(.wip) .c-author').first()
+  const handle = v.getByRole('separator', { name: 'Resize the Author column' })
+  await expect(handle).toHaveAttribute('aria-valuenow', '150')
+  expect(await widthOf(headCell)).toBe(150)
+  const box = (await handle.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 - 60, box.y + box.height / 2, { steps: 5 })
+  await page.mouse.up()
+  await expect.poll(() => widthOf(headCell)).toBe(210)
+  expect(await widthOf(rowCell)).toBe(210)
+  await expect.poll(() => saved().graphColumns).toEqual({ author: 210, date: 110, sha: 70 })
+  await expect(handle).toHaveAttribute('aria-valuenow', '210')
+  await shot('resized-columns')
+  await handle.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(() => widthOf(rowCell)).toBe(202)
+  await expect.poll(() => saved().graphColumns.author).toBe(202)
+  await handle.dblclick()
+  await expect.poll(() => widthOf(headCell)).toBe(150)
+  expect(await widthOf(rowCell)).toBe(150)
+  await expect.poll(() => saved().graphColumns).toEqual({ author: 150, date: 110, sha: 70 })
 })
 
 test('wide saved widths are clamped to a small window; the saved values are kept', async () => {
@@ -101,7 +134,7 @@ test('file rows: a status badge with its tooltip and an icon of the file type', 
   await expect(file('file.txt').locator('.ficon')).toHaveText('≡')
   await expect(file('main.c').locator('.ficon')).toHaveText('C')
   await expect(file('main.c').locator('.ficon')).toHaveCSS('color', 'rgb(81, 154, 186)') // --icon-c
-  await page.screenshot({ path: 'e2e-artifacts/file-icons.png' })
+  await shot('file-icons')
 })
 
 test('diffs are syntax highlighted', async () => {
@@ -110,5 +143,5 @@ test('diffs are syntax highlighted', async () => {
   await expect(keyword).toHaveCSS('color', 'rgb(124, 188, 244)') // --syn-kw
   await expect(v.locator('.lines .t span', { hasText: 'int' }).first()).toHaveCSS('color', 'rgb(78, 201, 176)') // --syn-ty
   await expect(v.locator('.lines .line.add .t')).toHaveText('int main(void) { return 0; }')
-  await page.screenshot({ path: 'e2e-artifacts/highlighted-diff.png' })
+  await shot('highlighted-diff')
 })

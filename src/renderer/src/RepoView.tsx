@@ -456,6 +456,8 @@ export function RepoView({ path, active, settings, onSettings, onBranch }: Props
                 scope={scope}
                 activeDays={activeDays}
                 remoteNames={remoteNames}
+                columns={settings.graphColumns}
+                onColumns={(graphColumns) => onSettings({ graphColumns })}
                 onFocus={focusOn}
                 onScope={setScope}
                 onActiveDays={(days) => onSettings({ activeDays: days })}

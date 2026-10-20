@@ -14,13 +14,13 @@ describe('config', () => {
     saveConfig(file, { ...DEFAULT_CONFIG, repos: [{ path: '/r/a', name: 'a' }] })
     expect(loadConfig(file).repos).toEqual([{ path: '/r/a', name: 'a' }])
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360 })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: { author: 150, date: 110, sha: 70 } })
   })
 
   it('resets hand-edited settings that fail validation to their defaults', async () => {
     const file = join(await tempDir(), 'config.json')
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { sidebarWidth: 'abc', activeDays: 'x', rightWidth: 5, claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360 })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: { author: 150, date: 110, sha: 70 } })
   })
 
   it('backs up a corrupt file instead of losing it', async () => {
@@ -53,5 +53,30 @@ describe('config', () => {
     expect(() => applySettings(DEFAULT_CONFIG, { constructor: 1 } as never)).toThrow('Invalid setting: constructor')
     expect(() => applySettings(DEFAULT_CONFIG, { toString: 1 } as never)).toThrow('Invalid setting: toString')
     for (const bad of [null, 5, 'x', []]) expect(() => applySettings(DEFAULT_CONFIG, bad as never)).toThrow('Invalid settings')
+  })
+
+  it('accepts graph column widths of 48 to 480 px and rejects anything else', () => {
+    const ok = { author: 48, date: 200, sha: 480 }
+    expect(applySettings(DEFAULT_CONFIG, { graphColumns: ok }).settings.graphColumns).toEqual(ok)
+    const bad: unknown[] = [
+      { author: 47, date: 110, sha: 70 },
+      { author: 150, date: 481, sha: 70 },
+      { author: 150.5, date: 110, sha: 70 },
+      { author: '150', date: 110, sha: 70 },
+      { author: 150, date: 110 },
+      { author: 150, date: 110, sha: 70, extra: 1 },
+      [150, 110, 70],
+      null,
+      5
+    ]
+    for (const graphColumns of bad) expect(() => applySettings(DEFAULT_CONFIG, { graphColumns } as never)).toThrow('Invalid setting: graphColumns')
+  })
+
+  it('resets invalid saved graph columns to the defaults', async () => {
+    const file = join(await tempDir(), 'config.json')
+    writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { graphColumns: { author: 10, date: 110, sha: 70 } } }))
+    expect(loadConfig(file).settings.graphColumns).toEqual({ author: 150, date: 110, sha: 70 })
+    writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { graphColumns: { author: 200, date: 90, sha: 60 } } }))
+    expect(loadConfig(file).settings.graphColumns).toEqual({ author: 200, date: 90, sha: 60 })
   })
 })
