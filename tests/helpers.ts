@@ -24,6 +24,12 @@ export async function commitAll(repo: string, message: string): Promise<void> {
   await git(repo, ['commit', '-q', '-m', message])
 }
 
+// An empty commit made `daysAgo` days ago (author and committer dates).
+export async function commitAt(repo: string, message: string, daysAgo: number): Promise<void> {
+  const date = `@${Math.round(Date.now() / 1000 - daysAgo * 86400)} +0000`
+  await git(repo, ['commit', '-q', '--allow-empty', '-m', message], { env: { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } })
+}
+
 export function lines(n: number, f: (i: number) => string = (i) => `line ${i}`): string {
   return Array.from({ length: n }, (_, i) => f(i + 1)).join('\n') + '\n'
 }

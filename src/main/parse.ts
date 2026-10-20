@@ -64,7 +64,7 @@ export function parseLog(out: string): Commit[] {
     })
 }
 
-export const BRANCH_FORMAT = '%(refname)%1f%(HEAD)%1f%(upstream:short)%1f%(upstream:track)%1f%(objectname)'
+export const BRANCH_FORMAT = '%(refname)%1f%(HEAD)%1f%(upstream:short)%1f%(upstream:track)%1f%(objectname)%1f%(committerdate:unix)'
 
 // Parses `git for-each-ref --format=BRANCH_FORMAT refs/heads refs/remotes`.
 export function parseBranches(out: string): Branch[] {
@@ -72,13 +72,13 @@ export function parseBranches(out: string): Branch[] {
     .split('\n')
     .filter(Boolean)
     .flatMap((line) => {
-      const [ref, head, upstream, track, sha] = line.split('\x1f')
+      const [ref, head, upstream, track, sha, date] = line.split('\x1f')
       const remote = ref.startsWith('refs/remotes/')
       const name = ref.replace(/^refs\/(heads|remotes)\//, '')
       if (remote && name.endsWith('/HEAD')) return []
       const ahead = /ahead (\d+)/.exec(track ?? '')?.[1]
       const behind = /behind (\d+)/.exec(track ?? '')?.[1]
-      return [{ name, remote, current: head === '*', upstream: upstream || null, ahead: ahead ? Number(ahead) : 0, behind: behind ? Number(behind) : 0, sha }]
+      return [{ name, remote, current: head === '*', upstream: upstream || null, ahead: ahead ? Number(ahead) : 0, behind: behind ? Number(behind) : 0, sha, date: Number(date) }]
     })
 }
 

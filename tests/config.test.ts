@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { addRepo, DEFAULT_CONFIG, loadConfig, removeRepo, saveConfig } from '../src/main/config'
+import { addRepo, applySettings, DEFAULT_CONFIG, loadConfig, removeRepo, saveConfig } from '../src/main/config'
 import { tempDir } from './helpers'
 
 describe('config', () => {
@@ -14,7 +14,7 @@ describe('config', () => {
     saveConfig(file, { ...DEFAULT_CONFIG, repos: [{ path: '/r/a', name: 'a' }] })
     expect(loadConfig(file).repos).toEqual([{ path: '/r/a', name: 'a' }])
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '' })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30 })
   })
 
   it('backs up a corrupt file instead of losing it', async () => {
@@ -32,5 +32,17 @@ describe('config', () => {
     cfg = removeRepo({ ...cfg, openTabs: ['/r/a', '/r/b'] }, '/r/a')
     expect(cfg.repos.map((r) => r.path)).toEqual(['/r/b'])
     expect(cfg.openTabs).toEqual(['/r/b'])
+  })
+
+  it('applies the settings the app edits, refuses invalid values and the others', () => {
+    expect(applySettings(DEFAULT_CONFIG, { activeDays: 90 }).settings.activeDays).toBe(90)
+    expect(applySettings(DEFAULT_CONFIG, { activeDays: 0 }).settings.activeDays).toBe(0)
+    expect(() => applySettings(DEFAULT_CONFIG, { activeDays: -1 })).toThrow('Invalid setting: activeDays')
+    expect(() => applySettings(DEFAULT_CONFIG, { activeDays: 1.5 })).toThrow('Invalid setting: activeDays')
+    expect(() => applySettings(DEFAULT_CONFIG, { claudePath: '/bin/sh' })).toThrow('Invalid setting: claudePath')
+    expect(DEFAULT_CONFIG.settings.activeDays).toBe(30) // not mutated
+    expect(() => applySettings(DEFAULT_CONFIG, { constructor: 1 } as never)).toThrow('Invalid setting: constructor')
+    expect(() => applySettings(DEFAULT_CONFIG, { toString: 1 } as never)).toThrow('Invalid setting: toString')
+    for (const bad of [null, 5, 'x', []]) expect(() => applySettings(DEFAULT_CONFIG, bad as never)).toThrow('Invalid settings')
   })
 })

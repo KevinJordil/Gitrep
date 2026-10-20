@@ -8,7 +8,7 @@ import { API_METHODS, type Api, type IpcResult } from '../shared/api'
 import type { Config, ConflictHunk, GraphScope, InteractiveRebaseRequest, MergeRequest, RepoEntry } from '../shared/types'
 import * as assist from './assist'
 import * as claude from './claude'
-import { addRepo, loadConfig, removeRepo, saveConfig } from './config'
+import { addRepo, applySettings, loadConfig, removeRepo, saveConfig } from './config'
 import * as conflicts from './conflicts'
 import { git, gitDir } from './git'
 import * as history from './history'
@@ -153,10 +153,13 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
     setConfig(removeRepo(config, path))
   },
   setOpenTabs: async (paths) => setConfig({ ...config, openTabs: paths.filter(isRegistered) }),
+  updateSettings: async (patch) => setConfig(applySettings(config, patch)),
   summaries: async () =>
     (await repo.mapLimit(config.repos, 6, (r) => repo.summary(r.path))).map((s) => ({ ...s, fetchError: fetchErrors.get(s.path) ?? null })),
   status: forRepo(repo.getStatus),
-  log: forRepo((p, scope: GraphScope) => repo.getLog(p, { only: scope?.only ?? null, hidden: Array.isArray(scope?.hidden) ? scope.hidden : [] })),
+  log: forRepo((p, scope: GraphScope, days?: number) =>
+    repo.getLog(p, { only: scope?.only ?? null, hidden: Array.isArray(scope?.hidden) ? scope.hidden : [] }, Math.max(0, Math.trunc(Number(days)) || 0))
+  ),
   branches: forRepo(repo.getBranches),
   tags: forRepo(history.getTags),
   commitDetails: forRepo(history.getCommitDetails),

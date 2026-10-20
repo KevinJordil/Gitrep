@@ -40,6 +40,7 @@ export interface Branch {
   ahead: number
   behind: number
   sha: string // tip commit
+  date: number // committer date of the tip, unix seconds
 }
 
 // Most commits the graph loads (`git log -n`).
@@ -110,6 +111,7 @@ export interface RepoSummary {
 export interface Settings {
   claudeModel: string
   claudePath: string // empty = resolve from the login shell
+  activeDays: number // the graph draws the branches committed to in the last N days; 0 = every branch
 }
 
 export interface Config {

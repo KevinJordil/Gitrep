@@ -25,6 +25,7 @@ import type {
   RepoStatus,
   RepoSummary,
   ResetMode,
+  Settings,
   Stash,
   Tag,
   UndoState
@@ -35,9 +36,10 @@ export interface Api {
   addRepos(): Promise<RepoEntry[]>
   removeRepo(path: string): Promise<void>
   setOpenTabs(paths: string[]): Promise<void>
+  updateSettings(patch: Partial<Settings>): Promise<void> // only the settings the app edits (see applySettings)
   summaries(): Promise<RepoSummary[]>
   status(repo: string): Promise<RepoStatus>
-  log(repo: string, scope: GraphScope): Promise<Commit[]>
+  log(repo: string, scope: GraphScope, days?: number): Promise<Commit[]> // days: active branches only; 0 or omitted = every branch
   branches(repo: string): Promise<Branch[]>
   tags(repo: string): Promise<Tag[]>
   commitDetails(repo: string, sha: string): Promise<CommitDetails>
@@ -160,7 +162,8 @@ export const API_METHODS = [
   'undoState',
   'undo',
   'redo',
-  'setWatched'
+  'setWatched',
+  'updateSettings'
 ] as const satisfies readonly InvokeMethod[]
 
 // Compile-time guard: every invoke method must be listed above.

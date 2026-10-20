@@ -46,6 +46,20 @@ describe('layoutGraph', () => {
     expect(rows[2].segments).toEqual([seg('top', 0, 0, 0, true), seg('top', 1, 0, 1)])
   })
 
+  it('keeps each branch in its lane when commits of two branches interleave by date (git log --date-order)', () => {
+    // main: b <- m1 <- m2, feature: b <- f1 <- f2, listed f2, m2, f1, m1, b.
+    const rows = layoutGraph([n('f2', 'f1'), n('m2', 'm1'), n('f1', 'b'), n('m1', 'b'), n('b')])
+    expect(rows.map((r) => [r.lane, r.color])).toEqual([
+      [0, 0],
+      [1, 1],
+      [0, 0],
+      [1, 1],
+      [0, 0]
+    ])
+    expect(rows[2].segments).toEqual([seg('top', 0, 0, 0), seg('through', 1, 1, 1), seg('bottom', 0, 0, 0)])
+    expect(rows[4].segments).toEqual([seg('top', 0, 0, 0), seg('top', 1, 0, 1)])
+  })
+
   it('ends the line at a parent outside the loaded history', () => {
     expect(layoutGraph([n('a', 'zzz')])).toEqual([{ lane: 0, color: 0, width: 1, segments: [] }])
   })

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
+import { isActive } from '../shared/branches'
 import { GRAPH_LIMIT, type Branch, type Commit, type DiffSide, type FileChange, type FileDiff, type GraphScope, type LineAction, type OpOutcome, type RepoStatus, type RepoSummary } from '../shared/types'
 import { buildPatch, parseDiff } from './diff'
 import { currentOperation, git, serialized } from './git'
@@ -34,19 +35,25 @@ export async function getStatus(repo: string): Promise<RepoStatus> {
 
 export const ALL_REFS: GraphScope = { only: null, hidden: [] }
 
-export async function getLog(repo: string, scope: GraphScope = ALL_REFS, limit = GRAPH_LIMIT): Promise<Commit[]> {
+// days: only the active branches (see isActive), 0 = every branch and tag.
+// --date-order: newest first across branches, still never a parent before its children (layoutGraph relies on it).
+export async function getLog(repo: string, scope: GraphScope = ALL_REFS, days = 0, limit = GRAPH_LIMIT): Promise<Commit[]> {
   if (!(await hasHead(repo))) return []
-  const refs = await graphRefs(repo, scope)
-  return parseLog(await git(repo, [...RO, 'log', '--topo-order', `-n${limit}`, `--format=${LOG_FORMAT}`, ...refs, '--']))
+  const refs = await graphRefs(repo, scope, days)
+  return parseLog(await git(repo, [...RO, 'log', '--date-order', `-n${limit}`, `--format=${LOG_FORMAT}`, ...refs, '--']))
 }
 
+const refName = (b: Branch) => (b.remote ? 'refs/remotes/' : 'refs/heads/') + b.name
+
 // Stashes are not drawn (they have their own sidebar list). Unknown branch names (deleted since) are ignored.
-async function graphRefs(repo: string, scope: GraphScope): Promise<string[]> {
+// Isolating a branch shows it whatever its age. Active branches only: tags are not walked (their pills still show on drawn commits).
+async function graphRefs(repo: string, scope: GraphScope, days: number): Promise<string[]> {
   const all = ['--branches', '--remotes', '--tags', 'HEAD']
-  if (!scope.only && !scope.hidden.length) return all
+  if (!scope.only && !scope.hidden.length && !days) return all
   const branches = await getBranches(repo)
   const only = branches.find((b) => b.name === scope.only)
-  if (only) return [(only.remote ? 'refs/remotes/' : 'refs/heads/') + only.name]
+  if (only) return [refName(only)]
+  if (days) return [...branches.filter(isActive(branches, days)).filter((b) => !scope.hidden.includes(b.name)).map(refName), 'HEAD']
   const hidden = branches.filter((b) => scope.hidden.includes(b.name))
   // --exclude applies to the next --branches/--remotes only, with names relative to refs/heads/ or refs/remotes/.
   const exclude = (remote: boolean) => hidden.filter((b) => b.remote === remote).map((b) => `--exclude=${b.name}`)

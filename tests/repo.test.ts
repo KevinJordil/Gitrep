@@ -11,6 +11,7 @@ import {
   fetchRepo,
   getBranches,
   getDiff,
+  ALL_REFS,
   getLog,
   getStatus,
   lastMessage,
@@ -22,7 +23,7 @@ import {
   switchBranch,
   unstage
 } from '../src/main/repo'
-import { commitAll, lines, makeRepo, tempDir, write } from './helpers'
+import { commitAll, commitAt, lines, makeRepo, tempDir, write } from './helpers'
 
 describe('getStatus', () => {
   it('reports branch, staged, unstaged and untracked files with line counts', async () => {
@@ -84,8 +85,8 @@ describe('getLog and getBranches', () => {
     await git(repo, ['branch', 'feature/x'])
     const sha = (await git(repo, ['rev-parse', 'HEAD'])).trim()
     expect(await getBranches(repo)).toEqual([
-      { name: 'feature/x', remote: false, current: false, upstream: null, ahead: 0, behind: 0, sha },
-      { name: 'main', remote: false, current: true, upstream: null, ahead: 0, behind: 0, sha }
+      { name: 'feature/x', remote: false, current: false, upstream: null, ahead: 0, behind: 0, sha, date: expect.any(Number) },
+      { name: 'main', remote: false, current: true, upstream: null, ahead: 0, behind: 0, sha, date: expect.any(Number) }
     ])
   })
 
@@ -104,7 +105,7 @@ describe('getLog and getBranches', () => {
     return repo
   }
 
-  it('lists every branch in topological order, without stash commits', async () => {
+  it('lists every branch, without stash commits', async () => {
     const repo = await branchy()
     const log = await getLog(repo)
     expect(log.map((c) => c.subject).sort()).toEqual(['base', 'on feature', 'on main'])
@@ -116,6 +117,49 @@ describe('getLog and getBranches', () => {
     expect((await getLog(repo, { only: 'feature', hidden: [] })).map((c) => c.subject)).toEqual(['on feature', 'base'])
     expect((await getLog(repo, { only: null, hidden: ['feature', 'gone'] })).map((c) => c.subject)).toEqual(['on main', 'base'])
     expect((await getLog(repo, { only: 'gone', hidden: [] })).map((c) => c.subject).sort()).toEqual(['base', 'on feature', 'on main'])
+  })
+
+  // base (10 days ago) <- m1 (4) <- m2 (2) on main; base <- f1 (3) <- f2 (1) on feature.
+  async function interleaved() {
+    const repo = await makeRepo()
+    await commitAt(repo, 'base', 10)
+    await git(repo, ['branch', 'feature'])
+    await commitAt(repo, 'm1', 4)
+    await commitAt(repo, 'm2', 2)
+    await git(repo, ['switch', '-q', 'feature'])
+    await commitAt(repo, 'f1', 3)
+    await commitAt(repo, 'f2', 1)
+    await git(repo, ['switch', '-q', 'main'])
+    return repo
+  }
+
+  it('lists commits newest first across branches, never a parent before its children', async () => {
+    const repo = await interleaved()
+    expect((await getLog(repo)).map((c) => c.subject)).toEqual(['f2', 'm2', 'f1', 'm1', 'base'])
+  })
+
+  it('gives each branch the committer date of its tip', async () => {
+    const repo = await interleaved()
+    const now = Date.now() / 1000
+    const dates = Object.fromEntries((await getBranches(repo)).map((b) => [b.name, Math.round((now - b.date) / 86400)]))
+    expect(dates).toEqual({ feature: 1, main: 2 })
+  })
+
+  it('draws only the active branches: recent tips, HEAD, isolated ones; tags are not walked', async () => {
+    const repo = await interleaved()
+    await git(repo, ['switch', '-q', '-c', 'old', 'main~2'])
+    await commitAt(repo, 'old work', 60)
+    await git(repo, ['tag', 'v0', 'HEAD'])
+    await git(repo, ['switch', '-q', 'main'])
+    expect((await getLog(repo, ALL_REFS, 30)).map((c) => c.subject)).toEqual(['f2', 'm2', 'f1', 'm1', 'base'])
+    expect((await getLog(repo, ALL_REFS, 90)).map((c) => c.subject)).toContain('old work')
+    expect((await getLog(repo, ALL_REFS, 0)).map((c) => c.subject)).toContain('old work')
+    expect((await getLog(repo, { only: 'old', hidden: [] }, 30)).map((c) => c.subject)).toEqual(['old work', 'base'])
+    expect((await getLog(repo, { only: null, hidden: ['feature'] }, 30)).map((c) => c.subject)).toEqual(['m2', 'm1', 'base'])
+    await git(repo, ['switch', '-q', 'old'])
+    expect((await getLog(repo, ALL_REFS, 30)).map((c) => c.subject)).toContain('old work') // the checked-out branch
+    await git(repo, ['switch', '-q', '--detach', 'old'])
+    expect((await getLog(repo, ALL_REFS, 30)).map((c) => c.subject)).toContain('old work') // HEAD
   })
 })
 

@@ -65,17 +65,17 @@ describe('parseLog', () => {
 describe('parseBranches', () => {
   it('parses local and remote refs, skips remote HEAD symrefs', () => {
     const out = [
-      ['refs/heads/feature/x', ' ', 'origin/feature/x', '[ahead 2, behind 1]', 'f1'],
-      ['refs/heads/main', '*', 'origin/main', '', 'm1'],
-      ['refs/remotes/origin/HEAD', ' ', '', '', 'm1'],
-      ['refs/remotes/origin/main', ' ', '', '', 'm1']
+      ['refs/heads/feature/x', ' ', 'origin/feature/x', '[ahead 2, behind 1]', 'f1', '1700000100'],
+      ['refs/heads/main', '*', 'origin/main', '', 'm1', '1700000200'],
+      ['refs/remotes/origin/HEAD', ' ', '', '', 'm1', '1700000200'],
+      ['refs/remotes/origin/main', ' ', '', '', 'm1', '1700000200']
     ]
       .map((f) => f.join('\x1f'))
       .join('\n')
     expect(parseBranches(out + '\n')).toEqual([
-      { name: 'feature/x', remote: false, current: false, upstream: 'origin/feature/x', ahead: 2, behind: 1, sha: 'f1' },
-      { name: 'main', remote: false, current: true, upstream: 'origin/main', ahead: 0, behind: 0, sha: 'm1' },
-      { name: 'origin/main', remote: true, current: false, upstream: null, ahead: 0, behind: 0, sha: 'm1' }
+      { name: 'feature/x', remote: false, current: false, upstream: 'origin/feature/x', ahead: 2, behind: 1, sha: 'f1', date: 1700000100 },
+      { name: 'main', remote: false, current: true, upstream: 'origin/main', ahead: 0, behind: 0, sha: 'm1', date: 1700000200 },
+      { name: 'origin/main', remote: true, current: false, upstream: null, ahead: 0, behind: 0, sha: 'm1', date: 1700000200 }
     ])
   })
 })
