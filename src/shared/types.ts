@@ -27,7 +27,8 @@ export interface Commit {
   parents: string[]
   author: string
   email: string
-  date: number // unix seconds
+  date: number // author date, unix seconds
+  committed: number // committer date, unix seconds (rebases and cherry-picks move it, not the author date)
   subject: string
   refs: string[] // git %D decorations: "HEAD -> main", "origin/main", "tag: v1.0"
 }

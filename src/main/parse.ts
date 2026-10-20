@@ -51,7 +51,7 @@ export function parseNumstat(out: string): Record<string, { add: number; del: nu
   return result
 }
 
-export const LOG_FORMAT = '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%D%x1f%s%x1e'
+export const LOG_FORMAT = '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%ct%x1f%D%x1f%s%x1e'
 
 export function parseLog(out: string): Commit[] {
   return out
@@ -59,8 +59,8 @@ export function parseLog(out: string): Commit[] {
     .map((record) => record.replace(/^\n/, ''))
     .filter(Boolean)
     .map((record) => {
-      const [sha, parents, author, email, at, refs, subject] = record.split('\x1f')
-      return { sha, parents: parents ? parents.split(' ') : [], author, email, date: Number(at), refs: refs ? refs.split(', ') : [], subject }
+      const [sha, parents, author, email, at, ct, refs, subject] = record.split('\x1f')
+      return { sha, parents: parents ? parents.split(' ') : [], author, email, date: Number(at), committed: Number(ct), refs: refs ? refs.split(', ') : [], subject }
     })
 }
 

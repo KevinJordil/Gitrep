@@ -65,7 +65,7 @@ describe('layoutGraph', () => {
   })
 })
 
-const commit = (sha: string, subject: string, author: string): Commit => ({ sha, parents: [], author, email: '', date: 0, subject, refs: [] })
+const commit = (sha: string, subject: string, author: string): Commit => ({ sha, parents: [], author, email: '', date: 0, committed: 0, subject, refs: [] })
 
 describe('searchCommits', () => {
   const list = [commit('a1b2', 'fix(ota): timeout', 'Nora'), commit('c3d4', 'docs: OTA guide', 'Arno'), commit('e5f6', 'chore: bump', 'Otavio')]

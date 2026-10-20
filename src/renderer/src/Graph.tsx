@@ -68,6 +68,10 @@ export function RefPill({ text, color, remoteNames, branches = [], onDrop }: Pil
 }
 
 // The usual choices, plus a value set by hand in the config file.
+const when = (t: number) => new Date(t * 1000).toLocaleString('en-GB')
+// The column shows when the commit landed (the graph's order); a rebase keeps the older author date.
+const dateTitle = (c: Commit) => (c.committed === c.date ? when(c.committed) : `Committed ${when(c.committed)}\nWritten ${when(c.date)}`)
+
 const dayChoices = (current: number) => [...new Set([30, 90, current])].filter((d) => d > 0).sort((a, b) => a - b)
 
 const SEARCH_FIELDS: [SearchField, string][] = [
@@ -147,8 +151,8 @@ const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selecte
         </span>
         <Highlight text={c.author} query={hl('author')} current={current} />
       </span>
-      <span className="c-date" title={new Date(c.date * 1000).toLocaleString('en-GB')}>
-        {relativeDate(c.date)}
+      <span className="c-date" title={dateTitle(c)}>
+        {relativeDate(c.committed)}
       </span>
       <span className="c-sha">
         <Highlight text={c.sha.slice(0, 7)} query={hl('sha')} current={current} />

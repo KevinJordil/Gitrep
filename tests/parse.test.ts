@@ -51,13 +51,13 @@ describe('parseNumstat', () => {
 describe('parseLog', () => {
   it('parses records separated by \\x1e', () => {
     const out =
-      ['a1', 'p1 p2', 'Ann', 'ann@x', '1700000000', 'HEAD -> main, origin/main, tag: v1', 'Merge things'].join('\x1f') +
+      ['a1', 'p1 p2', 'Ann', 'ann@x', '1700000000', '1700000500', 'HEAD -> main, origin/main, tag: v1', 'Merge things'].join('\x1f') +
       '\x1e\n' +
-      ['p1', '', 'Bob', 'bob@x', '1690000000', '', 'first'].join('\x1f') +
+      ['p1', '', 'Bob', 'bob@x', '1690000000', '1690000000', '', 'first'].join('\x1f') +
       '\x1e\n'
     expect(parseLog(out)).toEqual([
-      { sha: 'a1', parents: ['p1', 'p2'], author: 'Ann', email: 'ann@x', date: 1700000000, refs: ['HEAD -> main', 'origin/main', 'tag: v1'], subject: 'Merge things' },
-      { sha: 'p1', parents: [], author: 'Bob', email: 'bob@x', date: 1690000000, refs: [], subject: 'first' }
+      { sha: 'a1', parents: ['p1', 'p2'], author: 'Ann', email: 'ann@x', date: 1700000000, committed: 1700000500, refs: ['HEAD -> main', 'origin/main', 'tag: v1'], subject: 'Merge things' },
+      { sha: 'p1', parents: [], author: 'Bob', email: 'bob@x', date: 1690000000, committed: 1690000000, refs: [], subject: 'first' }
     ])
   })
 })
