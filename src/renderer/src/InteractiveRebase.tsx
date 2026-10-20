@@ -135,10 +135,10 @@ export function InteractiveRebase({ repo, branch, upstream, status, busy, runOut
       `${branch} rebased`
     ).then((ok) => ok && onClose())
   const chips: [number, string, string][] = [
-    [counts.squashed, 'squashed', '#e879b9'],
-    [counts.dropped, 'dropped', '#f2786d'],
-    [counts.renamed, 'renamed', '#6ea8ff'],
-    [counts.moved, 'moved', '#a0a7b6']
+    [counts.squashed, 'squashed', 'var(--pink)'],
+    [counts.dropped, 'dropped', 'var(--red)'],
+    [counts.renamed, 'renamed', 'var(--accent)'],
+    [counts.moved, 'moved', 'var(--muted)']
   ]
 
   return (
@@ -277,7 +277,7 @@ export function InteractiveRebase({ repo, branch, upstream, status, busy, runOut
             {chips
               .filter(([n]) => n > 0)
               .map(([n, label, c]) => (
-                <li key={label} style={{ color: c, background: `${c}14`, borderColor: `${c}40` }}>
+                <li key={label} style={{ color: c, background: `color-mix(in srgb, ${c} 8%, transparent)`, borderColor: `color-mix(in srgb, ${c} 25%, transparent)` }}>
                   {n} {label}
                 </li>
               ))}

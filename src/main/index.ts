@@ -236,7 +236,7 @@ function createWindow(): void {
     minHeight: 600,
     title: 'GitRep',
     icon,
-    backgroundColor: '#0d0f13',
+    backgroundColor: '#1f1f1f', // --bg of the theme, shown before the page loads
     autoHideMenuBar: true,
     // Test support: GITREP_HIDDEN=1 keeps the window hidden (end-to-end runs).
     show: !SMOKE && !process.env.GITREP_HIDDEN,

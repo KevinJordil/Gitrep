@@ -18,7 +18,8 @@ export function relativeDate(unixSeconds: number, now = Date.now()): string {
   return 'just now'
 }
 
-const PALETTE = ['#f5a524', '#6ea8ff', '#e879b9', '#5bd38a', '#b69cf5']
+// The lane colors of the theme (styles.css :root --l0 … --l4).
+const PALETTE = ['var(--l0)', 'var(--l1)', 'var(--l2)', 'var(--l3)', 'var(--l4)']
 
 // Graph lanes cycle through the same colors as the avatars (amber, blue, pink, green, violet).
 export const laneColor = (index: number): string => PALETTE[index % PALETTE.length]

@@ -52,10 +52,10 @@ export function Icon({ name, size = 16, stroke = 1.8 }: { name: IconName; size?:
 export function Logo() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="1" y="1" width="22" height="22" rx="6" fill="#1a1e26" stroke="#252a34" />
-      <path d="M8 6v12M8 12c0-3 3-4 8-4" stroke="#f5a524" strokeWidth="2" fill="none" strokeLinecap="round" />
-      <circle cx="8" cy="18" r="2" fill="#6ea8ff" />
-      <circle cx="16" cy="8" r="2" fill="#f5a524" />
+      <rect x="1" y="1" width="22" height="22" rx="6" fill="var(--raised)" stroke="var(--line)" />
+      <path d="M8 6v12M8 12c0-3 3-4 8-4" stroke="var(--amber)" strokeWidth="2" fill="none" strokeLinecap="round" />
+      <circle cx="8" cy="18" r="2" fill="var(--accent)" />
+      <circle cx="16" cy="8" r="2" fill="var(--amber)" />
     </svg>
   )
 }
