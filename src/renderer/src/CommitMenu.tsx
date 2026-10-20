@@ -9,8 +9,17 @@ const RESETS: [ResetMode, string, string][] = [
   ['hard', 'Hard', 'Discards uncommitted changes · can be undone']
 ]
 
+// Branch-only entries shown above the commit ones when the menu opens on a branch of the sidebar.
+export interface RefItem {
+  label: string
+  run: () => void
+  disabled?: boolean
+  danger?: boolean
+}
+
 interface Props {
   commit: Commit
+  branchActions?: { name: string; items: RefItem[] }
   x: number
   y: number
   branch: string | null // checked-out branch, null when detached
@@ -20,7 +29,7 @@ interface Props {
   onClose: () => void // must be stable (useCallback)
 }
 
-export function CommitMenu({ commit, x, y, branch, head, canRebase, onAction, onClose }: Props) {
+export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebase, onAction, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [sub, setSub] = useState(false)
   const target = branch ?? 'HEAD'
@@ -55,6 +64,10 @@ export function CommitMenu({ commit, x, y, branch, head, canRebase, onAction, on
     }
   }, [onClose])
 
+  const actRef = (run: () => void) => {
+    onClose()
+    run()
+  }
   const act = (a: CommitAction) => {
     onClose()
     onAction(a)
@@ -89,12 +102,30 @@ export function CommitMenu({ commit, x, y, branch, head, canRebase, onAction, on
   )
 
   const left = Math.max(8, Math.min(x, window.innerWidth - 300))
-  const top = Math.max(8, Math.min(y, window.innerHeight - 420))
+  // Placed once measured: below the pointer, else above it, else pinned to the bottom edge (the CSS max-height scrolls the rest).
+  const [top, setTop] = useState(Math.max(8, y))
+  const [scroll, setScroll] = useState(false)
+  useLayoutEffect(() => {
+    const h = ref.current?.offsetHeight ?? 0
+    const room = window.innerHeight - 8
+    setScroll(h > room - 8)
+    setTop(y + h <= room ? Math.max(8, y) : y - h >= 8 ? y - h : Math.max(8, room - h))
+  }, [y])
   return (
-    <div ref={ref} className="menu" role="menu" aria-label={`Actions on commit ${commit.sha.slice(0, 7)}`} style={{ left, top }} onKeyDown={onKey} onContextMenu={(e) => e.preventDefault()}>
+    <div ref={ref} className={`menu ${scroll ? 'scroll' : ''}`} role="menu" aria-label={branchActions ? `Actions on branch ${branchActions.name}` : `Actions on commit ${commit.sha.slice(0, 7)}`} style={{ left, top }} onKeyDown={onKey} onContextMenu={(e) => e.preventDefault()}>
       <div className="menu-head">
-        {commit.sha.slice(0, 7)} · {commit.subject}
+        {branchActions ? `${branchActions.name} · ${commit.sha.slice(0, 7)}` : `${commit.sha.slice(0, 7)} · ${commit.subject}`}
       </div>
+      {branchActions && (
+        <>
+          {branchActions.items.map((it) => (
+            <button key={it.label} role="menuitem" className={`menu-item ${it.danger ? 'danger' : ''}`} disabled={it.disabled} onMouseEnter={closeSub} onClick={() => actRef(it.run)}>
+              <span>{it.label}</span>
+            </button>
+          ))}
+          <div className="menu-sep" role="separator" />
+        </>
+      )}
       {item('Check out this commit', 'checkout')}
       {item('Create branch here…', 'branch', 'B')}
       {item('Create tag here…', 'tag', 'T')}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { isActive } from '../../shared/branches'
+import { isActive, toggleHide, toggleOnly } from '../../shared/branches'
 import type { Branch, GraphScope, Stash, Tag } from '../../shared/types'
 import { dragBranch, dropOnBranch, type DropBranch } from './dnd'
 import { laneColor } from './format'
@@ -19,6 +19,7 @@ interface Props {
   onScope: (s: GraphScope) => void
   onDrop: DropBranch
   onDelete: (b: Branch) => void
+  onMenu: (b: Branch, x: number, y: number) => void
 }
 
 function Title({ title, count }: { title: string; count: number }) {
@@ -30,7 +31,7 @@ function Title({ title, count }: { title: string; count: number }) {
   )
 }
 
-export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeDays, onSwitch, onFocus, onScope, onDrop, onDelete }: Props) {
+export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeDays, onSwitch, onFocus, onScope, onDrop, onDelete, onMenu }: Props) {
   const [unfolded, setUnfolded] = useState<string[]>([]) // titles of the sections showing their older branches
   const dot = (sha: string, fallback: string) => {
     const c = colors.get(sha)
@@ -53,6 +54,17 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeD
         className={`side-item br ${b.current ? 'current' : ''} ${focused === b.sha ? 'sel' : ''} ${off ? 'off' : ''}`}
         title={b.current ? 'Current branch' : 'Double-click to switch to this branch'}
         onDoubleClick={() => !b.current && onSwitch(b)}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.currentTarget.querySelector<HTMLElement>('.name')?.focus() // the menu gives focus back to the row
+          onMenu(b, e.clientX, e.clientY)
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return
+          e.preventDefault()
+          const r = e.currentTarget.getBoundingClientRect()
+          onMenu(b, r.left + 24, r.bottom)
+        }}
         {...dragBranch(b)}
         {...(b.remote ? {} : dropOnBranch(b, branches, onDrop))}
       >
@@ -69,7 +81,7 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeD
             aria-pressed={hidden}
             disabled={b.current}
             title={b.current ? 'The checked-out branch is always shown' : hidden ? 'Show this branch' : 'Hide this branch'}
-            onClick={() => onScope({ only: null, hidden: hidden ? scope.hidden.filter((h) => h !== b.name) : [...scope.hidden, b.name] })}
+            onClick={() => onScope(toggleHide(scope, b.name))}
           >
             <Icon name={hidden ? 'eyeOff' : 'eye'} size={13} stroke={2} />
           </button>
@@ -78,7 +90,7 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeD
             aria-label={`${isolated ? 'Stop isolating' : 'Isolate'} ${b.name}`}
             aria-pressed={isolated}
             title={isolated ? 'Show all branches' : 'Show only this branch'}
-            onClick={() => onScope({ only: isolated ? null : b.name, hidden: [] })}
+            onClick={() => onScope(toggleOnly(scope, b.name))}
           >
             <Icon name="target" size={13} stroke={2} />
           </button>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import type { Branch, Commit, GraphScope, OperationInfo, RepoEntry, RepoStatus, ResetMode, Settings, Stash, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
-import { CommitMenu, type CommitAction } from './CommitMenu'
+import { CommitMenu, type CommitAction, type RefItem } from './CommitMenu'
 import { CommitPanel } from './CommitPanel'
 import { ConflictView, OperationPanel } from './ConflictView'
 import { PromptDialog } from './Dialog'
@@ -17,6 +17,7 @@ import { MergeMenu } from './MergeMenu'
 import type { Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
 import { applySuggestions, blocksOf, hunkOf, newDraft, textOf, type Draft } from './resolve'
+import { toggleHide, toggleOnly } from '../../shared/branches'
 import { Sidebar } from './Sidebar'
 import { clampPane } from './panes'
 import { Splitter } from './Splitter'
@@ -58,7 +59,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const [focus, setFocus] = useState<Focus>({ kind: 'wip' })
   const [scope, setScope] = useState<GraphScope>(ALL)
   const [selection, setSelection] = useState<Selection | null>(null)
-  const [menu, setMenu] = useState<{ commit: Commit; x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<{ commit: Commit; x: number; y: number; branchActions?: { name: string; items: RefItem[] } } | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
   const [drop, setDrop] = useState<{ source: Branch; target: Branch; x: number; y: number } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -284,6 +285,23 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   }, [active, busy, undo, replay, focus.kind])
 
   const openMenu = useCallback((commit: Commit, x: number, y: number) => setMenu({ commit, x, y }), [])
+  const switchTo = (b: Branch) => void run('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)
+  // The graph's commit menu on the tip of a sidebar branch, with the branch actions of its row on top.
+  const openBranchMenu = (b: Branch, x: number, y: number) => {
+    const current = branches.find((o) => o.current && !o.remote)
+    const isolated = scope.only === b.name
+    const hidden = scope.hidden.includes(b.name)
+    const items: RefItem[] = [
+      { label: `Switch to ${b.name}`, run: () => switchTo(b), disabled: b.current },
+      { label: `Merge or rebase ${b.name} into ${current?.name ?? 'the current branch'}…`, run: () => current && openDrop(b, current, x, y), disabled: !current || current.name === b.name },
+      { label: isolated ? 'Show all branches' : `Show only ${b.name}`, run: () => setScope(toggleOnly(scope, b.name)) },
+      { label: hidden ? `Show ${b.name}` : `Hide ${b.name}`, run: () => setScope(toggleHide(scope, b.name)), disabled: b.current },
+      ...(b.remote ? [] : [{ label: `Delete ${b.name}`, run: () => deleteBranch(b), disabled: b.current, danger: true }])
+    ]
+    const commit = log.find((c) => c.sha === b.sha) ?? { sha: b.sha, parents: [], author: '', email: '', date: b.date, committed: b.date, subject: b.name, refs: [] }
+    focusOn({ kind: 'commit', sha: b.sha })
+    setMenu({ commit, x, y, branchActions: { name: b.name, items } })
+  }
   const closeMenu = useCallback(() => setMenu(null), [])
   const openDrop = useCallback<DropBranch>((source, target, x, y) => setDrop({ source, target, x, y }), [])
   const closeDrop = useCallback(() => setDrop(null), [])
@@ -436,7 +454,8 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           onScope={setScope}
           onDrop={openDrop}
           onDelete={deleteBranch}
-          onSwitch={(b) => void run('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)}
+          onMenu={openBranchMenu}
+          onSwitch={switchTo}
         />
         {focus.kind === 'rebase' ? (
           // Takes the center and the right panel.
@@ -483,7 +502,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} run={run} busy={busy} />
         )}
       </div>
-      {menu && <CommitMenu commit={menu.commit} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
+      {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
       {dialog}
     </>
