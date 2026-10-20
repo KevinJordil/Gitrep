@@ -4,6 +4,7 @@ export interface GraphNode {
   sha: string
   parents: string[]
   wip?: boolean // the uncommitted-changes row: its edges are drawn dashed
+  dashed?: boolean // a commit not pushed yet: only the edges to its parents are dashed
 }
 
 // One piece of line inside a row, in lane numbers. y: top = 0, dot = middle, bottom = row height.
@@ -66,9 +67,9 @@ export function layoutGraph(nodes: GraphNode[]): GraphRow[] {
         }
         if (lanes[target] !== p) {
           lanes[target] = p
-          dashed[target] = !!n.wip
+          dashed[target] = !!(n.wip || n.dashed)
         }
-        segments.push({ kind: 'bottom', from: lane, to: target, color: colors[target], dashed: !!n.wip })
+        segments.push({ kind: 'bottom', from: lane, to: target, color: colors[target], dashed: !!(n.wip || n.dashed) })
       })
     while (lanes.length && lanes[lanes.length - 1] === null) {
       lanes.pop()

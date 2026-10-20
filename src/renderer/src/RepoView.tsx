@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Branch, Commit, GraphScope, OperationInfo, RepoEntry, RepoStatus, ResetMode, Settings, Stash, Tag, UndoState } from '../../shared/types'
+import type { Branch, Commit, GraphScope, OperationInfo, RepoEntry, RepoStatus, ResetMode, Settings, Stash, SyncState, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
 import { CommitMenu, type CommitAction, type RefItem } from './CommitMenu'
@@ -52,6 +52,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const notify = useToast()
   const [status, setStatus] = useState<RepoStatus | null>(null)
   const [log, setLog] = useState<Commit[]>([])
+  const [sync, setSync] = useState<SyncState>({ outgoing: [], incoming: [], upstream: null })
   const [branches, setBranches] = useState<Branch[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [stashes, setStashes] = useState<Stash[]>([])
@@ -105,9 +106,10 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     const id = ++request.current
     await refreshStatus(true)
     try {
-      const [l, b, t, s, u] = await Promise.all([api.log(path, scope, activeDays), api.branches(path), api.tags(path), api.stashes(path), api.undoState(path)])
+      const [l, y, b, t, s, u] = await Promise.all([api.log(path, scope, activeDays), api.sync(path), api.branches(path), api.tags(path), api.stashes(path), api.undoState(path)])
       if (id !== request.current) return // a newer load started; its result wins
       setLog(same(l))
+      setSync(same(y))
       setBranches(same(b))
       setTags(same(t))
       setStashes(same(s))
@@ -352,7 +354,11 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const changes = status ? status.staged.length + status.unstaged.length + status.conflicted.length : 0
   const hasWip = changes > 0
   const head = status?.head ?? null
-  const nodes = useMemo<GraphNode[]>(() => (hasWip ? [{ sha: WIP, parents: head ? [head] : [], wip: true }, ...log] : log), [log, hasWip, head])
+  const nodes = useMemo<GraphNode[]>(() => {
+    const unsynced = new Set([...sync.outgoing, ...sync.incoming])
+    const list = log.map((c): GraphNode => (unsynced.has(c.sha) ? { sha: c.sha, parents: c.parents, dashed: true } : c))
+    return hasWip ? [{ sha: WIP, parents: head ? [head] : [], wip: true }, ...list] : list
+  }, [log, sync, hasWip, head])
   const rows = useMemo(() => layoutGraph(nodes), [nodes])
   const colors = useMemo(() => new Map(nodes.map((n, i) => [n.sha, rows[i].color])), [nodes, rows])
   const ancestors = useMemo(() => ancestorsOf(head, log), [head, log])
@@ -473,6 +479,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
                 repoName={path.split('/').pop() ?? path}
                 active={active}
                 commits={log}
+                sync={sync}
                 rows={rows}
                 wip={wipLabel}
                 head={head}

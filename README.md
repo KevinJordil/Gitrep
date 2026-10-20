@@ -16,7 +16,7 @@ Undo (toolbar or Ctrl+Z) reverts the last operation done in GitRep, Redo (toolba
 
 ## History graph
 
-The graph lists the commits newest first across branches (`git log --date-order`). By default it draws the active branches: those with a commit in the last 30 days, plus the checked-out branch and its upstream. The "Branches shown" menu above the graph switches to 90 days or to all branches and tags, or isolates one branch whatever its age. In the sidebar, the other branches are folded under "N older branches".
+The graph lists the commits newest first across branches (`git log --date-order`). By default it draws the active branches: those with a commit in the last 30 days, plus the checked-out branch and its upstream. The "Branches shown" menu above the graph switches to 90 days or to all branches and tags, or isolates one branch whatever its age. In the sidebar, the other branches are folded under "N older branches". Commits no remote has yet (on any local branch) get a hollow dot with an up arrow, dashed lines down to the pushed history and an ↑ chip; commits of the current branch's upstream that it lacks get the same with a down arrow and a ↓ chip. The header sums them up (`↑ 2 not pushed · ↓ 1 to pull`) and each part selects the first such commit.
 
 ## Commit message instructions
 

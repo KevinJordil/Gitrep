@@ -14,6 +14,7 @@ import {
   ALL_REFS,
   getLog,
   getStatus,
+  getSync,
   lastMessage,
   mapLimit,
   pull,
@@ -379,6 +380,65 @@ describe('remote operations', () => {
     const { a } = await setupRemote()
     await git(a, ['switch', '-q', '--detach'])
     await expect(push(a)).rejects.toThrow('Detached HEAD')
+  })
+})
+
+describe('getSync', () => {
+  async function pushed() {
+    const remote = await tempDir()
+    await git(remote, ['init', '-q', '--bare', '-b', 'main'])
+    const a = await tempDir()
+    await git(a, ['clone', '-q', remote, '.'])
+    await write(a, 'f', '1\n')
+    await commitAll(a, 'one')
+    await push(a)
+    return { remote, a }
+  }
+  const head = async (repo: string) => (await git(repo, ['rev-parse', 'HEAD'])).trim()
+
+  it('lists a local commit ahead of origin as outgoing', async () => {
+    const { a } = await pushed()
+    expect(await getSync(a)).toEqual({ outgoing: [], incoming: [], upstream: 'origin/main' })
+    await write(a, 'f', '2\n')
+    await commitAll(a, 'two')
+    expect(await getSync(a)).toEqual({ outgoing: [await head(a)], incoming: [], upstream: 'origin/main' })
+  })
+
+  it('lists the commits of a branch without upstream that no remote has', async () => {
+    const { a } = await pushed()
+    await git(a, ['switch', '-q', '-c', 'feature'])
+    await write(a, 'f', '2\n')
+    await commitAll(a, 'two')
+    expect(await getSync(a)).toEqual({ outgoing: [await head(a)], incoming: [], upstream: null })
+  })
+
+  it('lists a commit pushed by another clone and fetched as incoming', async () => {
+    const { remote, a } = await pushed()
+    const b = await tempDir()
+    await git(b, ['clone', '-q', remote, '.'])
+    await write(b, 'f', '2\n')
+    await commitAll(b, 'two')
+    await push(b)
+    await fetchRepo(a)
+    expect(await getSync(a)).toEqual({ outgoing: [], incoming: [await head(b)], upstream: 'origin/main' })
+  })
+
+  it('reports nothing outgoing when the repository has no remote at all', async () => {
+    const repo = await makeRepo()
+    for (const m of ['one', 'two', 'three']) {
+      await write(repo, 'f', `${m}\n`)
+      await commitAll(repo, m)
+    }
+    expect(await getSync(repo)).toEqual({ outgoing: [], incoming: [], upstream: null })
+  })
+
+  it('has nothing to sync in a repository without remote commits or when detached', async () => {
+    const repo = await makeRepo()
+    expect(await getSync(repo)).toEqual({ outgoing: [], incoming: [], upstream: null })
+    await write(repo, 'f', '1\n')
+    await commitAll(repo, 'one')
+    await git(repo, ['switch', '-q', '--detach'])
+    expect(await getSync(repo)).toMatchObject({ incoming: [], upstream: null })
   })
 })
 

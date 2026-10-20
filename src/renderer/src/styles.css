@@ -16,6 +16,8 @@
   --sel: #04395e;
   --row-hover: #262628;
   --amber: #e8b24a;
+  --sync-out: #e8b24a; /* commit not pushed yet */
+  --sync-in: #4daafc; /* commit not pulled yet */
   --pink: #e586c4;
   --green: #57c785;
   --red: #f47a72;
@@ -178,6 +180,16 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 .scroll { flex: 1; overflow: auto; min-height: 0; }
 .row { display: flex; align-items: center; height: 34px; padding: 0 14px 0 0; content-visibility: auto; contain-intrinsic-size: auto 34px; }
 .row:hover { background: var(--row-hover); }
+.row.out { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--sync-out) 55%, transparent); }
+.row.in { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--sync-in) 55%, transparent); }
+.sync-chip { flex: none; font: 600 12px var(--mono); line-height: 18px; padding: 0 6px; border-radius: 5px; border: 1px solid; }
+.sync-chip.out { color: var(--sync-out); border-color: color-mix(in srgb, var(--sync-out) 45%, transparent); }
+.sync-chip.in { color: var(--sync-in); border-color: color-mix(in srgb, var(--sync-in) 45%, transparent); }
+.sync-sum { font: 12px var(--mono); color: var(--faint); white-space: nowrap; }
+.sync-sum button { font: inherit; border-radius: 4px; }
+.sync-sum .out { color: var(--sync-out); }
+.sync-sum .in { color: var(--sync-in); }
+.sync-sum button:hover { text-decoration: underline; }
 .row.sel { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
 .row.wip.sel { background: var(--raised); box-shadow: inset 2px 0 0 var(--amber); }
 .lanes { flex: none; width: var(--col-graph); } /* the svg keeps its drawn width as attribute; a narrower column clips it */

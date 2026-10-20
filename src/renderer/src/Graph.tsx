@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { DEFAULT_GRAPH_COLUMNS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LANES_MIN, GRAPH_LIMIT, type Branch, type Commit, type GraphScope, type Settings } from '../../shared/types'
+import { DEFAULT_GRAPH_COLUMNS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LANES_MIN, GRAPH_LIMIT, type Branch, type Commit, type GraphScope, type Settings, type SyncState } from '../../shared/types'
 import { colorFor, initials, laneColor, parseRef, relativeDate } from './format'
 import { dragBranch, dropOnBranch, type DropBranch } from './dnd'
 import { searchCommits, splitMatch, type GraphRow, type SearchField, type Segment } from './graph'
@@ -29,8 +29,11 @@ function segmentPath(s: Segment): string {
 }
 
 type Dot = 'commit' | 'merge' | 'head' | 'wip'
+type Sync = 'out' | 'in' // not pushed yet / not pulled yet
+const count = (l: string[]) => (l.length >= GRAPH_LIMIT ? `${l.length}+` : l.length) // the lists are capped
+const SYNC_TITLE = { out: 'Not pushed yet', in: 'Not pulled yet' }
 
-function Lanes({ row, width, dot, selected }: { row: GraphRow; width: number; dot: Dot; selected: boolean }) {
+function Lanes({ row, width, dot, selected, sync }: { row: GraphRow; width: number; dot: Dot; selected: boolean; sync?: Sync }) {
   const cx = laneX(row.lane)
   const color = laneColor(row.color)
   return (
@@ -39,9 +42,15 @@ function Lanes({ row, width, dot, selected }: { row: GraphRow; width: number; do
         <path key={i} d={segmentPath(s)} stroke={laneColor(s.color)} strokeWidth={2} fill="none" strokeDasharray={s.dashed ? '3 3' : undefined} />
       ))}
       {(selected || dot === 'head') && <circle cx={cx} cy={MID} r={9.5} fill="none" stroke={selected ? 'var(--text)' : color} strokeOpacity={selected ? 0.5 : 0.35} strokeWidth={2} />}
+      {sync && (
+        <>
+          <circle cx={cx} cy={MID} r={6.5} fill="var(--bg)" stroke={color} strokeWidth={2} />
+          <path d={`M${cx} ${MID + (sync === 'out' ? 3 : -3)}V${MID + (sync === 'out' ? -3 : 3)}M${cx - 2.5} ${MID + (sync === 'out' ? -0.5 : 0.5)}L${cx} ${MID + (sync === 'out' ? -3 : 3)}L${cx + 2.5} ${MID + (sync === 'out' ? -0.5 : 0.5)}`} stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </>
+      )}
       {dot === 'wip' && <circle cx={cx} cy={MID} r={6} fill="var(--bg)" stroke={color} strokeWidth={2} strokeDasharray="2.5 2" />}
-      {dot === 'merge' && <circle cx={cx} cy={MID} r={5.5} fill="var(--bg)" stroke={color} strokeWidth={2.5} />}
-      {(dot === 'commit' || dot === 'head') && <circle cx={cx} cy={MID} r={dot === 'head' ? 6 : 5.5} fill={color} />}
+      {!sync && dot === 'merge' && <circle cx={cx} cy={MID} r={5.5} fill="var(--bg)" stroke={color} strokeWidth={2.5} />}
+      {!sync && (dot === 'commit' || dot === 'head') && <circle cx={cx} cy={MID} r={dot === 'head' ? 6 : 5.5} fill={color} />}
     </svg>
   )
 }
@@ -142,6 +151,8 @@ interface RowProps {
   branches: Branch[]
   match: string // the search query when this row matches, else ''
   field: SearchField
+  sync?: Sync
+  upstream: string | null
   current: boolean // the current search match
   dim: boolean // a search is active and this row does not match
   onSelect: (sha: string) => void
@@ -149,12 +160,12 @@ interface RowProps {
   onDrop: DropBranch
 }
 
-const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, branches, match, field, current, dim, onSelect, onMenu, onDrop }: RowProps) {
+const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, branches, match, field, sync, upstream, current, dim, onSelect, onMenu, onDrop }: RowProps) {
   const merge = c.parents.length > 1
   const hl = (f: SearchField) => (field === 'all' || field === f ? match : '')
   return (
     <div
-      className={`row ${selected ? 'sel' : ''} ${dim ? 'dim' : ''}`}
+      className={`row ${selected ? 'sel' : ''} ${dim ? 'dim' : ''} ${sync ?? ''}`}
       data-sha={c.sha}
       role="button"
       tabIndex={0}
@@ -175,11 +186,17 @@ const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selecte
         }
       }}
     >
-      <Lanes row={row} width={width} dot={head ? 'head' : merge ? 'merge' : 'commit'} selected={selected} />
+      <Lanes row={row} width={width} dot={head ? 'head' : merge ? 'merge' : 'commit'} selected={selected} sync={sync} />
       <span className="msg">
         {c.refs.map((r) => (
           <RefPill key={r} text={r} color={laneColor(row.color)} remoteNames={remoteNames} branches={branches} onDrop={onDrop} />
         ))}
+        {sync && (
+          <span className={`sync-chip ${sync}`} role="img" aria-label={SYNC_TITLE[sync]} title={sync === 'in' && upstream ? `${SYNC_TITLE.in} (on ${upstream})` : SYNC_TITLE[sync]}>
+            {sync === 'out' ? '↑' : '↓'}
+          </span>
+        )}
+        {sync && <span className="sr-only"> · {sync === 'out' ? 'not pushed' : 'not pulled'}</span>}
         <span className="s" style={{ color: merge ? 'var(--muted)' : undefined }}>
           <Highlight text={c.subject} query={hl('message')} current={current} />
         </span>
@@ -204,6 +221,7 @@ interface Props {
   repoName: string
   active: boolean
   commits: Commit[]
+  sync: SyncState
   rows: GraphRow[] // one per commit, plus the work-in-progress row first when `wip` is set
   wip: string | null // label of the work-in-progress row
   head: string | null
@@ -221,7 +239,7 @@ interface Props {
   onDrop: DropBranch // must be stable (useCallback)
 }
 
-export function Graph({ repoName, active, commits, rows, wip, head, focus, branches, scope, activeDays, remoteNames, columns, onColumns, onFocus, onScope, onActiveDays, onMenu, onDrop }: Props) {
+export function Graph({ repoName, active, commits, sync, rows, wip, head, focus, branches, scope, activeDays, remoteNames, columns, onColumns, onFocus, onScope, onActiveDays, onMenu, onDrop }: Props) {
   const list = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
@@ -230,6 +248,8 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
   const auto = graphWidth(rows)
   const width = columns.graph || auto
   const offset = wip ? 1 : 0
+  const outgoing = useMemo(() => new Set(sync.outgoing), [sync])
+  const incoming = useMemo(() => new Set(sync.incoming), [sync])
   const focused = focus.kind === 'commit' ? focus.sha : null
   const select = useCallback((sha: string) => onFocus({ kind: 'commit', sha }), [onFocus])
   const matches = useMemo(() => searchCommits(commits, query, field), [commits, query, field])
@@ -266,6 +286,12 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
     return () => window.removeEventListener('keydown', onKey)
   }, [active])
 
+  // The first commit of a kind that is drawn, like a search match.
+  const jump = (set: Set<string>) => {
+    const c = commits.find((x) => set.has(x.sha))
+    if (c) select(c.sha)
+  }
+
   const vars = { '--col-graph': `${width}px`, '--col-author': `${columns.author}px`, '--col-date': `${columns.date}px`, '--col-sha': `${columns.sha}px` } as CSSProperties
   const handle = (c: keyof Columns) => <ColumnHandle column={c} width={columns[c]} onSave={(w) => onColumns({ ...columns, [c]: w })} />
   return (
@@ -287,6 +313,21 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
             <button aria-label="Show hidden branches" title="Show hidden branches" onClick={() => onScope({ only: null, hidden: [] })}>
               <Icon name="close" size={11} stroke={2.4} />
             </button>
+          </span>
+        )}
+        {(sync.outgoing.length > 0 || sync.incoming.length > 0) && (
+          <span className="sync-sum">
+            {sync.outgoing.length > 0 && (
+              <button className="out" title={`${count(sync.outgoing)} commits on local branches that no remote has`} onClick={() => jump(outgoing)}>
+                ↑ {count(sync.outgoing)} not pushed
+              </button>
+            )}
+            {sync.outgoing.length > 0 && sync.incoming.length > 0 && ' · '}
+            {sync.incoming.length > 0 && (
+              <button className="in" title="Select the first commit not pulled yet" onClick={() => jump(incoming)}>
+                ↓ {count(sync.incoming)} to pull
+              </button>
+            )}
           </span>
         )}
         <div className="grow" />
@@ -392,6 +433,8 @@ export function Graph({ repoName, active, commits, rows, wip, head, focus, branc
             branches={branches}
             match={matchSet.has(i) ? query : ''}
             field={field}
+            sync={outgoing.has(c.sha) ? 'out' : incoming.has(c.sha) ? 'in' : undefined}
+            upstream={sync.upstream}
             current={c.sha === currentSha}
             dim={searching && !matchSet.has(i)}
             onSelect={select}

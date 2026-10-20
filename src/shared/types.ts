@@ -33,6 +33,13 @@ export interface Commit {
   refs: string[] // git %D decorations: "HEAD -> main", "origin/main", "tag: v1.0"
 }
 
+// Commits (newest first, capped at GRAPH_LIMIT) that exist on one side only: see getSync.
+export interface SyncState {
+  outgoing: string[] // on a local branch, on no remote
+  incoming: string[] // on the current branch's upstream, not on the current branch
+  upstream: string | null
+}
+
 export interface Branch {
   name: string
   remote: boolean

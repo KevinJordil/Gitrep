@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { isActive } from '../shared/branches'
-import { GRAPH_LIMIT, type Branch, type Commit, type DiffSide, type FileChange, type FileDiff, type GraphScope, type LineAction, type OpOutcome, type RepoStatus, type RepoSummary } from '../shared/types'
+import { GRAPH_LIMIT, type Branch, type Commit, type SyncState, type DiffSide, type FileChange, type FileDiff, type GraphScope, type LineAction, type OpOutcome, type RepoStatus, type RepoSummary } from '../shared/types'
 import { buildPatch, parseDiff } from './diff'
 import { currentOperation, git, serialized } from './git'
 import { clear, record, tracked } from './journal'
@@ -41,6 +41,16 @@ export async function getLog(repo: string, scope: GraphScope = ALL_REFS, days = 
   if (!(await hasHead(repo))) return []
   const refs = await graphRefs(repo, scope, days)
   return parseLog(await git(repo, [...RO, 'log', '--date-order', `-n${limit}`, `--format=${LOG_FORMAT}`, ...refs, '--']))
+}
+
+// Commits no remote has (any local branch) and commits of the upstream the current branch lacks. Neither is an error when absent.
+export async function getSync(repo: string, limit = GRAPH_LIMIT): Promise<SyncState> {
+  const list = async (args: string[]) => (await git(repo, [...RO, 'rev-list', `-n${limit}`, ...args, '--'], { okCodes: [128] })).split('\n').filter(Boolean)
+  const upstream = (await git(repo, [...RO, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], { okCodes: [128] })).trim() || null
+  // Without any remote-tracking ref every commit would count as not pushed: there is nothing to push to.
+  const hasRemotes = (await git(repo, [...RO, 'for-each-ref', '--count=1', '--format=%(refname)', 'refs/remotes'])).trim() !== ''
+  const [outgoing, incoming] = await Promise.all([hasRemotes ? list(['--branches', '--not', '--remotes']) : [], upstream ? list(['HEAD..@{upstream}']) : []])
+  return { outgoing, incoming, upstream }
 }
 
 const refName = (b: Branch) => (b.remote ? 'refs/remotes/' : 'refs/heads/') + b.name

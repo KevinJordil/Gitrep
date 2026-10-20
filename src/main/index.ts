@@ -161,6 +161,7 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   log: forRepo((p, scope: GraphScope, days?: number) =>
     repo.getLog(p, { only: scope?.only ?? null, hidden: Array.isArray(scope?.hidden) ? scope.hidden : [] }, Math.max(0, Math.trunc(Number(days)) || 0))
   ),
+  sync: forRepo(repo.getSync),
   branches: forRepo(repo.getBranches),
   tags: forRepo(history.getTags),
   commitDetails: forRepo(history.getCommitDetails),

@@ -46,6 +46,13 @@ describe('layoutGraph', () => {
     expect(rows[2].segments).toEqual([seg('top', 0, 0, 0, true), seg('top', 1, 0, 1)])
   })
 
+  it('draws only the lines of a not-pushed commit dashed, down to its first pushed parent', () => {
+    const rows = layoutGraph([{ sha: 'o', parents: ['x'], dashed: true }, n('y', 'p'), n('x', 'p'), n('p')])
+    expect(rows[0].segments).toEqual([seg('bottom', 0, 0, 0, true)])
+    expect(rows[1].segments).toEqual([seg('through', 0, 0, 0, true), seg('bottom', 1, 1, 1)])
+    expect(rows[2].segments).toEqual([seg('top', 0, 0, 0, true), seg('through', 1, 1, 1), seg('bottom', 0, 0, 0)])
+  })
+
   it('keeps each branch in its lane when commits of two branches interleave by date (git log --date-order)', () => {
     // main: b <- m1 <- m2, feature: b <- f1 <- f2, listed f2, m2, f1, m1, b.
     const rows = layoutGraph([n('f2', 'f1'), n('m2', 'm1'), n('f1', 'b'), n('m1', 'b'), n('b')])

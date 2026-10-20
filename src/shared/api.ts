@@ -1,6 +1,7 @@
 import type {
   Branch,
   Commit,
+  SyncState,
   CommitDetails,
   ConflictFile,
   ConflictHunk,
@@ -41,6 +42,7 @@ export interface Api {
   summaries(): Promise<RepoSummary[]>
   status(repo: string): Promise<RepoStatus>
   log(repo: string, scope: GraphScope, days?: number): Promise<Commit[]> // days: active branches only; 0 or omitted = every branch
+  sync(repo: string): Promise<SyncState> // commits not pushed and not pulled, for the graph
   branches(repo: string): Promise<Branch[]>
   tags(repo: string): Promise<Tag[]>
   commitDetails(repo: string, sha: string): Promise<CommitDetails>
@@ -109,6 +111,7 @@ export const API_METHODS = [
   'summaries',
   'status',
   'log',
+  'sync',
   'branches',
   'tags',
   'commitDetails',

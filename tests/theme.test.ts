@@ -27,6 +27,7 @@ describe('theme tokens', () => {
     ['del-t', 'del-bg'],
     ['ctx-t', 'panel'],
     ['on-primary', 'primary'],
+    ...['sync-out', 'sync-in'].flatMap((fg) => ['bg', 'panel', 'sel', 'row-hover', 'hover'].map((bg): [string, string] => [fg, bg])),
     ['claude-fg', 'claude-bg'],
     ['warn-fg', 'warn-bg'],
     ...['kw', 'ty', 'str', 'num', 'com', 'pp', 'fn'].flatMap((s) => ['panel', 'add-bg', 'del-bg'].map((bg): [string, string] => [`syn-${s}`, bg]))
