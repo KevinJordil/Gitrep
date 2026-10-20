@@ -101,19 +101,29 @@ describe('conflicted files', () => {
     await merge(repo, 'feature', 'main')
     const file = await getConflictFile(repo, 'a.txt')
     expect(file).toEqual({ path: 'a.txt', kind: 'text', text: expect.stringContaining('||||||| '), ours: true, theirs: true })
-    await expect(resolveFile(repo, 'a.txt', file.text)).rejects.toThrow('The result still has conflict markers')
-    await resolveFile(repo, 'a.txt', 'main\nfeature\n')
+    await expect(resolveFile(repo, 'a.txt', file.text, file.text)).rejects.toThrow('The result still has conflict markers')
+    await resolveFile(repo, 'a.txt', 'main\nfeature\n', file.text)
     expect(await readFile(join(repo, 'a.txt'), 'utf8')).toBe('main\nfeature\n')
     const s = await getStatus(repo)
     expect(s.conflicted).toEqual([])
     expect(s.staged.map((f) => f.path)).toEqual(['a.txt'])
   })
 
+  it('refuses a result made from a version of the file that changed on disk', async () => {
+    const repo = await setup()
+    await merge(repo, 'feature', 'main')
+    const file = await getConflictFile(repo, 'a.txt')
+    await writeFile(join(repo, 'a.txt'), 'changed outside\n')
+    await expect(resolveFile(repo, 'a.txt', 'main\nfeature\n', file.text)).rejects.toThrow('The file changed on disk. Review it again.')
+    expect(await readFile(join(repo, 'a.txt'), 'utf8')).toBe('changed outside\n')
+    expect((await getStatus(repo)).conflicted.map((f) => f.path)).toEqual(['a.txt'])
+  })
+
   it('refuses paths that are not conflicted or outside the repository', async () => {
     const repo = await setup()
     await merge(repo, 'feature', 'main')
     await expect(getConflictFile(repo, 'b.txt')).rejects.toThrow('Not a conflicted file: b.txt')
-    await expect(resolveFile(repo, '../a.txt', 'x')).rejects.toThrow('Path outside the repository')
+    await expect(resolveFile(repo, '../a.txt', 'x', '')).rejects.toThrow('Path outside the repository')
     await expect(resolveSide(repo, 'a.txt', 'both' as 'ours')).rejects.toThrow('Invalid side')
   })
 

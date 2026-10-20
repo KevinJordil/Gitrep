@@ -69,7 +69,7 @@ export interface Api {
   skipOperation(repo: string): Promise<OpOutcome>
   operationInfo(repo: string): Promise<OperationInfo>
   conflictFile(repo: string, path: string): Promise<ConflictFile>
-  resolveFile(repo: string, path: string, content: string): Promise<void>
+  resolveFile(repo: string, path: string, content: string, source: string): Promise<void>
   resolveSide(repo: string, path: string, side: 'ours' | 'theirs'): Promise<void>
   handOver(repo: string): Promise<void> // opens Claude Code in a terminal with the conflict's context
   suggestConflict(repo: string, path: string, hunks: ConflictHunk[]): Promise<(ConflictSuggestion | null)[]>

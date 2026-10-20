@@ -29,6 +29,7 @@ export function MergeMenu({ repo, source, target, status, x, y, runOutcome, onCl
   const [message, setMessage] = useState('')
   const [drafting, setDrafting] = useState(false)
   const [autostash, setAutostash] = useState(true)
+  const [prepare, setPrepare] = useState(true)
   const dirty = status ? new Set([...status.staged, ...status.unstaged.filter((f) => f.status !== '?')].map((f) => f.path)).size : 0
 
   useEffect(() => {
@@ -63,7 +64,7 @@ export function MergeMenu({ repo, source, target, status, x, y, runOutcome, onCl
   }
   const go = (mode: MergeMode, done: string) => {
     onClose()
-    void runOutcome(mode, () => api.integrate(repo, { source: source.name, target: target.name, mode, message, autostash: dirty > 0 && autostash }), done)
+    void runOutcome(mode, () => api.integrate(repo, { source: source.name, target: target.name, mode, message, autostash: dirty > 0 && autostash }), done, prepare)
   }
 
   const incoming = preview?.incoming ?? 0
@@ -155,6 +156,9 @@ export function MergeMenu({ repo, source, target, status, x, y, runOutcome, onCl
                 <input type="checkbox" checked={autostash} onChange={(e) => setAutostash(e.target.checked)} /> Stash the {plural(dirty, 'local change')}, then re-apply them after
               </label>
             )}
+            <label className="check">
+              <input type="checkbox" checked={prepare} onChange={(e) => setPrepare(e.target.checked)} /> If it conflicts, prepare a resolution with Claude (to review)
+            </label>
           </div>
           <span className="mm-foot">Esc to cancel · everything can be undone with Ctrl+Z</span>
         </>

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Branch, Commit, GraphScope, RepoStatus, ResetMode, Stash, Tag, UndoState } from '../../shared/types'
+import type { Branch, Commit, GraphScope, OperationInfo, RepoStatus, ResetMode, Stash, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
 import { CommitMenu, type CommitAction } from './CommitMenu'
 import { CommitPanel } from './CommitPanel'
+import { ConflictView, OperationPanel } from './ConflictView'
 import { PromptDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import type { DropBranch } from './dnd'
@@ -14,13 +15,14 @@ import { Icon, type IconName } from './icons'
 import { MergeMenu } from './MergeMenu'
 import type { Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
+import { applySuggestions, blocksOf, hunkOf, newDraft, textOf, type Draft } from './resolve'
 import { Sidebar } from './Sidebar'
 import { StashDialog, StashPanel, StashView } from './Stash'
 import { useToast } from './toast'
 
 const ALL: GraphScope = { only: null, hidden: [] }
 const WIP = 'WIP' // sha of the work-in-progress graph row (never a real sha)
-const CONFLICTS = 'Stopped on conflicts: resolve them, stage the files, then click Continue'
+const CONFLICTS = 'Stopped on conflicts: resolve each file, then click Continue'
 
 interface Props {
   path: string
@@ -43,6 +45,11 @@ export function RepoView({ path, active, onBranch }: Props) {
   const [dialog, setDialog] = useState<ReactNode>(null)
   const [drop, setDrop] = useState<{ source: Branch; target: Branch; x: number; y: number } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [info, setInfo] = useState<OperationInfo | null>(null)
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({}) // conflict resolutions in progress, by path
+  const draftsRef = useRef(drafts)
+  draftsRef.current = drafts
+  const [asking, setAsking] = useState(false)
   const [version, setVersion] = useState(0)
   const lastError = useRef('')
   const lastStatus = useRef('')
@@ -109,6 +116,24 @@ export function RepoView({ path, active, onBranch }: Props) {
     if (focus.kind === 'stash' && !stashes.some((s) => s.sha === focus.sha)) setFocus({ kind: 'wip' })
   }, [focus, stashes])
 
+  // While git is stopped: who is on each side, the rebase steps. Drafts of files that are no longer conflicted go.
+  const stopped = !!status && (!!status.operation || status.conflicted.length > 0)
+  useEffect(() => {
+    if (!status) return
+    const live = new Set(status.conflicted.map((f) => f.path))
+    setDrafts((all) => (Object.keys(all).every((p) => live.has(p)) ? all : Object.fromEntries(Object.entries(all).filter(([p]) => live.has(p)))))
+    if (!stopped) {
+      setInfo(null)
+      setFocus((f) => (f.kind === 'conflicts' ? { kind: 'wip' } : f)) // the operation is over
+      return
+    }
+    let alive = true
+    api.operationInfo(path).then((i) => alive && setInfo((old) => (JSON.stringify(old) === JSON.stringify(i) ? old : i)), report)
+    return () => {
+      alive = false
+    }
+  }, [path, status, stopped, report])
+
   useEffect(() => {
     if (active) void refreshAll()
   }, [active, refreshAll])
@@ -164,15 +189,52 @@ export function RepoView({ path, active, onBranch }: Props) {
     setFocus(f)
     setSelection(null)
   }, [])
-  // On conflicts, show the changes panel: its Conflicts group lists the files to resolve and stage.
+  const onDraft = useCallback((p: string, d: Draft) => setDrafts((all) => ({ ...all, [p]: d })), [])
+
+  // Asks Claude for every conflicted text file and puts the proposals in the drafts, for review. Nothing is written.
+  const resolveAll = useCallback(async () => {
+    setAsking(true)
+    const failed: string[] = []
+    let proposed = 0
+    try {
+      for (const f of (await api.status(path)).conflicted) {
+        try {
+          const file = await api.conflictFile(path, f.path)
+          if (file.kind !== 'text') continue
+          const old = draftsRef.current[f.path]
+          const d = old?.source === file.text ? old : newDraft(file.text)
+          const blocks = blocksOf(d)
+          if (!blocks.length) continue
+          const proposals = await api.suggestConflict(path, f.path, blocks.map((b) => hunkOf(d, b)))
+          // Edited while Claude was thinking: keep the user's version.
+          setDrafts((all) => (all[f.path] && textOf(all[f.path]) !== textOf(d) ? all : { ...all, [f.path]: applySuggestions(d, proposals) }))
+          proposed++
+        } catch (e) {
+          failed.push(errorText(e))
+        }
+      }
+    } catch (e) {
+      failed.push(errorText(e))
+    } finally {
+      setAsking(false)
+    }
+    if (proposed) notify('info', `Claude proposed a resolution for ${proposed} file${proposed === 1 ? '' : 's'}: review each result, then mark it as resolved`)
+    if (failed.length) notify('error', failed.join('\n'))
+  }, [path, notify])
+
+  // On conflicts, open the conflict view (and ask Claude when the drop menu said so).
   const runOutcome = useCallback<RunOutcome>(
-    (label, fn, done) =>
-      run(label, async () => {
-        const conflicts = (await fn()) === 'conflicts'
-        if (conflicts) focusOn({ kind: 'wip' })
+    async (label, fn, done, prepare = false) => {
+      let conflicts = false
+      const ok = await run(label, async () => {
+        conflicts = (await fn()) === 'conflicts'
+        if (conflicts) focusOn({ kind: 'conflicts' })
         notify('info', conflicts ? CONFLICTS : done)
-      }),
-    [run, notify, focusOn]
+      })
+      if (conflicts && prepare) void resolveAll()
+      return ok
+    },
+    [run, notify, focusOn, resolveAll]
   )
   // The toast says what was undone and offers the opposite move.
   const replay = useCallback(
@@ -256,6 +318,9 @@ export function RepoView({ path, active, onBranch }: Props) {
   const wipLabel = hasWip ? `${changes} modified file${changes === 1 ? '' : 's'}${staged ? ` · ${staged} staged` : ''}` : null
   const branchLabel = status ? (status.branch ?? `Detached HEAD (${status.head?.slice(0, 7) ?? '?'})`) : '…'
   const stash = focus.kind === 'stash' ? stashes.find((s) => s.sha === focus.sha) : undefined
+  const inConflicts = focus.kind === 'conflicts' && stopped && !!info
+  const conflicted = status?.conflicted ?? []
+  const conflictPath = focus.kind === 'conflicts' ? (conflicted.find((f) => f.path === focus.path) ?? conflicted[0])?.path ?? null : null
   const stashBranch = (s: Stash) =>
     setDialog(
       <PromptDialog
@@ -305,7 +370,20 @@ export function RepoView({ path, active, onBranch }: Props) {
           <Icon name="terminal" /> Terminal
         </button>
       </div>
-      {status && <OperationBanner repo={path} status={status} busy={busy} run={run} runOutcome={runOutcome} onCode={() => void openCode()} />}
+      {status && (
+        <OperationBanner
+          repo={path}
+          status={status}
+          info={info}
+          busy={busy}
+          asking={asking}
+          inView={inConflicts && !selection}
+          run={run}
+          runOutcome={runOutcome}
+          onShow={() => focusOn({ kind: 'conflicts' })}
+          onResolveAll={() => void resolveAll()}
+        />
+      )}
       <div className="panes">
         <Sidebar
           branches={branches}
@@ -325,6 +403,8 @@ export function RepoView({ path, active, onBranch }: Props) {
             <DiffView key={`${selection.path}:${selection.side ?? selection.commit}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} />
           ) : stash ? (
             <StashView key={stash.sha} repo={path} stash={stash} version={version} run={run} onBack={() => focusOn({ kind: 'wip' })} />
+          ) : inConflicts && info ? (
+            <ConflictView repo={path} path={conflictPath} info={info} draft={conflictPath ? drafts[conflictPath] : undefined} version={version} busy={busy} run={run} onDraft={onDraft} />
           ) : (
             <Graph
               repoName={path.split('/').pop() ?? path}
@@ -346,10 +426,12 @@ export function RepoView({ path, active, onBranch }: Props) {
         </section>
         {stash ? (
           <StashPanel key={stash.sha} repo={path} stash={stash} branch={status?.branch ?? null} busy={busy} run={run} runOutcome={runOutcome} onNewBranch={() => stashBranch(stash)} />
+        ) : inConflicts && status && info ? (
+          <OperationPanel repo={path} status={status} info={info} path={conflictPath} busy={busy} runOutcome={runOutcome} onPath={(p) => focusOn({ kind: 'conflicts', path: p })} onSelect={setSelection} />
         ) : focus.kind === 'commit' ? (
           <CommitPanel key={`${focus.sha}:${focus.explain ?? ''}`} repo={path} sha={focus.sha} autoExplain={!!focus.explain} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} />
         ) : (
-          <ChangesPanel repo={path} status={status} selection={selection} onSelect={setSelection} run={run} busy={busy} />
+          <ChangesPanel repo={path} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} run={run} busy={busy} />
         )}
       </div>
       {menu && <CommitMenu commit={menu.commit} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}

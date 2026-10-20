@@ -1,6 +1,6 @@
 # GitRep
 
-Local multi-repo git client (Electron + React). A dashboard of all your repositories; a commit graph of every branch with search, isolate/hide, commit details and a context menu (checkout, branch, tag, cherry-pick, revert, reset); stashes; drag a branch onto another to merge, rebase or fast-forward, with conflict prediction; undo and redo of every operation; diffs with staging per file, hunk or line; and commit, merge and stash messages, commit explanations and merge advice suggested by Claude.
+Local multi-repo git client (Electron + React). A dashboard of all your repositories; a commit graph of every branch with search, isolate/hide, commit details and a context menu (checkout, branch, tag, cherry-pick, revert, reset); stashes; drag a branch onto another to merge, rebase or fast-forward, with conflict prediction; undo and redo of every operation; a conflict editor (both sides named, block by block, editable result, rebase steps) with resolutions proposed by Claude or handed over to Claude Code in a terminal; diffs with staging per file, hunk or line; and commit, merge and stash messages, commit explanations and merge advice suggested by Claude.
 
 ## Run
 

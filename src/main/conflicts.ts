@@ -105,12 +105,14 @@ export async function getConflictFile(repo: string, path: string): Promise<Confl
   return { ...base, kind: 'text', text }
 }
 
-// Writes the resolved content and stages it. A result that still has markers is refused.
-export async function resolveFile(repo: string, path: string, content: string): Promise<void> {
+// Writes the resolved content (made from `source`, the file as it was read) and stages it. A result that still has markers is refused.
+export async function resolveFile(repo: string, path: string, content: string, source: string): Promise<void> {
   const full = await conflicted(repo, path)
   const text = String(content)
   if (hasConflictMarkers(text)) throw new Error('The result still has conflict markers: resolve every block first')
   await serialized(repo, async () => {
+    // The file the result was made from must still be the one on disk (Claude Code or an editor may have changed it).
+    if ((await readFile(full, 'utf8').catch(() => null)) !== String(source)) throw new Error('The file changed on disk. Review it again.')
     await writeFile(full, text)
     await git(repo, ['add', '--', path])
   })

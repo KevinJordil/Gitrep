@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 
 export const projectRoot = resolve(__dirname, '..')
 export const FAKE_MESSAGE = 'feat: fake message from e2e'
+export const FAKE_SUMMARY = 'keep both lines' // the fake Claude's conflict proposal: lines "two" and "other"
 
 export interface Fixture {
   root: string
@@ -13,6 +14,7 @@ export interface Fixture {
   beta: string
   gamma: string
   remote: string
+  terminalLog: string // arguments the fake terminal was started with (hand-over to Claude Code)
   app: ElectronApplication
   page: Page
   git: (repo: string, ...args: string[]) => string
@@ -70,9 +72,25 @@ export async function launchFixture(): Promise<Fixture> {
   git(gamma, 'commit', '-m', 'init gamma')
   git(gamma, 'checkout', '--detach')
 
+  // The task is the last argument: a conflict gets one proposal, everything else the fixed message.
   const fakeClaude = join(root, 'claude')
-  writeFileSync(fakeClaude, `#!/bin/sh\necho '${FAKE_MESSAGE}'\n`)
+  writeFileSync(
+    fakeClaude,
+    [
+      '#!/bin/sh',
+      'for task; do :; done',
+      'case "$task" in',
+      `  Resolve*) printf '%s\\n' '=== conflict 1' 'confidence: high' 'summary: ${FAKE_SUMMARY}' 'explanation: Both changes are needed.' '--- resolution' two other '=== end' ;;`,
+      `  *) echo '${FAKE_MESSAGE}' ;;`,
+      'esac',
+      ''
+    ].join('\n')
+  )
   chmodSync(fakeClaude, 0o755)
+  const terminalLog = join(root, 'terminal-args')
+  const fakeTerminal = join(root, 'terminal')
+  writeFileSync(fakeTerminal, `#!/bin/sh\nprintf '%s\\n' "$@" > '${terminalLog}'\n`)
+  chmodSync(fakeTerminal, 0o755)
 
   const userData = join(root, 'userData')
   mkdirSync(userData)
@@ -88,13 +106,13 @@ export async function launchFixture(): Promise<Fixture> {
   const app = await _electron.launch({
     args: ['.', '--no-sandbox'],
     cwd: projectRoot,
-    env: { ...env, GITREP_USER_DATA: userData, GITREP_HIDDEN: '1' } as Record<string, string>
+    env: { ...env, GITREP_USER_DATA: userData, GITREP_HIDDEN: '1', GITREP_TERMINAL: fakeTerminal } as Record<string, string>
   })
   const page = await app.firstWindow()
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))
   await page.waitForLoadState('domcontentloaded')
   return {
-    root, alpha, beta, gamma, remote, app, page, git,
+    root, alpha, beta, gamma, remote, terminalLog, app, page, git,
     close: async () => {
       await app.close().catch(() => undefined)
       rmSync(root, { recursive: true, force: true })

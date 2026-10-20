@@ -11,13 +11,14 @@ interface Props {
   status: RepoStatus | null
   selection: Selection | null
   onSelect: (s: Selection) => void
+  onConflict: (path: string) => void // opens the conflict view on that file
   run: RunOp
   busy: string | null
 }
 
 const pathsOf = (files: FileChange[]) => files.flatMap((f) => (f.origPath ? [f.path, f.origPath] : [f.path]))
 
-export function ChangesPanel({ repo, status, selection, onSelect, run, busy }: Props) {
+export function ChangesPanel({ repo, status, selection, onSelect, onConflict, run, busy }: Props) {
   const notify = useToast()
   const [summary, setSummary] = useState('')
   const [body, setBody] = useState('')
@@ -104,7 +105,7 @@ export function ChangesPanel({ repo, status, selection, onSelect, run, busy }: P
       </div>
       <div className="scroll">
         {conflicted.length > 0 && (
-          <FileGroup title="Conflicts" files={conflicted} side="unstaged" selection={null} hint="Resolve them in VS Code, then stage them." buttons={stageBtn} />
+          <FileGroup title="Conflicts" files={conflicted} side="unstaged" selection={null} onSelect={(s) => onConflict(s.path)} hint="Click a file to resolve it, or stage it as it is." buttons={stageBtn} />
         )}
         <FileGroup
           title="Unstaged"
