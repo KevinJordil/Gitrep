@@ -19,7 +19,8 @@ import type {
   RepoSummary,
   ResetMode,
   Stash,
-  Tag
+  Tag,
+  UndoState
 } from './types'
 
 export interface Api {
@@ -49,11 +50,12 @@ export interface Api {
   mergeMessage(repo: string, source: string, target: string): Promise<string>
   fetch(repo: string): Promise<void>
   fetchAll(): Promise<void>
-  pull(repo: string): Promise<void>
+  pull(repo: string): Promise<OpOutcome>
   push(repo: string): Promise<void>
   switchBranch(repo: string, name: string, remote: boolean): Promise<void>
   checkoutCommit(repo: string, sha: string): Promise<void>
   createBranch(repo: string, name: string, at: string, checkout: boolean): Promise<void>
+  deleteBranch(repo: string, name: string, force: boolean): Promise<void>
   createTag(repo: string, name: string, at: string, message: string): Promise<void>
   cherryPick(repo: string, sha: string): Promise<OpOutcome>
   revert(repo: string, sha: string): Promise<OpOutcome>
@@ -70,6 +72,9 @@ export interface Api {
   stashConflicts(repo: string, sha: string): Promise<string[]>
   openInCode(repo: string): Promise<void>
   openTerminal(repo: string): Promise<void>
+  undoState(repo: string): Promise<UndoState>
+  undo(repo: string): Promise<string> // resolves to the message to show
+  redo(repo: string): Promise<string>
   setWatched(repos: string[]): Promise<void>
   onRepoChanged(cb: (repo: string) => void): () => void
 }
@@ -108,6 +113,7 @@ export const API_METHODS = [
   'switchBranch',
   'checkoutCommit',
   'createBranch',
+  'deleteBranch',
   'createTag',
   'cherryPick',
   'revert',
@@ -124,6 +130,9 @@ export const API_METHODS = [
   'stashConflicts',
   'openInCode',
   'openTerminal',
+  'undoState',
+  'undo',
+  'redo',
   'setWatched'
 ] as const satisfies readonly InvokeMethod[]
 

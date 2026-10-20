@@ -1,6 +1,7 @@
 import type { Branch, MergePreview, MergeRequest, OpOutcome, ResetMode } from '../shared/types'
 import { git, serialized } from './git'
 import { resolveCommit } from './history'
+import { aborted, record, resumed, tracked } from './journal'
 import { getBranches, getStatus, RO } from './repo'
 
 // Conflict hunks keep the common ancestor: easier to resolve by hand.
@@ -46,7 +47,7 @@ export async function checkoutCommit(repo: string, rev: string): Promise<void> {
   const sha = await resolveCommit(repo, rev)
   await serialized(repo, async () => {
     await ensureIdle(repo)
-    await git(repo, ['switch', '--detach', sha])
+    await tracked(repo, `Check out ${sha.slice(0, 7)}`, 'keep', () => git(repo, ['switch', '--detach', sha]))
   })
 }
 
@@ -54,8 +55,16 @@ export async function createBranch(repo: string, name: string, rev: string, chec
   const [branch, at] = await Promise.all([validBranchName(repo, name), resolveCommit(repo, rev)])
   await serialized(repo, async () => {
     if (checkout) await ensureIdle(repo)
-    await git(repo, checkout ? ['switch', '-c', branch, at] : ['branch', branch, at])
+    await tracked(repo, `Create branch ${branch}`, 'keep', () => git(repo, checkout ? ['switch', '-c', branch, at] : ['branch', branch, at]))
   })
+}
+
+// -d refuses a branch that is not merged into HEAD: the renderer asks first, then forces with -D.
+export async function deleteBranch(repo: string, name: string, force: boolean): Promise<void> {
+  const branch = (await getBranches(repo)).find((b) => b.name === name && !b.remote)
+  if (!branch) throw new Error(`Not a local branch: ${name}`)
+  if (branch.current) throw new Error('The checked-out branch cannot be deleted')
+  await serialized(repo, () => tracked(repo, `Delete branch ${name}`, 'keep', () => git(repo, ['branch', force ? '-D' : '-d', name])))
 }
 
 // A message makes an annotated tag.
@@ -67,7 +76,11 @@ export async function createTag(repo: string, name: string, rev: string, message
   })
   const at = await resolveCommit(repo, rev)
   const annotated = String(message ?? '').trim()
-  await serialized(repo, () => git(repo, annotated ? ['tag', '-a', '-F', '-', '--cleanup=whitespace', name, at] : ['tag', name, at], { input: annotated }))
+  await serialized(repo, async () => {
+    await git(repo, annotated ? ['tag', '-a', '-F', '-', '--cleanup=whitespace', name, at] : ['tag', name, at], { input: annotated })
+    const ref = `refs/tags/${name}`
+    record(repo, `Create tag ${name}`, { kind: 'ref', ref, before: null, after: (await git(repo, ['rev-parse', ref])).trim() })
+  })
 }
 
 // Merge commits are picked/reverted against their first parent.
@@ -75,7 +88,8 @@ export async function cherryPick(repo: string, rev: string): Promise<OpOutcome> 
   const sha = await resolveCommit(repo, rev)
   return serialized(repo, async () => {
     await ensureIdle(repo)
-    return mayConflict(repo, ['cherry-pick', ...((await isMerge(repo, sha)) ? ['-m', '1'] : []), sha])
+    const args = ['cherry-pick', ...((await isMerge(repo, sha)) ? ['-m', '1'] : []), sha]
+    return tracked(repo, `Cherry-pick ${sha.slice(0, 7)}`, 'keep', () => mayConflict(repo, args))
   })
 }
 
@@ -83,7 +97,8 @@ export async function revert(repo: string, rev: string): Promise<OpOutcome> {
   const sha = await resolveCommit(repo, rev)
   return serialized(repo, async () => {
     await ensureIdle(repo)
-    return mayConflict(repo, ['revert', '--no-edit', ...((await isMerge(repo, sha)) ? ['-m', '1'] : []), sha])
+    const args = ['revert', '--no-edit', ...((await isMerge(repo, sha)) ? ['-m', '1'] : []), sha]
+    return tracked(repo, `Revert ${sha.slice(0, 7)}`, 'keep', () => mayConflict(repo, args))
   })
 }
 
@@ -92,7 +107,9 @@ export async function resetTo(repo: string, rev: string, mode: ResetMode): Promi
   const sha = await resolveCommit(repo, rev)
   await serialized(repo, async () => {
     await ensureIdle(repo)
-    await git(repo, ['reset', `--${mode}`, sha])
+    // A hard reset discards local changes: `stash create` saves them in a dangling commit for undo (no stash entry).
+    const saved = mode === 'hard' ? (await git(repo, ['stash', 'create'])).trim() : ''
+    await tracked(repo, `Reset to ${sha.slice(0, 7)} (${mode})`, mode, () => git(repo, ['reset', `--${mode}`, sha]), saved || undefined)
   })
 }
 
@@ -101,7 +118,7 @@ export async function continueOperation(repo: string): Promise<OpOutcome> {
     const s = await getStatus(repo)
     if (!s.operation) throw new Error('No merge, rebase, cherry-pick or revert in progress')
     if (s.conflicted.length) throw new Error('Resolve the conflicted files and stage them first')
-    return mayConflict(repo, [s.operation, '--continue'])
+    return resumed(repo, () => mayConflict(repo, [s.operation!, '--continue']))
   })
 }
 
@@ -109,7 +126,7 @@ export async function abortOperation(repo: string): Promise<void> {
   await serialized(repo, async () => {
     const op = (await getStatus(repo)).operation
     if (!op) throw new Error('No merge, rebase, cherry-pick or revert in progress')
-    await git(repo, [op, '--abort'])
+    await aborted(repo, () => git(repo, [op, '--abort']))
   })
 }
 
@@ -151,23 +168,24 @@ export async function integrate(repo: string, req: MergeRequest): Promise<OpOutc
   const { source, target } = await branchPair(repo, req.source, req.target)
   // Explicit both ways: a user's merge.autoStash / rebase.autoStash must not override the checkbox.
   const auto = [req.autostash ? '--autostash' : '--no-autostash']
+  const label = req.mode === 'merge' ? `Merge ${source.name} into ${target.name}` : req.mode === 'rebase' ? `Rebase ${target.name} onto ${source.name}` : `Fast-forward ${target.name}`
   return serialized(repo, async () => {
     await ensureIdle(repo)
     const status = await getStatus(repo)
     const current = status.branch === target.name
-    if (req.mode === 'ff') {
-      if ((await count(repo, `${source.sha}..${target.sha}`)) > 0) throw new Error(`${target.name} cannot be fast-forwarded: it has commits that ${source.name} does not have`)
-      if (current) await git(repo, ['merge', '--ff-only', ...auto, source.ref])
-      else await git(repo, ['update-ref', `refs/heads/${target.name}`, source.sha, target.sha])
-      return 'done'
-    }
-    if (req.mode === 'rebase') return mayConflict(repo, ['rebase', ...auto, source.ref, target.name])
-    if (req.mode !== 'merge') throw new Error(`Invalid mode: ${req.mode}`)
-    if (!current) {
-      if (status.staged.length || status.unstaged.some((f) => f.status !== '?')) throw new Error(`Commit or stash your changes, or check out ${target.name} first.`)
-      await git(repo, ['switch', target.name])
-    }
-    const message = String(req.message ?? '').trim() || defaultMergeMessage(source, target.name)
-    return mayConflict(repo, ['merge', '--no-ff', ...auto, '-m', message, source.ref])
+    if (req.mode === 'merge' && !current && (status.staged.length || status.unstaged.some((f) => f.status !== '?'))) throw new Error(`Commit or stash your changes, or check out ${target.name} first.`)
+    return tracked(repo, label, 'keep', async () => {
+      if (req.mode === 'ff') {
+        if ((await count(repo, `${source.sha}..${target.sha}`)) > 0) throw new Error(`${target.name} cannot be fast-forwarded: it has commits that ${source.name} does not have`)
+        if (current) await git(repo, ['merge', '--ff-only', ...auto, source.ref])
+        else await git(repo, ['update-ref', `refs/heads/${target.name}`, source.sha, target.sha])
+        return 'done'
+      }
+      if (req.mode === 'rebase') return mayConflict(repo, ['rebase', ...auto, source.ref, target.name])
+      if (req.mode !== 'merge') throw new Error(`Invalid mode: ${req.mode}`)
+      if (!current) await git(repo, ['switch', target.name])
+      const message = String(req.message ?? '').trim() || defaultMergeMessage(source, target.name)
+      return mayConflict(repo, ['merge', '--no-ff', ...auto, '-m', message, source.ref])
+    })
   })
 }

@@ -7,12 +7,14 @@ import { API_METHODS, type Api, type IpcResult } from '../shared/api'
 import type { Config, GraphScope, MergeRequest, RepoEntry } from '../shared/types'
 import * as claude from './claude'
 import { addRepo, loadConfig, removeRepo, saveConfig } from './config'
-import { git } from './git'
+import { git, gitDir } from './git'
 import * as history from './history'
+import * as journal from './journal'
 import * as ops from './ops'
 import * as repo from './repo'
 import { smoke } from './smoke'
 import * as stash from './stash'
+import * as undo from './undo'
 
 const SMOKE = !!process.env.GITREP_SMOKE
 if (SMOKE) app.setPath('userData', join(tmpdir(), 'gitrep-smoke'))
@@ -103,7 +105,7 @@ async function setWatched(paths: string[]): Promise<void> {
     if (watchers.has(p)) continue
     let dir: string
     try {
-      dir = await repo.gitDir(p)
+      dir = await gitDir(p)
     } catch {
       continue // missing or broken repo: the dashboard shows the error
     }
@@ -171,6 +173,7 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   switchBranch: forRepo(repo.switchBranch),
   checkoutCommit: forRepo(ops.checkoutCommit),
   createBranch: forRepo((p, name: string, at: string, checkout: boolean) => ops.createBranch(p, name, at, !!checkout)),
+  deleteBranch: forRepo((p, name: string, force: boolean) => ops.deleteBranch(p, name, !!force)),
   createTag: forRepo(ops.createTag),
   cherryPick: forRepo(ops.cherryPick),
   revert: forRepo(ops.revert),
@@ -187,6 +190,9 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   stashConflicts: forRepo(stash.stashConflicts),
   openInCode: forRepo((p) => launch('code', [p], p)),
   openTerminal: forRepo((p) => launch('gnome-terminal', [`--working-directory=${p}`], p).catch(() => launch('x-terminal-emulator', [], p))),
+  undoState: forRepo(async (p) => journal.undoState(p)),
+  undo: forRepo(undo.undo),
+  redo: forRepo(undo.redo),
   setWatched
 }
 

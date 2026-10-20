@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import type { RepoOperation } from '../shared/types'
 
 export class GitError extends Error {
   constructor(
@@ -48,4 +51,25 @@ export function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const run = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(fn)
   queues.set(key, run)
   return run
+}
+
+const gitDirs = new Map<string, string>()
+
+export async function gitDir(repo: string): Promise<string> {
+  let dir = gitDirs.get(repo)
+  if (!dir) {
+    dir = (await git(repo, ['rev-parse', '--absolute-git-dir'])).trim()
+    gitDirs.set(repo, dir)
+  }
+  return dir
+}
+
+// The operation git stopped in the middle of, if any.
+export async function currentOperation(repo: string): Promise<RepoOperation> {
+  const d = await gitDir(repo)
+  if (existsSync(join(d, 'rebase-merge')) || existsSync(join(d, 'rebase-apply'))) return 'rebase'
+  if (existsSync(join(d, 'MERGE_HEAD'))) return 'merge'
+  if (existsSync(join(d, 'CHERRY_PICK_HEAD'))) return 'cherry-pick'
+  if (existsSync(join(d, 'REVERT_HEAD'))) return 'revert'
+  return null
 }

@@ -183,3 +183,9 @@ export interface ConflictSuggestion {
   summary: string
   explanation: string
 }
+
+// Labels of the operations Undo and Redo would revert or replay, null when there is none.
+export interface UndoState {
+  undo: string | null
+  redo: string | null
+}

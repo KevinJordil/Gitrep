@@ -248,7 +248,7 @@ export function RepoView({ path, active, onBranch }: Props) {
           {branchLabel}
         </span>
         <ToolButton icon="fetch" label="Fetch" busy={busy === 'fetch'} disabled={!!busy} onClick={() => void run('fetch', () => api.fetch(path), 'Fetch complete')} />
-        <ToolButton icon="pull" label="Pull" count={status?.behind ? `↓${status.behind}` : ''} busy={busy === 'pull'} disabled={!!busy} onClick={() => void run('pull', () => api.pull(path), 'Pull complete')} />
+        <ToolButton icon="pull" label="Pull" count={status?.behind ? `↓${status.behind}` : ''} busy={busy === 'pull'} disabled={!!busy} onClick={() => void runOutcome('pull', () => api.pull(path), 'Pull complete')} />
         <ToolButton icon="push" label="Push" count={status?.ahead ? `↑${status.ahead}` : ''} busy={busy === 'push'} disabled={!!busy} onClick={() => void run('push', () => api.push(path), 'Push complete')} />
         <div className="tsep" />
         <ToolButton icon="branch" label="Branch" busy={busy === 'branch'} disabled={!!busy || !head} onClick={() => head && newBranch(head, status?.branch ?? head.slice(0, 7))} />

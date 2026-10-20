@@ -1,32 +1,16 @@
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, join, relative, resolve, sep } from 'node:path'
-import { GRAPH_LIMIT, type Branch, type Commit, type DiffSide, type FileChange, type FileDiff, type GraphScope, type LineAction, type RepoOperation, type RepoStatus, type RepoSummary } from '../shared/types'
+import { basename, dirname, relative, resolve, sep } from 'node:path'
+import { GRAPH_LIMIT, type Branch, type Commit, type DiffSide, type FileChange, type FileDiff, type GraphScope, type LineAction, type OpOutcome, type RepoStatus, type RepoSummary } from '../shared/types'
 import { buildPatch, parseDiff } from './diff'
-import { git, serialized } from './git'
+import { currentOperation, git, serialized } from './git'
+import { tracked } from './journal'
+import { mayConflict } from './ops'
 import { BRANCH_FORMAT, LOG_FORMAT, parseBranches, parseLog, parseNumstat, parseStatus } from './parse'
 
 // Background reads must not take index.lock (would collide with the user's own git commands).
 export const RO = ['--no-optional-locks']
-const gitDirs = new Map<string, string>()
 
-export async function gitDir(repo: string): Promise<string> {
-  let dir = gitDirs.get(repo)
-  if (!dir) {
-    dir = (await git(repo, ['rev-parse', '--absolute-git-dir'])).trim()
-    gitDirs.set(repo, dir)
-  }
-  return dir
-}
-
-async function operation(repo: string): Promise<RepoOperation> {
-  const d = await gitDir(repo)
-  if (existsSync(join(d, 'rebase-merge')) || existsSync(join(d, 'rebase-apply'))) return 'rebase'
-  if (existsSync(join(d, 'MERGE_HEAD'))) return 'merge'
-  if (existsSync(join(d, 'CHERRY_PICK_HEAD'))) return 'cherry-pick'
-  if (existsSync(join(d, 'REVERT_HEAD'))) return 'revert'
-  return null
-}
 
 async function hasHead(repo: string): Promise<boolean> {
   return (await git(repo, ['rev-parse', '--verify', '-q', 'HEAD'], { okCodes: [1] })).trim() !== ''
@@ -37,7 +21,7 @@ export async function getStatus(repo: string): Promise<RepoStatus> {
     git(repo, [...RO, 'status', '--porcelain=v2', '--branch', '-z']),
     git(repo, [...RO, 'diff', '--numstat', '-z', '--no-renames']),
     git(repo, [...RO, 'diff', '--cached', '--numstat', '-z', '--no-renames']),
-    operation(repo)
+    currentOperation(repo)
   ])
   const s = parseStatus(out)
   const w = parseNumstat(worktree)
@@ -130,8 +114,9 @@ export async function applyLines(repo: string, file: FileDiff, hunk: number, lin
 
 export async function commit(repo: string, message: string, amend: boolean): Promise<void> {
   if (!message.trim()) throw new Error('Empty commit message')
-  // --cleanup=whitespace keeps lines starting with "#" (issue numbers).
-  await serialized(repo, () => git(repo, ['commit', '-F', '-', '--cleanup=whitespace', ...(amend ? ['--amend'] : [])], { input: message }))
+  const label = `${amend ? 'Amend' : 'Commit'} "${message.trim().split('\n')[0].slice(0, 60)}"`
+  // --cleanup=whitespace keeps lines starting with "#" (issue numbers). Undo is a soft reset: the changes come back staged.
+  await serialized(repo, () => tracked(repo, label, 'soft', () => git(repo, ['commit', '-F', '-', '--cleanup=whitespace', ...(amend ? ['--amend'] : [])], { input: message })))
 }
 
 export async function lastMessage(repo: string): Promise<string> {
@@ -142,8 +127,8 @@ export async function fetchRepo(repo: string): Promise<void> {
   await serialized(`net:${repo}`, () => git(repo, ['fetch', '--all', '--prune']))
 }
 
-export async function pull(repo: string): Promise<void> {
-  await serialized(repo, () => git(repo, ['pull', '--autostash']))
+export async function pull(repo: string): Promise<OpOutcome> {
+  return serialized(repo, () => tracked(repo, 'Pull', 'keep', () => mayConflict(repo, ['pull', '--autostash'])))
 }
 
 export async function push(repo: string): Promise<void> {
@@ -154,7 +139,8 @@ export async function push(repo: string): Promise<void> {
 
 export async function switchBranch(repo: string, name: string, remote: boolean): Promise<void> {
   if (name.startsWith('-')) throw new Error(`Invalid branch name: ${name}`)
-  await serialized(repo, () => git(repo, remote ? ['switch', '--track', name] : ['switch', name]))
+  const label = `Switch to ${remote ? name.replace(/^[^/]+\//, '') : name}`
+  await serialized(repo, () => tracked(repo, label, 'keep', () => git(repo, remote ? ['switch', '--track', name] : ['switch', name])))
 }
 
 export function displayFolder(path: string, home = homedir()): string {
