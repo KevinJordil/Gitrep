@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { addRepo, applySettings, DEFAULT_CONFIG, loadConfig, removeRepo, saveConfig } from '../src/main/config'
+import { addRepo, applyRepoSettings, applySettings, DEFAULT_CONFIG, loadConfig, removeRepo, saveConfig } from '../src/main/config'
 import { tempDir } from './helpers'
 
 describe('config', () => {
@@ -14,13 +14,13 @@ describe('config', () => {
     saveConfig(file, { ...DEFAULT_CONFIG, repos: [{ path: '/r/a', name: 'a' }] })
     expect(loadConfig(file).repos).toEqual([{ path: '/r/a', name: 'a' }])
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: { author: 150, date: 110, sha: 70 } })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { author: 150, date: 110, sha: 70 } })
   })
 
   it('resets hand-edited settings that fail validation to their defaults', async () => {
     const file = join(await tempDir(), 'config.json')
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { sidebarWidth: 'abc', activeDays: 'x', rightWidth: 5, claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: { author: 150, date: 110, sha: 70 } })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { author: 150, date: 110, sha: 70 } })
   })
 
   it('backs up a corrupt file instead of losing it', async () => {
@@ -78,5 +78,40 @@ describe('config', () => {
     expect(loadConfig(file).settings.graphColumns).toEqual({ author: 150, date: 110, sha: 70 })
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { graphColumns: { author: 200, date: 90, sha: 60 } } }))
     expect(loadConfig(file).settings.graphColumns).toEqual({ author: 200, date: 90, sha: 60 })
+  })
+
+  it('accepts commit instructions up to 4000 characters, globally and per repository', async () => {
+    expect(applySettings(DEFAULT_CONFIG, { commitInstructions: 'x'.repeat(4000) }).settings.commitInstructions).toHaveLength(4000)
+    for (const bad of ['x'.repeat(4001), 5, null]) expect(() => applySettings(DEFAULT_CONFIG, { commitInstructions: bad } as never)).toThrow('Invalid setting: commitInstructions')
+    const cfg = { ...DEFAULT_CONFIG, repos: [{ path: '/r/a', name: 'a' }] }
+    expect(applyRepoSettings(cfg, '/r/a', { commitInstructions: 'be brief' }).repos[0]).toEqual({ path: '/r/a', name: 'a', commitInstructions: 'be brief' })
+    expect(cfg.repos[0]).toEqual({ path: '/r/a', name: 'a' }) // not mutated
+    expect(() => applyRepoSettings(cfg, '/r/b', { commitInstructions: 'x' })).toThrow('Unknown repository')
+    expect(() => applyRepoSettings(cfg, '/r/a', { name: 'z' } as never)).toThrow('Invalid setting: name')
+    expect(() => applyRepoSettings(cfg, '/r/a', { toString: 1 } as never)).toThrow('Invalid setting: toString')
+    expect(() => applyRepoSettings(cfg, '/r/a', { commitInstructions: 'x'.repeat(4001) })).toThrow('Invalid setting: commitInstructions')
+    for (const bad of [null, 5, 'x', []]) expect(() => applyRepoSettings(cfg, '/r/a', bad as never)).toThrow('Invalid settings')
+  })
+
+  it('drops invalid saved commit instructions', async () => {
+    const file = join(await tempDir(), 'config.json')
+    const repos = [
+      { path: '/a', name: 'a', commitInstructions: 'ok' },
+      { path: '/b', name: 'b', commitInstructions: 5 },
+      { path: '/c', name: 'c', commitInstructions: 'x'.repeat(4001) }
+    ]
+    writeFileSync(file, JSON.stringify({ repos, openTabs: [], settings: { commitInstructions: 7 } }))
+    const cfg = loadConfig(file)
+    expect(cfg.repos).toEqual([{ path: '/a', name: 'a', commitInstructions: 'ok' }, { path: '/b', name: 'b' }, { path: '/c', name: 'c' }])
+    expect(cfg.settings.commitInstructions).toBe('')
+  })
+
+  it('tolerates a non-array repos list and non-object entries', async () => {
+    const file = join(await tempDir(), 'config.json')
+    writeFileSync(file, JSON.stringify({ repos: 'x', openTabs: [], settings: {} }))
+    expect(loadConfig(file).repos).toEqual([])
+    writeFileSync(file, JSON.stringify({ repos: [null, 5, { path: '/x' }, { path: '/a', name: 'a', commitInstructions: 5 }], openTabs: ['/a', null, 3], settings: {} }))
+    expect(loadConfig(file).repos).toEqual([{ path: '/a', name: 'a' }])
+    expect(loadConfig(file).openTabs).toEqual(['/a'])
   })
 })

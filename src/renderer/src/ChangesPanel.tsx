@@ -1,14 +1,18 @@
-import { useState, type KeyboardEvent, type ReactNode } from 'react'
-import type { DiffSide, FileChange, RepoStatus } from '../../shared/types'
+import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { MAX_INSTRUCTIONS, type DiffSide, type FileChange, type RepoStatus } from '../../shared/types'
 import { api } from './api'
 import { errorText, splitPath } from './format'
 import { FileIcon, StatusBadge } from './FileIcon'
+import { Dialog } from './Dialog'
 import { Icon } from './icons'
 import type { RunOp, Selection } from './model'
 import { useToast } from './toast'
 
 interface Props {
   repo: string
+  name: string
+  instructions: { global: string; repo: string } // commit message instructions saved in the config
+  onInstructions: (global?: string, repo?: string) => Promise<boolean> // only the texts given are saved
   status: RepoStatus | null
   selection: Selection | null
   onSelect: (s: Selection) => void
@@ -19,13 +23,14 @@ interface Props {
 
 const pathsOf = (files: FileChange[]) => files.flatMap((f) => (f.origPath ? [f.path, f.origPath] : [f.path]))
 
-export function ChangesPanel({ repo, status, selection, onSelect, onConflict, run, busy }: Props) {
+export function ChangesPanel({ repo, name, instructions, onInstructions, status, selection, onSelect, onConflict, run, busy }: Props) {
   const notify = useToast()
   const [summary, setSummary] = useState('')
   const [body, setBody] = useState('')
   const [amend, setAmend] = useState(false)
   const [thinking, setThinking] = useState(false)
   const [note, setNote] = useState('')
+  const [editing, setEditing] = useState(false)
 
   const staged = status?.staged ?? []
   const unstaged = status?.unstaged ?? []
@@ -149,6 +154,10 @@ export function ChangesPanel({ repo, status, selection, onSelect, onConflict, ru
           <label htmlFor={`summary-${repo}`} style={{ fontWeight: 500 }}>
             Commit message
           </label>
+          <button type="button" className="icon-btn" aria-label="Commit message instructions" title="Commit message instructions" onClick={() => setEditing(true)}>
+            <Icon name="sliders" size={14} />
+            {(instructions.global.trim() || instructions.repo.trim()) && <span className="dot" aria-hidden />}
+          </button>
           <button type="button" className="btn-claude" disabled={thinking || staged.length === 0} title={staged.length === 0 ? 'Stage some changes first' : undefined} onClick={() => void generate()}>
             {thinking ? <span className="spin" /> : <Icon name="sparkle" size={14} />}
             {thinking ? 'Claude is writing…' : 'Generate with Claude'}
@@ -168,7 +177,44 @@ export function ChangesPanel({ repo, status, selection, onSelect, onConflict, ru
           {busy === 'commit' ? 'Commit…' : `Commit to ${branch}`}
         </button>
       </form>
+      {editing && <InstructionsDialog name={name} initial={instructions} onSave={onInstructions} onClose={() => setEditing(false)} />}
     </aside>
+  )
+}
+
+interface InstructionsProps {
+  name: string
+  initial: { global: string; repo: string }
+  onSave: (global?: string, repo?: string) => Promise<boolean>
+  onClose: () => void
+}
+
+function InstructionsDialog({ name, initial, onSave, onClose }: InstructionsProps) {
+  const [repoText, setRepoText] = useState(initial.repo)
+  const [globalText, setGlobalText] = useState(initial.global)
+  const [busy, setBusy] = useState(false)
+  const id = useId()
+  const save = async () => {
+    setBusy(true)
+    const ok = await onSave(globalText !== initial.global ? globalText : undefined, repoText !== initial.repo ? repoText : undefined)
+    setBusy(false)
+    if (ok) onClose()
+  }
+  const field = (label: string, text: string, set: (t: string) => void, key: string, focus = false) => (
+    <div className="dialog-field">
+      <label htmlFor={`${id}-${key}`}>{label}</label>
+      <textarea id={`${id}-${key}`} className="field" rows={5} maxLength={MAX_INSTRUCTIONS} autoFocus={focus} value={text} onChange={(e) => set(e.target.value)} />
+      <span className="note counter">
+        {text.length} / {MAX_INSTRUCTIONS}
+      </span>
+    </div>
+  )
+  return (
+    <Dialog title="Commit message instructions" submit="Save" busy={busy} onSubmit={() => void save()} onClose={onClose}>
+      {field(`This repository (${name})`, repoText, setRepoText, 'repo', true)}
+      {field('All repositories', globalText, setGlobalText, 'global')}
+      <span className="note">Added to the instructions Claude follows when it writes a commit message. Stored in GitRep on this computer, not in the repository.</span>
+    </Dialog>
   )
 }
 

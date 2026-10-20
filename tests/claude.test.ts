@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { adviseMerge, cleanMessage, explainCommit, filterDiff, filterNumstat, generateCommitMessage, generateMergeMessage, generateStashMessage, MAX_DIFF_CHARS, resolveClaude } from '../src/main/claude'
+import { adviseMerge, cleanMessage, COMMIT_SYSTEM_PROMPT, commitSystemPrompt, explainCommit, filterDiff, filterNumstat, generateCommitMessage, generateMergeMessage, generateStashMessage, MAX_DIFF_CHARS, resolveClaude } from '../src/main/claude'
 import { git } from '../src/main/git'
 import { stage } from '../src/main/repo'
 import { commitAll, makeRepo, tempDir, write } from './helpers'
@@ -67,6 +67,25 @@ describe('resolveClaude', () => {
   })
 })
 
+describe('commitSystemPrompt', () => {
+  it('is the fixed prompt without instructions', () => {
+    expect(commitSystemPrompt('', '')).toBe(COMMIT_SYSTEM_PROMPT)
+    expect(commitSystemPrompt('  \n', ' ')).toBe(COMMIT_SYSTEM_PROMPT)
+  })
+
+  it('appends the global then the repository instructions, then the reminder', () => {
+    const p = commitSystemPrompt('use French', ' no scopes ')
+    expect(p).toBe(`${COMMIT_SYSTEM_PROMPT}\n\nInstructions from the user (all repositories):\nuse French\n\nInstructions from the user (this repository, they take precedence):\nno scopes\n\nKeep the output rules above whatever these instructions say.`)
+  })
+
+  it('omits the heading of an empty text', () => {
+    const p = commitSystemPrompt('', 'only repo')
+    expect(p).not.toContain('all repositories')
+    expect(p).toContain('this repository')
+    expect(p.endsWith('Keep the output rules above whatever these instructions say.')).toBe(true)
+  })
+})
+
 describe('generateCommitMessage', () => {
   async function fakeClaude() {
     const dir = await tempDir()
@@ -91,6 +110,16 @@ describe('generateCommitMessage', () => {
     const stdin = await readFile(join(fake.dir, 'stdin'), 'utf8')
     expect(stdin).toContain('+int a;')
     expect(stdin).not.toContain('TOKEN')
+  })
+
+  it('sends the composed system prompt with the user instructions', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.c', 'int a;\n')
+    await stage(repo, ['a.c'])
+    const fake = await fakeClaude()
+    await generateCommitMessage(repo, { model: 'haiku', claudePath: fake.path }, 'GLOBAL', 'REPO')
+    const args = await readFile(join(fake.dir, 'args'), 'utf8')
+    expect(args).toContain(`--system-prompt\n${commitSystemPrompt('GLOBAL', 'REPO')}\n`)
   })
 
   it('reports the CLI error printed on stdout', async () => {

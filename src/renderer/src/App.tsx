@@ -86,7 +86,16 @@ export function App() {
   const updateSettings = useCallback(
     (patch: Partial<Settings>) =>
       api.updateSettings(patch).then(
-        () => (reload(), true),
+        async () => (await reload(), true),
+        (e: unknown) => (notify('error', errorText(e)), false)
+      ),
+    [reload, notify]
+  )
+
+  const updateRepoSettings = useCallback(
+    (path: string, patch: { commitInstructions: string }) =>
+      api.updateRepoSettings(path, patch).then(
+        async () => (await reload(), true),
         (e: unknown) => (notify('error', errorText(e)), false)
       ),
     [reload, notify]
@@ -154,7 +163,7 @@ export function App() {
         {active === 'dashboard' && <Dashboard repoCount={config.repos.length} onOpen={(p) => void openTab(p)} onAdd={() => void addRepos()} onChanged={() => void reload()} />}
         {config.openTabs.map((p) => (
           <div key={p} className="repo" style={{ display: active === p ? 'flex' : 'none' }}>
-            <RepoView path={p} active={active === p} settings={config.settings} onSettings={updateSettings} onBranch={onBranch} />
+            <RepoView path={p} active={active === p} settings={config.settings} entry={config.repos.find((r) => r.path === p)} onSettings={updateSettings} onRepoSettings={updateRepoSettings} onBranch={onBranch} />
           </div>
         ))}
         {closing && (

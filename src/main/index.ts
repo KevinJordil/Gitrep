@@ -8,7 +8,7 @@ import { API_METHODS, type Api, type IpcResult } from '../shared/api'
 import type { Config, ConflictHunk, GraphScope, InteractiveRebaseRequest, MergeRequest, RepoEntry } from '../shared/types'
 import * as assist from './assist'
 import * as claude from './claude'
-import { addRepo, applySettings, loadConfig, removeRepo, saveConfig } from './config'
+import { addRepo, applyRepoSettings, applySettings, loadConfig, removeRepo, saveConfig } from './config'
 import * as conflicts from './conflicts'
 import { git, gitDir } from './git'
 import * as history from './history'
@@ -154,6 +154,7 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   },
   setOpenTabs: async (paths) => setConfig({ ...config, openTabs: paths.filter(isRegistered) }),
   updateSettings: async (patch) => setConfig(applySettings(config, patch)),
+  updateRepoSettings: async (path, patch) => setConfig(applyRepoSettings(config, path, patch)),
   summaries: async () =>
     (await repo.mapLimit(config.repos, 6, (r) => repo.summary(r.path))).map((s) => ({ ...s, fetchError: fetchErrors.get(s.path) ?? null })),
   status: forRepo(repo.getStatus),
@@ -172,7 +173,7 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   applyLines: forRepo(repo.applyLines),
   commit: forRepo(repo.commit),
   lastMessage: forRepo(repo.lastMessage),
-  generateMessage: forRepo((p) => claude.generateCommitMessage(p, claudeOptions())),
+  generateMessage: forRepo((p) => claude.generateCommitMessage(p, claudeOptions(), config.settings.commitInstructions, config.repos.find((r) => r.path === p)?.commitInstructions ?? '')),
   explainCommit: forRepo((p, sha: string) => claude.explainCommit(p, sha, claudeOptions())),
   stashMessage: forRepo((p) => claude.generateStashMessage(p, claudeOptions())),
   adviseMerge: forRepo((p, source: string, target: string) => claude.adviseMerge(p, source, target, claudeOptions())),

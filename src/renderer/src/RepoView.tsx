@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Branch, Commit, GraphScope, OperationInfo, RepoStatus, ResetMode, Settings, Stash, Tag, UndoState } from '../../shared/types'
+import type { Branch, Commit, GraphScope, OperationInfo, RepoEntry, RepoStatus, ResetMode, Settings, Stash, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
 import { CommitMenu, type CommitAction } from './CommitMenu'
@@ -32,10 +32,12 @@ interface Props {
   active: boolean
   settings: Settings
   onSettings: (patch: Partial<Settings>) => Promise<boolean> // false when the save failed
+  entry?: RepoEntry
+  onRepoSettings: (path: string, patch: { commitInstructions: string }) => Promise<boolean>
   onBranch: (path: string, label: string) => void
 }
 
-export function RepoView({ path, active, settings, onSettings, onBranch }: Props) {
+export function RepoView({ path, active, settings, entry, onSettings, onRepoSettings, onBranch }: Props) {
   const { activeDays } = settings
   // The saved pane widths, clamped to the current window so the center keeps its minimum (the saved values are left as they are).
   const [winW, setWinW] = useState(window.innerWidth)
@@ -181,6 +183,10 @@ export function RepoView({ path, active, settings, onSettings, onBranch }: Props
     else if (selection.side === 'staged' && inUnstaged) setSelection({ path: selection.path, side: inUnstaged.status === '?' ? 'untracked' : 'unstaged' })
     else setSelection(null)
   }, [status, selection])
+
+  // Only what changed is sent; each call reports its own failure.
+  const saveInstructions = async (global?: string, repo?: string) =>
+    (global === undefined || (await onSettings({ commitInstructions: global }))) && (repo === undefined || (await onRepoSettings(path, { commitInstructions: repo })))
 
   const run = useCallback<RunOp>(
     async (label, fn, done) => {
@@ -474,7 +480,7 @@ export function RepoView({ path, active, settings, onSettings, onBranch }: Props
         ) : focus.kind === 'commit' ? (
           <CommitPanel key={`${focus.sha}:${focus.explain ?? ''}`} repo={path} sha={focus.sha} autoExplain={!!focus.explain} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} />
         ) : (
-          <ChangesPanel repo={path} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} run={run} busy={busy} />
+          <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} run={run} busy={busy} />
         )}
       </div>
       {menu && <CommitMenu commit={menu.commit} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}

@@ -48,6 +48,7 @@ export interface Branch {
 export const GRAPH_LIMIT = 2000
 export const GRAPH_COLUMN_MIN = 48 // px, the Author, Date and SHA columns of the history
 export const GRAPH_COLUMN_MAX = 480
+export const MAX_INSTRUCTIONS = 4000 // characters of a commit message instructions text
 export const DEFAULT_GRAPH_COLUMNS = { author: 150, date: 110, sha: 70 }
 
 export interface Tag {
@@ -99,6 +100,7 @@ export type LineAction = 'stage' | 'unstage' | 'discard'
 export interface RepoEntry {
   path: string
   name: string
+  commitInstructions?: string // free text added to the commit message prompt for this repository
 }
 
 export interface RepoSummary {
@@ -118,6 +120,7 @@ export interface Settings {
   activeDays: number // the graph draws the branches committed to in the last N days; 0 = every branch
   sidebarWidth: number // px, resizable
   rightWidth: number // px, resizable
+  commitInstructions: string // free text added to the commit message prompt, all repositories
   graphColumns: { author: number; date: number; sha: number } // px, resizable in the history header
 }
 

@@ -115,7 +115,7 @@ test('wide saved widths are clamped to a small window; the saved values are kept
 test('commit form: a tall summary field and a six-line description that grows vertically', async () => {
   const summary = v.getByPlaceholder('Summary', { exact: true })
   const description = v.getByPlaceholder('Description', { exact: true })
-  await expect(v.getByLabel('Commit message')).toHaveAttribute('placeholder', 'Summary')
+  await expect(v.getByLabel('Commit message', { exact: true })).toHaveAttribute('placeholder', 'Summary')
   expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(42)
   expect(await summary.evaluate((e) => getComputedStyle(e).fontSize)).toBe('14px')
   await expect(description).toHaveAttribute('rows', '6')

@@ -18,6 +18,10 @@ Undo (toolbar or Ctrl+Z) reverts the last operation done in GitRep, Redo (toolba
 
 The graph lists the commits newest first across branches (`git log --date-order`). By default it draws the active branches: those with a commit in the last 30 days, plus the checked-out branch and its upstream. The "Branches shown" menu above the graph switches to 90 days or to all branches and tags, or isolates one branch whatever its age. In the sidebar, the other branches are folded under "N older branches".
 
+## Commit message instructions
+
+The sliders button next to "Generate with Claude" opens free-text instructions that are added to what Claude is told when it writes a commit message (language, prefixes, length...): one text for all repositories and one for the current repository, up to 4000 characters each, which wins on a conflict. The fixed output rules (plain message, subject of at most 72 characters) always apply. They are stored in the GitRep config on this computer (`settings.commitInstructions` and `commitInstructions` on each repository), never in the repository. A dot on the button shows that instructions are active.
+
 ## Install in the GNOME launcher
 
     npm run package
@@ -25,7 +29,7 @@ The graph lists the commits newest first across branches (`git log --date-order`
 
 ## Configuration
 
-`~/.config/GitRep/config.json`: list of repositories, open tabs, `settings.claudeModel` (default `haiku`), `settings.claudePath` (empty = resolved through your shell), `settings.activeDays` (branches drawn by default: those with a commit in the last N days, 0 = all; default 30, set from the graph), `settings.sidebarWidth` and `settings.rightWidth` (pane widths in pixels, set by dragging their edges) and `settings.graphColumns` (widths in pixels of the Author, Date and SHA columns of the history, 48 to 480, set by dragging the header separators).
+`~/.config/GitRep/config.json`: list of repositories, open tabs, `settings.claudeModel` (default `haiku`), `settings.claudePath` (empty = resolved through your shell), `settings.activeDays` (branches drawn by default: those with a commit in the last N days, 0 = all; default 30, set from the graph), `settings.sidebarWidth` and `settings.rightWidth` (pane widths in pixels, set by dragging their edges) and `settings.graphColumns` (widths in pixels of the Author, Date and SHA columns of the history, 48 to 480, set by dragging the header separators) and `settings.commitInstructions` (see above).
 
 ## Sandbox
 

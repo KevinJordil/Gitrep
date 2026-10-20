@@ -67,6 +67,16 @@ export const COMMIT_SYSTEM_PROMPT = [
   'No markdown, no code fences, no quotes around the message, no commentary.'
 ].join('\n')
 
+// The fixed rules stay first and authoritative; the user's free text only adds preferences after them.
+export function commitSystemPrompt(global: string, repo: string): string {
+  const parts = [
+    ['Instructions from the user (all repositories):', global.trim()],
+    ['Instructions from the user (this repository, they take precedence):', repo.trim()]
+  ].filter(([, text]) => text)
+  if (!parts.length) return COMMIT_SYSTEM_PROMPT
+  return [COMMIT_SYSTEM_PROMPT, ...parts.map(([head, text]) => `${head}\n${text}`), 'Keep the output rules above whatever these instructions say.'].join('\n\n')
+}
+
 export function buildCommitInput(stat: string, diff: string, subjects: string[]): string {
   return [
     'Recent commit subjects in this repository:',
@@ -145,7 +155,7 @@ export async function askClaude(opts: ClaudeOptions, system: string, task: strin
   return cleanMessage(await runClaude(claude, args, input))
 }
 
-export async function generateCommitMessage(repo: string, opts: ClaudeOptions): Promise<GeneratedMessage> {
+export async function generateCommitMessage(repo: string, opts: ClaudeOptions, globalInstructions = '', repoInstructions = ''): Promise<GeneratedMessage> {
   const [numstat, diff, log] = await Promise.all([
     git(repo, ['diff', '--cached', '--numstat', '--no-renames', '--no-color']),
     git(repo, ['diff', '--cached', '--no-renames', '--no-color', '--no-ext-diff']),
@@ -156,7 +166,7 @@ export async function generateCommitMessage(repo: string, opts: ClaudeOptions): 
   if (!text.trim()) throw new Error('All staged files are sensitive: nothing is sent to Claude.')
   const files = (diff.match(/^diff --git /gm) ?? []).length
   const input = buildCommitInput(filterNumstat(numstat), text, log.split('\n').filter(Boolean))
-  const message = await askClaude(opts, COMMIT_SYSTEM_PROMPT, 'Write the commit message for the staged changes provided on stdin.', input)
+  const message = await askClaude(opts, commitSystemPrompt(globalInstructions, repoInstructions), 'Write the commit message for the staged changes provided on stdin.', input)
   return { message, excluded, files }
 }
 

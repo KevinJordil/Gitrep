@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { FAKE_MESSAGE, launchFixture, type Fixture } from './fixtures'
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 test.describe.configure({ mode: 'serial' })
@@ -118,6 +118,40 @@ test('7. commit with a generated message', async () => {
   expect(hits(btn!)).toBe(false)
   expect(hits(code!)).toBe(false)
   await shot('after-commit')
+})
+
+test('7b. commit message instructions are saved and sent to Claude', async () => {
+  const v = repoView()
+  writeFileSync(join(fx.beta, 'instr.txt'), 'x\n')
+  fx.git(fx.beta, 'add', 'instr.txt')
+  const open = () => v.getByRole('button', { name: 'Commit message instructions' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Commit message instructions' })
+  await expect(v.getByRole('button', { name: 'Commit message instructions' }).locator('.dot')).toHaveCount(0)
+  await open()
+  await dialog.getByLabel('This repository (beta)').fill('REPO-RULE use French')
+  await dialog.getByLabel('All repositories').fill('GLOBAL-RULE no scopes')
+  await expect(dialog).toContainText('21 / 4000')
+  await expect(dialog).toContainText('Stored in GitRep on this computer, not in the repository.')
+  await page.mouse.move(0, 0)
+  await dialog.getByLabel('All repositories').blur()
+  await shot('commit-instructions')
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(v.getByRole('button', { name: 'Commit message instructions' }).locator('.dot')).toHaveCount(1)
+  await open()
+  await expect(dialog.getByLabel('This repository (beta)')).toHaveValue('REPO-RULE use French')
+  await expect(dialog.getByLabel('All repositories')).toHaveValue('GLOBAL-RULE no scopes')
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await v.getByRole('button', { name: 'Generate with Claude' }).click()
+  await expect(v.getByPlaceholder('Summary', { exact: true })).toHaveValue(FAKE_MESSAGE)
+  const args = readFileSync(join(fx.root, 'claude-args'), 'utf8')
+  const prompt = args.slice(args.indexOf('You write git commit messages.'))
+  expect(prompt.indexOf('GLOBAL-RULE no scopes')).toBeGreaterThan(prompt.indexOf('all repositories'))
+  expect(prompt.indexOf('REPO-RULE use French')).toBeGreaterThan(prompt.indexOf('GLOBAL-RULE no scopes'))
+  expect(prompt).toContain('Keep the output rules above')
+  await v.getByPlaceholder('Summary', { exact: true }).fill('')
+  fx.git(fx.beta, 'reset', '-q', 'instr.txt')
+  rmSync(join(fx.beta, 'instr.txt'))
 })
 
 test('8. amend the last commit', async () => {

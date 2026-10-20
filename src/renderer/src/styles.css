@@ -229,6 +229,10 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 input.field { height: 34px; }
 textarea.field { padding: 8px 10px; resize: none; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .field:focus { border-color: var(--claude-bd); }
+.icon-btn { position: relative; width: 28px; height: 28px; margin-left: auto; margin-right: 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); display: grid; place-items: center; flex: none; }
+.icon-btn:hover { color: var(--text); }
+.icon-btn .dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--claude-fg); }
+.counter { align-self: flex-end; }
 .btn-claude { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--claude-bd); background: var(--claude-bg); color: var(--claude-fg); white-space: nowrap; }
 .btn-primary { height: 38px; padding: 0 14px; border-radius: 8px; background: var(--primary); color: var(--on-primary); font-weight: 600; text-align: center; }
 .btn { height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--raised); color: var(--text); white-space: nowrap; }

@@ -37,6 +37,7 @@ export interface Api {
   removeRepo(path: string): Promise<void>
   setOpenTabs(paths: string[]): Promise<void>
   updateSettings(patch: Partial<Settings>): Promise<void> // only the settings the app edits (see applySettings)
+  updateRepoSettings(path: string, patch: { commitInstructions: string }): Promise<void> // see applyRepoSettings
   summaries(): Promise<RepoSummary[]>
   status(repo: string): Promise<RepoStatus>
   log(repo: string, scope: GraphScope, days?: number): Promise<Commit[]> // days: active branches only; 0 or omitted = every branch
@@ -163,7 +164,8 @@ export const API_METHODS = [
   'undo',
   'redo',
   'setWatched',
-  'updateSettings'
+  'updateSettings',
+  'updateRepoSettings'
 ] as const satisfies readonly InvokeMethod[]
 
 // Compile-time guard: every invoke method must be listed above.

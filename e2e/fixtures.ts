@@ -89,7 +89,7 @@ export async function launchFixture(): Promise<Fixture> {
       'case "$prompt" in',
       `  Resolve*) printf '%s\\n' '=== conflict 1' 'confidence: high' 'summary: ${FAKE_SUMMARY}' 'explanation: Both changes are needed.' '--- resolution' two other '=== end' ;;`,
       `  Plan*) awk '/^commit /{ line[n++] = ($3 ~ /^wip/ ? "drop " : "pick ") $2 } END { for (i = n - 1; i >= 0; i--) print line[i]; print "---"; print "${FAKE_PLAN}" }' ;;`,
-      `  *) echo '${FAKE_MESSAGE}' ;;`,
+      `  *) printf '%s\\n' "$@" > '${join(root, 'claude-args')}'; echo '${FAKE_MESSAGE}' ;;`,
       'esac',
       ''
     ].join('\n')
