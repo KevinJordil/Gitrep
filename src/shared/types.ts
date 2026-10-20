@@ -145,6 +145,7 @@ export interface RepoEntry {
   path: string
   name: string
   commitInstructions?: string // free text added to the commit message prompt for this repository
+  reviewPrompt?: ReviewPrompt // this repository's own review prompt, the default there
 }
 
 export interface RepoSummary {
@@ -167,6 +168,7 @@ export interface Settings {
   commitInstructions: string // free text added to the commit message prompt, all repositories
   graphColumns: { graph: number; author: number; date: number; sha: number } // px, resizable in the history header
   forgeHosts: Record<string, ForgeKind> // the forge of a host the app could not recognize, as the user said
+  reviewPrompts: ReviewPrompt[] // named review prompts for every repository; the first is the default
 }
 
 export interface Config {
@@ -356,3 +358,63 @@ export interface ReviewComment {
 
 // What one call posts. GitLab: comments, the summary note, then publish when drafting. GitHub: comments and a summary review, or one pending review.
 export type PostStep = { kind: 'summary'; body: string } | { kind: 'comment'; comment: ReviewComment } | { kind: 'publish' } | { kind: 'review'; body: string; comments: ReviewComment[] }
+
+// What Claude is asked to look for in a review, besides the fixed output rules.
+export interface ReviewPrompt {
+  name: string
+  text: string
+}
+
+export const MAX_PROMPT_NAME = 60
+export const MAX_PROMPT_TEXT = 4000
+export const MAX_PROMPTS = 20
+
+// What a review of `branch` against `base` covers: merge-base(base, branch)..branch.
+export interface ReviewScope {
+  head: string
+  mergeBase: string
+  commits: number
+  files: number
+  add: number
+  del: number
+}
+
+export type Severity = 'critical' | 'important' | 'minor'
+
+// One problem Claude found. side new: lines of the branch's version (context or added), old: deleted lines.
+// The comment sits under endLine; anchor: that diff line's numbers on both sides (a context line has both).
+// fix: replaces lines line..endLine of the branch's version (original: those lines as reviewed).
+export interface ReviewFinding {
+  id: number
+  severity: Severity
+  path: string
+  side: 'new' | 'old'
+  line: number
+  endLine: number
+  anchor: { oldNo: number | null; newNo: number | null }
+  title: string
+  body: string
+  fix: { original: string[]; lines: string[] } | null
+}
+
+export interface Review {
+  branch: string
+  base: string
+  head: string // the reviewed commit
+  mergeBase: string
+  prompt: string // the prompt's name
+  files: FileDiff[] // the reviewed diff, sensitive files left out
+  findings: ReviewFinding[]
+  excluded: string[] // sensitive files, never sent to Claude
+  skipped: string[] // files too large to send
+  dropped: number // findings that pointed outside the diff, or over the limit
+}
+
+// What updateRepoSettings may change on a registered repository. reviewPrompt null: back to the global prompts.
+export type RepoSettingsPatch = { commitInstructions?: string; reviewPrompt?: ReviewPrompt | null }
+
+export interface ReviewRequest {
+  branch: string
+  base: string
+  prompt: ReviewPrompt
+}

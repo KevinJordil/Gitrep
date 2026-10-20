@@ -29,9 +29,13 @@ import type {
   RebasePlan,
   RebaseProposal,
   RepoEntry,
+  RepoSettingsPatch,
   RepoStatus,
   RepoSummary,
   ResetMode,
+  Review,
+  ReviewRequest,
+  ReviewScope,
   Settings,
   Stash,
   Tag,
@@ -44,7 +48,7 @@ export interface Api {
   removeRepo(path: string): Promise<void>
   setOpenTabs(paths: string[]): Promise<void>
   updateSettings(patch: Partial<Settings>): Promise<void> // only the settings the app edits (see applySettings)
-  updateRepoSettings(path: string, patch: { commitInstructions: string }): Promise<void> // see applyRepoSettings
+  updateRepoSettings(path: string, patch: RepoSettingsPatch): Promise<void> // see applyRepoSettings
   summaries(): Promise<RepoSummary[]>
   status(repo: string): Promise<RepoStatus>
   log(repo: string, scope: GraphScope, days?: number): Promise<Commit[]> // days: active branches only; 0 or omitted = every branch
@@ -112,6 +116,8 @@ export interface Api {
   removeAccount(host: string): Promise<void>
   forgeInfo(repo: string, branch: string): Promise<ForgeInfo | null> // null: the branch's remote is not on a forge
   postReviewStep(repo: string, branch: string, head: string, draft: boolean, step: PostStep): Promise<void>
+  reviewScope(repo: string, branch: string, base: string): Promise<ReviewScope>
+  startReview(repo: string, req: ReviewRequest): Promise<Review> // asks Claude; nothing is written
   onRepoChanged(cb: (repo: string) => void): () => void
 }
 
@@ -190,7 +196,9 @@ export const API_METHODS = [
   'testAccount',
   'removeAccount',
   'forgeInfo',
-  'postReviewStep'
+  'postReviewStep',
+  'reviewScope',
+  'startReview'
 ] as const satisfies readonly InvokeMethod[]
 
 // Compile-time guard: every invoke method must be listed above.

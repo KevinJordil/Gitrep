@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Branch, Commit, GraphScope, OperationInfo, RepoEntry, RepoStatus, ResetMode, Settings, Stash, SyncState, Tag, UndoState } from '../../shared/types'
+import type { Branch, Commit, GraphScope, OperationInfo, RepoEntry, RepoSettingsPatch, RepoStatus, ResetMode, Settings, Stash, SyncState, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
 import { CommitMenu, type CommitAction, type RefItem } from './CommitMenu'
@@ -36,7 +36,7 @@ interface Props {
   settings: Settings
   onSettings: (patch: Partial<Settings>) => Promise<boolean> // false when the save failed
   entry?: RepoEntry
-  onRepoSettings: (path: string, patch: { commitInstructions: string }) => Promise<boolean>
+  onRepoSettings: (path: string, patch: RepoSettingsPatch) => Promise<boolean>
   onBranch: (path: string, label: string) => void
 }
 

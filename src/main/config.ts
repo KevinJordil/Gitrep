@@ -1,9 +1,13 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
-import { DEFAULT_GRAPH_COLUMNS, MAX_INSTRUCTIONS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LANES_MIN, type Config, type Settings } from '../shared/types'
+import { DEFAULT_GRAPH_COLUMNS, MAX_INSTRUCTIONS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LANES_MIN, MAX_PROMPT_NAME, MAX_PROMPT_TEXT, MAX_PROMPTS, type Config, type RepoEntry, type RepoSettingsPatch, type ReviewPrompt, type Settings } from '../shared/types'
 import { isHost } from './forge'
 
-export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: DEFAULT_GRAPH_COLUMNS, commitInstructions: '', forgeHosts: {} } }
+export const DEFAULT_REVIEW_PROMPTS: ReviewPrompt[] = [
+  { name: 'Default review', text: 'Look for bugs, unhandled errors, security issues, concurrency problems and missing tests. Ignore formatting. Write the comments in English.' }
+]
+
+export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: DEFAULT_GRAPH_COLUMNS, commitInstructions: '', forgeHosts: {}, reviewPrompts: DEFAULT_REVIEW_PROMPTS } }
 
 export function loadConfig(file: string): Config {
   let raw: string
@@ -21,7 +25,8 @@ export function loadConfig(file: string): Config {
     for (const [key, valid] of Object.entries(EDITABLE)) if (!valid(settings[key as keyof Settings])) Object.assign(settings, { [key]: structuredClone(DEFAULT_CONFIG.settings[key as keyof Settings]) })
     const repos = (Array.isArray(parsed.repos) ? parsed.repos : [])
       .filter((r) => typeof r?.path === 'string' && typeof r.name === 'string')
-      .map((r) => (r.commitInstructions === undefined || isInstructions(r.commitInstructions) ? r : { path: r.path, name: r.name }))
+      .map((r) => (r.commitInstructions === undefined || isInstructions(r.commitInstructions) ? r : withoutInstructions(r)))
+      .map((r) => (r.reviewPrompt === undefined || isPrompt(r.reviewPrompt) ? r : withoutPrompt(r)))
     const openTabs = (Array.isArray(parsed.openTabs) ? parsed.openTabs : []).filter((t) => typeof t === 'string')
     return { ...structuredClone(DEFAULT_CONFIG), ...parsed, repos, openTabs, settings }
   } catch {
@@ -61,6 +66,18 @@ const isColumns = (v: unknown) => {
   })
 }
 
+export const isPrompt = (v: unknown): v is ReviewPrompt => {
+  if (!v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).length !== 2) return false
+  const { name, text } = v as Record<string, unknown>
+  return typeof name === 'string' && name.trim() === name && name.length > 0 && name.length <= MAX_PROMPT_NAME && typeof text === 'string' && text.length <= MAX_PROMPT_TEXT
+}
+
+const isPrompts = (v: unknown) => Array.isArray(v) && v.length > 0 && v.length <= MAX_PROMPTS && v.every(isPrompt) && new Set(v.map((p: ReviewPrompt) => p.name)).size === v.length
+
+const withoutInstructions = ({ commitInstructions: _, ...rest }: RepoEntry): RepoEntry => rest
+
+const withoutPrompt = ({ reviewPrompt: _, ...rest }: RepoEntry): RepoEntry => rest
+
 const isForgeHosts = (v: unknown) =>
   !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length <= 200 && Object.entries(v).every(([host, kind]) => isHost(host) && (kind === 'gitlab' || kind === 'github'))
 
@@ -71,7 +88,8 @@ const EDITABLE: Partial<Record<keyof Settings, (v: unknown) => boolean>> = {
   rightWidth: (v) => isWidth(v),
   graphColumns: isColumns,
   commitInstructions: isInstructions,
-  forgeHosts: isForgeHosts
+  forgeHosts: isForgeHosts,
+  reviewPrompts: isPrompts
 }
 
 export function applySettings(cfg: Config, patch: Partial<Settings>): Config {
@@ -80,10 +98,23 @@ export function applySettings(cfg: Config, patch: Partial<Settings>): Config {
   return { ...cfg, settings: { ...cfg.settings, ...patch } }
 }
 
-// Per-repository settings the app edits: only the commit message instructions, for a repository already registered.
-export function applyRepoSettings(cfg: Config, path: string, patch: { commitInstructions: string }): Config {
+// Per-repository settings the app edits, for a repository already registered: the commit message instructions and
+// the repository's own review prompt (null removes it).
+const REPO_EDITABLE: Record<keyof RepoSettingsPatch, (v: unknown) => boolean> = {
+  commitInstructions: isInstructions,
+  reviewPrompt: (v) => v === null || isPrompt(v)
+}
+
+export function applyRepoSettings(cfg: Config, path: string, patch: RepoSettingsPatch): Config {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings')
   if (!cfg.repos.some((r) => r.path === path)) throw new Error('Unknown repository')
-  for (const [key, value] of Object.entries(patch)) if (key !== 'commitInstructions' || !isInstructions(value)) throw new Error(`Invalid setting: ${key}`)
-  return { ...cfg, repos: cfg.repos.map((r) => (r.path === path ? { ...r, ...patch } : r)) }
+  for (const [key, value] of Object.entries(patch)) if (!Object.hasOwn(REPO_EDITABLE, key) || !REPO_EDITABLE[key as keyof RepoSettingsPatch](value)) throw new Error(`Invalid setting: ${key}`)
+  return {
+    ...cfg,
+    repos: cfg.repos.map((r) => {
+      if (r.path !== path) return r
+      const next = { ...r, ...patch }
+      return patch.reviewPrompt === null ? withoutPrompt(next as RepoEntry) : (next as RepoEntry)
+    })
+  }
 }

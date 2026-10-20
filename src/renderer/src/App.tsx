@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Config, Settings } from '../../shared/types'
+import type { Config, RepoSettingsPatch, Settings } from '../../shared/types'
 import { api } from './api'
 import { Dashboard } from './Dashboard'
 import { Dialog } from './Dialog'
@@ -93,7 +93,7 @@ export function App() {
   )
 
   const updateRepoSettings = useCallback(
-    (path: string, patch: { commitInstructions: string }) =>
+    (path: string, patch: RepoSettingsPatch) =>
       api.updateRepoSettings(path, patch).then(
         async () => (await reload(), true),
         (e: unknown) => (notify('error', errorText(e)), false)

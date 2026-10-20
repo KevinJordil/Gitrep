@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { addRepo, applyRepoSettings, applySettings, DEFAULT_CONFIG, loadConfig, removeRepo, saveConfig } from '../src/main/config'
+import { addRepo, applyRepoSettings, applySettings, DEFAULT_CONFIG, DEFAULT_REVIEW_PROMPTS, loadConfig, removeRepo, saveConfig } from '../src/main/config'
 import { tempDir } from './helpers'
 
 describe('config', () => {
@@ -14,13 +14,13 @@ describe('config', () => {
     saveConfig(file, { ...DEFAULT_CONFIG, repos: [{ path: '/r/a', name: 'a' }] })
     expect(loadConfig(file).repos).toEqual([{ path: '/r/a', name: 'a' }])
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {} })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {}, reviewPrompts: DEFAULT_REVIEW_PROMPTS })
   })
 
   it('resets hand-edited settings that fail validation to their defaults', async () => {
     const file = join(await tempDir(), 'config.json')
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { sidebarWidth: 'abc', activeDays: 'x', rightWidth: 5, claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {} })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {}, reviewPrompts: DEFAULT_REVIEW_PROMPTS })
   })
 
   it('backs up a corrupt file instead of losing it', async () => {
@@ -130,5 +130,33 @@ describe('config', () => {
   it('accepts the forge chosen for a host, refuses bad hosts and unknown forges', () => {
     expect(applySettings(DEFAULT_CONFIG, { forgeHosts: { 'code.x.ch': 'gitlab', 'git.y.ch': 'github' } }).settings.forgeHosts).toEqual({ 'code.x.ch': 'gitlab', 'git.y.ch': 'github' })
     for (const forgeHosts of [{ 'code.x.ch': 'bitbucket' }, { '-x': 'gitlab' }, { 'a b': 'github' }, ['gitlab'], null, 'x']) expect(() => applySettings(DEFAULT_CONFIG, { forgeHosts } as never)).toThrow('Invalid setting: forgeHosts')
+  })
+
+  it('accepts up to 20 named review prompts with unique names, and one prompt per repository', () => {
+    const prompts = [{ name: 'Default review', text: 'x' }, { name: 'Java style', text: 'y'.repeat(4000) }]
+    expect(applySettings(DEFAULT_CONFIG, { reviewPrompts: prompts }).settings.reviewPrompts).toEqual(prompts)
+    const bad: unknown[] = [[], [{ name: 'a', text: 'x' }, { name: 'a', text: 'y' }], [{ name: '', text: 'x' }], [{ name: ' a', text: 'x' }], [{ name: 'a', text: 'x'.repeat(4001) }], [{ name: 'a', text: 'x', extra: 1 }], Array.from({ length: 21 }, (_, i) => ({ name: `p${i}`, text: '' })), null]
+    for (const reviewPrompts of bad) expect(() => applySettings(DEFAULT_CONFIG, { reviewPrompts } as never)).toThrow('Invalid setting: reviewPrompts')
+    const cfg = { ...DEFAULT_CONFIG, repos: [{ path: '/r/a', name: 'a', commitInstructions: 'keep' }] }
+    const own = { name: 'Firmware safety review', text: 'ISR re-entrancy' }
+    const set = applyRepoSettings(cfg, '/r/a', { reviewPrompt: own })
+    expect(set.repos[0]).toEqual({ path: '/r/a', name: 'a', commitInstructions: 'keep', reviewPrompt: own })
+    expect(applyRepoSettings(set, '/r/a', { reviewPrompt: null }).repos[0]).toEqual({ path: '/r/a', name: 'a', commitInstructions: 'keep' })
+    expect(() => applyRepoSettings(cfg, '/r/a', { reviewPrompt: { name: '', text: '' } })).toThrow('Invalid setting: reviewPrompt')
+  })
+
+  it('keeps a valid review prompt when the commit instructions of the same repository are invalid', async () => {
+    const file = join(await tempDir(), 'config.json')
+    writeFileSync(file, JSON.stringify({ repos: [{ path: '/a', name: 'a', commitInstructions: 5, reviewPrompt: { name: 'ok', text: 't' } }], openTabs: [], settings: {} }))
+    expect(loadConfig(file).repos).toEqual([{ path: '/a', name: 'a', reviewPrompt: { name: 'ok', text: 't' } }])
+  })
+
+  it('drops an invalid saved repository prompt and resets invalid global prompts', async () => {
+    const file = join(await tempDir(), 'config.json')
+    const repos = [{ path: '/a', name: 'a', reviewPrompt: { name: 'ok', text: 't' } }, { path: '/b', name: 'b', reviewPrompt: { name: 5 } }]
+    writeFileSync(file, JSON.stringify({ repos, openTabs: [], settings: { reviewPrompts: 'oops' } }))
+    const cfg = loadConfig(file)
+    expect(cfg.repos).toEqual([repos[0], { path: '/b', name: 'b' }])
+    expect(cfg.settings.reviewPrompts).toEqual(DEFAULT_REVIEW_PROMPTS)
   })
 })

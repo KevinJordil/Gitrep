@@ -161,10 +161,10 @@ export interface ClaudeOptions {
 }
 
 // One read-only question: no tools, no MCP servers, no saved session, project settings only (and the cwd is empty).
-export async function askClaude(opts: ClaudeOptions, system: string, task: string, input: string): Promise<string> {
+export async function askClaude(opts: ClaudeOptions, system: string, task: string, input: string, timeoutMs?: number): Promise<string> {
   const claude = await resolveClaude(opts.claudePath)
   const args = ['-p', '--tools', '', '--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence', '--model', opts.model, '--system-prompt', system, task]
-  return cleanMessage(await runClaude(claude, args, input))
+  return cleanMessage(await runClaude(claude, args, input, timeoutMs))
 }
 
 export async function generateCommitMessage(repo: string, opts: ClaudeOptions, globalInstructions = '', repoInstructions = ''): Promise<GeneratedMessage> {
