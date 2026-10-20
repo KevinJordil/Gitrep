@@ -165,3 +165,21 @@ export interface GeneratedMessage {
   excluded: string[]
   files: number
 }
+
+// One conflict block as sent to Claude: the three versions and a few lines around them.
+export interface ConflictHunk {
+  before: string[]
+  ours: string[]
+  base: string[] | null
+  theirs: string[]
+  after: string[]
+}
+
+export type Confidence = 'high' | 'medium' | 'low'
+
+export interface ConflictSuggestion {
+  lines: string[] // replaces the whole block
+  confidence: Confidence
+  summary: string
+  explanation: string
+}
