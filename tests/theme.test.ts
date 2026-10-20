@@ -38,6 +38,6 @@ describe('theme tokens', () => {
   })
 
   it('has no hard-coded color outside :root', () => {
-    expect(css.slice(css.indexOf('}', css.indexOf(':root {'))).match(/#[0-9a-f]{3,8}\b/gi)).toBeNull()
+    expect(css.slice(css.indexOf('}', css.indexOf(':root {'))).match(/#[0-9a-f]{3,8}\b|rgba?\(/gi)).toBeNull()
   })
 })

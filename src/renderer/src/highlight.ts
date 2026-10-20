@@ -10,7 +10,7 @@ export interface Token {
 }
 
 // Diffs bigger than this are shown without colors: tokenizing them would stall the view.
-export const MAX_HIGHLIGHT = 200_000 // characters
+export const MAX_HIGHLIGHT = 30_000 // characters
 
 const PLAIN = 'var(--syn-plain)' // the theme's default color: such tokens are left uncolored
 
@@ -77,9 +77,9 @@ const loaded = new Map<Lang, Promise<void>>()
 
 async function ready(lang: Lang): Promise<HighlighterCore> {
   // forgiving: a pattern the JavaScript engine cannot run leaves its text uncolored instead of failing.
-  highlighter ??= createHighlighterCore({ themes: [THEME], langs: [], engine: createJavaScriptRegexEngine({ forgiving: true }) })
+  highlighter ??= createHighlighterCore({ themes: [THEME], langs: [], engine: createJavaScriptRegexEngine({ forgiving: true }) }).catch((e) => { highlighter = null; throw e })
   const hl = await highlighter
-  if (!loaded.has(lang)) loaded.set(lang, hl.loadLanguage(GRAMMARS[lang]()))
+  if (!loaded.has(lang)) loaded.set(lang, hl.loadLanguage(GRAMMARS[lang]()).catch((e) => { loaded.delete(lang); throw e })) // a failed load is retried by the next diff
   await loaded.get(lang)
   return hl
 }

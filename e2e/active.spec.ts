@@ -60,6 +60,7 @@ test('isolating an old branch shows it, showing all goes back to the active ones
   await v.getByLabel('Branches shown').selectOption('old/legacy')
   await expect(v.locator('.scope-chip')).toContainText('Only old/legacy')
   await expect.poll(subjects).toEqual(['legacy work', 'init alpha'])
+  await expect(v.locator('.sidebar .side-item', { hasText: 'old/legacy' })).toBeVisible() // an isolated branch is never folded
   await v.getByRole('button', { name: 'Show all branches' }).click()
   await expect(row('a two')).toBeVisible()
   await expect(row('legacy work')).toHaveCount(0)

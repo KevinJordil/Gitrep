@@ -14,7 +14,9 @@ export function loadConfig(file: string): Config {
   }
   try {
     const parsed = JSON.parse(raw) as Partial<Config>
-    return { ...structuredClone(DEFAULT_CONFIG), ...parsed, settings: { ...DEFAULT_CONFIG.settings, ...parsed.settings } }
+    const settings = { ...DEFAULT_CONFIG.settings, ...parsed.settings }
+    for (const [key, valid] of Object.entries(EDITABLE)) if (!valid(settings[key as keyof Settings])) Object.assign(settings, { [key]: DEFAULT_CONFIG.settings[key as keyof Settings] })
+    return { ...structuredClone(DEFAULT_CONFIG), ...parsed, settings }
   } catch {
     copyFileSync(file, `${file}.corrupt`) // keep the user's repo list recoverable
     return structuredClone(DEFAULT_CONFIG)

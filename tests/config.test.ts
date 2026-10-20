@@ -17,6 +17,12 @@ describe('config', () => {
     expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360 })
   })
 
+  it('resets hand-edited settings that fail validation to their defaults', async () => {
+    const file = join(await tempDir(), 'config.json')
+    writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { sidebarWidth: 'abc', activeDays: 'x', rightWidth: 5, claudeModel: 'sonnet' } }))
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360 })
+  })
+
   it('backs up a corrupt file instead of losing it', async () => {
     const file = join(await tempDir(), 'config.json')
     writeFileSync(file, '{oops')

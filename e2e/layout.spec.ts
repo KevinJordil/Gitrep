@@ -72,6 +72,11 @@ test('wide saved widths are clamped to a small window; the saved values are kept
   expect(await widthOf(v.locator('aside.right'))).toBeLessThan(720)
   await expect(v.getByRole('separator', { name: 'Resize the right panel' })).toHaveAttribute('aria-valuenow', String(await widthOf(v.locator('aside.right'))))
   expect(saved()).toMatchObject({ sidebarWidth: 480, rightWidth: 720 })
+  // the author and date columns give way so the commit subjects stay readable
+  const msg = v.locator('.graph-rows .row:not(.wip) .msg').first()
+  expect(await widthOf(msg)).toBeGreaterThan(100)
+  await expect(msg.locator('.s')).toBeVisible()
+  await expect(v.locator('.cols .c-author')).toBeHidden()
 })
 
 test('commit form: a tall summary field and a six-line description that grows vertically', async () => {

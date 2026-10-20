@@ -298,7 +298,7 @@ export function OperationPanel({ repo, status, info, path, busy, runOutcome, onP
         const [dir, name] = splitPath(f.path)
         return (
           <div key={f.path} className={`file ${conflict ? 'conflict' : ''} ${conflict && f.path === path ? 'sel' : ''}`}>
-            {conflict ? <StatusBadge status="U" /> : <span className="st st-added" title="Resolved">✓</span>}
+            {conflict ? <StatusBadge status="U" /> : <span className="st st-added" title="Resolved" role="img" aria-label="Resolved">✓</span>}
             <FileIcon path={f.path} />
             <button className="path" onClick={() => (conflict ? onPath(f.path) : onSelect({ path: f.path, side: 'staged' }))}>
               <span className="faint">{dir}</span>

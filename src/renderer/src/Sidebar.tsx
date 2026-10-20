@@ -41,7 +41,8 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeD
     ['Local branches', branches.filter((b) => !b.remote)],
     ['Remote', branches.filter((b) => b.remote)]
   ]
-  const active = isActive(branches, activeDays)
+  const isRecent = isActive(branches, activeDays)
+  const active = (b: Branch) => isRecent(b) || scope.only === b.name // an isolated branch is never folded
   const branchItem = (b: Branch) => {
     const isolated = scope.only === b.name
     const hidden = scope.hidden.includes(b.name)
