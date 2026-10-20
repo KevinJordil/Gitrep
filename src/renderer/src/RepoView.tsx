@@ -18,6 +18,9 @@ import { InteractiveRebase } from './InteractiveRebase'
 import { MergeMenu } from './MergeMenu'
 import type { FileView, Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
+import { newUi, type ReviewSession, type ReviewUi } from './review'
+import { ReviewDialog } from './ReviewDialog'
+import { ReviewBanner, ReviewView } from './ReviewView'
 import { applySuggestions, blocksOf, hunkOf, newDraft, textOf, type Draft } from './resolve'
 import { toggleHide, toggleOnly } from '../../shared/branches'
 import { Sidebar } from './Sidebar'
@@ -72,6 +75,12 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const draftsRef = useRef(drafts)
   draftsRef.current = drafts
   const [asking, setAsking] = useState(false)
+  const [reviewing, setReviewing] = useState<string | null>(null) // the branch of the open start dialog
+  const [session, setSession] = useState<ReviewSession | null>(null)
+  const [ui, setUi] = useState<ReviewUi | null>(null) // what the review screen remembers while another view is shown
+  const [rerunning, setRerunning] = useState(false)
+  const sessionRef = useRef(session)
+  sessionRef.current = session
   const [version, setVersion] = useState(0)
   const lastError = useRef('')
   const lastStatus = useRef('')
@@ -357,6 +366,34 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     }
   }
 
+  const openReview = (branch: string) => (session && session.review.branch === branch ? focusOn({ kind: 'review' }) : setReviewing(branch))
+  const startReview = (s: ReviewSession) => {
+    setReviewing(null)
+    setSession(s)
+    setUi(newUi(s.review))
+    focusOn({ kind: 'review' })
+  }
+  const exitReview = () => {
+    setSession(null)
+    focusOn({ kind: 'wip' })
+  }
+  const rerun = async () => {
+    if (!session) return
+    setRerunning(true)
+    try {
+      const review = await api.startReview(path, session.request)
+      // Exited or restarted meanwhile: the answer is dropped.
+      if (sessionRef.current?.started === session.started) {
+        setSession({ ...session, started: Date.now(), review })
+        setUi(newUi(review))
+      }
+    } catch (e) {
+      notify('error', errorText(e))
+    } finally {
+      setRerunning(false)
+    }
+  }
+
   const changes = status ? status.staged.length + status.unstaged.length + status.conflicted.length : 0
   const hasWip = changes > 0
   const head = status?.head ?? null
@@ -372,6 +409,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const staged = status?.staged.length ?? 0
   const wipLabel = hasWip ? `${changes} modified file${changes === 1 ? '' : 's'}${staged ? ` · ${staged} staged` : ''}` : null
   const branchLabel = status ? (status.branch ?? `Detached HEAD (${status.head?.slice(0, 7) ?? '?'})`) : '…'
+  const inReview = focus.kind === 'review' && !!session
   const stash = focus.kind === 'stash' ? stashes.find((s) => s.sha === focus.sha) : undefined
   const inConflicts = focus.kind === 'conflicts' && stopped && !!info
   const conflicted = status?.conflicted ?? []
@@ -429,6 +467,11 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
         <ToolButton icon="branch" label="Branch" busy={busy === 'branch'} disabled={!!busy || !head} onClick={() => head && newBranch(head, status?.branch ?? head.slice(0, 7))} />
         <ToolButton icon="stash" label="Stash" busy={busy === 'stash'} disabled={!!busy || !hasWip || !head} onClick={() => status && setDialog(<StashDialog repo={path} status={status} run={run} onClose={closeDialog} />)} />
         <ToolButton icon="pop" label="Pop" busy={busy === 'pop'} disabled={!!busy || !stashes.length} onClick={() => void runOutcome('pop', () => api.stashApply(path, stashes[0].sha, true), 'Stash applied and dropped')} />
+        <div className="tsep" />
+        <button className={`tbtn review ${inReview ? 'on' : ''}`} title={session ? 'Back to the review' : 'Review the current branch with Claude'} disabled={!session && !status?.branch} onClick={() => (session ? focusOn({ kind: 'review' }) : status?.branch && openReview(status.branch))}>
+          <Icon name="sparkle" />
+          <span>Review</span>
+        </button>
         <div className="grow" />
         <button className="tbtn boxed" onClick={() => void openCode()}>
           <Icon name="code" /> VS Code
@@ -451,9 +494,13 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           onResolveAll={() => void resolveAll()}
         />
       )}
+      {inReview && session && <ReviewBanner session={session} rerunning={rerunning} onRerun={() => void rerun()} onExit={exitReview} />}
       <div className="panes" style={{ '--side-w': `${sideW}px`, '--right-w': `${rightW}px` } as CSSProperties}>
         <Splitter pane="sidebar" width={sideW} other={rightW} onSave={(w) => onSettings({ sidebarWidth: w })} />
         <Splitter pane="right" width={rightW} other={sideW} onSave={(w) => onSettings({ rightWidth: w })} />
+        {inReview && session && ui ? (
+          <ReviewView key={session.started} repo={path} session={session} status={status} undoLabel={undo.undo} ui={ui} setUi={(f) => setUi((u) => (u ? f(u) : u))} run={run} onShowChanges={exitReview} />
+        ) : (
         <Sidebar
           branches={branches}
           tags={tags}
@@ -469,7 +516,8 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           onMenu={openBranchMenu}
           onSwitch={switchTo}
         />
-        {focus.kind === 'rebase' ? (
+        )}
+        {inReview ? null : focus.kind === 'rebase' ? (
           // Takes the center and the right panel.
           <InteractiveRebase key={`${focus.branch}:${focus.upstream}`} repo={path} branch={focus.branch} upstream={focus.upstream} status={status} busy={busy} runOutcome={runOutcome} onClose={closeRebase} />
         ) : focus.kind === 'file' ? (
@@ -508,7 +556,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
             )}
           </section>
         )}
-        {focus.kind === 'rebase' || focus.kind === 'file' ? null : stash ? (
+        {inReview || focus.kind === 'rebase' || focus.kind === 'file' ? null : stash ? (
           <StashPanel key={stash.sha} repo={path} stash={stash} branch={status?.branch ?? null} busy={busy} run={run} runOutcome={runOutcome} onNewBranch={() => stashBranch(stash)} />
         ) : inConflicts && status && info ? (
           <OperationPanel repo={path} status={status} info={info} path={conflictPath} busy={busy} runOutcome={runOutcome} onPath={(p) => focusOn({ kind: 'conflicts', path: p })} onSelect={setSelection} />
@@ -521,6 +569,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
       {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
       {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
+      {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing} branches={branches} settings={settings} entry={entry} onStart={startReview} onClose={() => setReviewing(null)} />}
       {dialog}
     </>
   )

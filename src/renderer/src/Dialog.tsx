@@ -8,10 +8,12 @@ interface DialogProps {
   onSubmit: () => void
   onClose: () => void
   children: ReactNode
+  wide?: boolean
+  foot?: ReactNode // at the left of the buttons
 }
 
 // Modal form on the native <dialog> (focus trap, Escape, backdrop). Electron has no window.prompt.
-export function Dialog({ title, submit, busy = false, canSubmit = true, onSubmit, onClose, children }: DialogProps) {
+export function Dialog({ title, submit, busy = false, canSubmit = true, onSubmit, onClose, children, wide = false, foot }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   useEffect(() => {
@@ -22,7 +24,7 @@ export function Dialog({ title, submit, busy = false, canSubmit = true, onSubmit
   return (
     <dialog
       ref={ref}
-      className="dialog"
+      className={`dialog ${wide ? 'wide' : ''}`}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault()
@@ -38,6 +40,7 @@ export function Dialog({ title, submit, busy = false, canSubmit = true, onSubmit
         <h2 id={titleId}>{title}</h2>
         {children}
         <div className="dialog-actions">
+          {foot && <span className="dialog-foot">{foot}</span>}
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>

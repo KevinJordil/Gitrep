@@ -3,6 +3,7 @@ import type { DiffSide, OpOutcome } from '../../shared/types'
 // What the right panel shows: the working tree changes, one commit, one stash, or the conflicts of an operation.
 // explain: set (to a new value each time) to ask Claude for an explanation as soon as the panel opens.
 // conflicts: path is the file shown (default: the first conflicted one). rebase: the interactive rebase editor of a local branch.
+// review: the review screen of the current review session (it takes the three panes).
 // file: the history or the blame of one file, from the commit `rev` (null: HEAD).
 export type Focus =
   | { kind: 'wip' }
@@ -11,6 +12,7 @@ export type Focus =
   | { kind: 'conflicts'; path?: string }
   | { kind: 'rebase'; branch: string; upstream: string }
   | { kind: 'file'; path: string; rev: string | null; view: FileView }
+  | { kind: 'review' }
 
 // What the file view's center shows: the selected commit's diff of the file, or the file's blame.
 export type FileView = 'diff' | 'blame'

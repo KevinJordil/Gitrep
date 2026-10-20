@@ -1,0 +1,171 @@
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { launchFixture, lines, openRepo, type Fixture } from './fixtures'
+
+test.describe.configure({ mode: 'serial' })
+
+let fx: Fixture
+let page: Page
+let v: Locator
+const git = (...args: string[]) => fx.git(fx.alpha, ...args).trim()
+const read = (f: string) => readFileSync(join(fx.alpha, f), 'utf8')
+const refresh = () => page.evaluate(() => window.dispatchEvent(new Event('focus')))
+const dialog = () => page.getByRole('dialog', { name: 'Review with Claude' })
+const findings = () => v.getByRole('complementary', { name: 'Findings' })
+const card = (title: string) => v.getByRole('group', { name: `Finding: ${title}` })
+const panel = () => v.locator('aside.right')
+const CALC = lines(12, { 3: 'int ratio = total / n;', 9: 'for (i = 0; i <= n; i++)', 10: '  sum += v[i];' })
+
+const finding = (fields: string[], comment: string, fix?: string[]) => ['=== finding', ...fields, '--- comment', comment, ...(fix ? ['--- fix', ...fix] : []), '=== end'].join('\n')
+const ANSWER = [
+  finding(['severity: minor', 'file: calc.c', 'line: R7', 'title: Magic number'], 'Name this constant.'),
+  finding(['severity: critical', 'file: calc.c', 'line: R3', 'title: Division by zero'], 'n can be 0 here.', ['int ratio = n ? total / n : 0;']),
+  finding(['severity: important', 'file: calc.c', 'line: R9', 'end: R10', 'title: Off by one'], 'The loop reads v[n].', ['for (i = 0; i < n; i++) sum += v[i];']),
+  finding(['severity: critical', 'file: nope.c', 'line: R1', 'title: Elsewhere'], 'Not in the diff.')
+].join('\n')
+
+async function startReview() {
+  await v.getByRole('button', { name: 'Review', exact: true }).click()
+  // The remote-tracking branch first: it is what a merge request compares with. Here local main is one commit ahead.
+  await expect(dialog().getByLabel('Compare with')).toHaveValue('origin/main')
+  await expect(dialog().getByRole('status')).toContainText('3 commits · 3 files')
+  await dialog().getByLabel('Compare with').selectOption('main')
+  await expect(dialog().getByRole('status')).toContainText('2 commits · 2 files · +13 −0 · merge base')
+  await dialog().getByRole('button', { name: 'Start review' }).click()
+  await expect(dialog()).toHaveCount(0)
+  await expect(v.getByRole('region', { name: 'Review' })).toContainText('Reviewing your branch feature/calc against main · 3 findings · Default review')
+}
+
+test.beforeAll(async () => {
+  fx = await launchFixture()
+  page = fx.page
+  // alpha: feature/calc adds calc.c (and a sensitive .env) in two commits, and is checked out.
+  git('switch', '-q', '-c', 'feature/calc')
+  writeFileSync(join(fx.alpha, 'calc.c'), lines(12, { 3: 'int ratio = total / n;' }))
+  writeFileSync(join(fx.alpha, '.env'), 'SECRET=hunter2\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'feat: calc')
+  writeFileSync(join(fx.alpha, 'calc.c'), CALC)
+  git('commit', '-q', '-am', 'feat: sum')
+  writeFileSync(join(fx.root, 'review-answer'), ANSWER)
+  v = await openRepo(page, 'alpha')
+})
+test.afterAll(async () => {
+  await fx?.close()
+})
+
+test('the toolbar starts a review of the current branch: compare with, scope, prompt, findings', async () => {
+  await v.getByRole('button', { name: 'Review', exact: true }).click()
+  await expect(dialog().getByLabel('Branch', { exact: true })).toHaveValue('feature/calc')
+  await expect(dialog().getByLabel('Review prompt')).toHaveValue('global:Default review')
+  await expect(dialog().locator('.prompt-pre')).toContainText('Look for bugs')
+  await page.screenshot({ path: 'e2e-artifacts/review-start.png' })
+  await dialog().getByRole('button', { name: 'Cancel' }).click()
+  await startReview()
+  const stdin = readFileSync(join(fx.root, 'review-stdin'), 'utf8')
+  expect(stdin).toContain('R3    +int ratio = total / n;')
+  expect(stdin).not.toContain('hunter2')
+  expect(readFileSync(join(fx.root, 'review-args'), 'utf8')).toContain('Review instructions from the user:\nLook for bugs')
+  await expect(findings()).toContainText('3 of 3 kept')
+  await expect(findings()).toContainText('Not sent to Claude (sensitive): .env')
+  await expect(findings()).toContainText('1 finding pointed outside the diff and was left out.')
+  await expect(findings().locator('.fsum')).toHaveText(['Division by zero', 'Off by one', 'Magic number'])
+  await expect(card('Division by zero').getByLabel('Comment')).toHaveValue('n can be 0 here.')
+  await expect(card('Division by zero').getByLabel('Suggested fix')).toHaveValue('int ratio = n ? total / n : 0;')
+  await page.mouse.move(0, 0)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.screenshot({ path: 'e2e-artifacts/review-branch.png' })
+})
+
+test('severity filter, navigation, keep and ignore', async () => {
+  await findings().getByRole('button', { name: 'Critical (1)' }).click()
+  await expect(findings().locator('.fsum')).toHaveText(['Division by zero'])
+  await findings().getByRole('button', { name: /^All/ }).click()
+  await expect(v.locator('.pane-head')).toContainText('finding 1 of 3')
+  await v.getByRole('button', { name: 'Next finding' }).click()
+  await expect(v.locator('.pane-head')).toContainText('finding 2 of 3')
+  await expect(card('Off by one')).toHaveClass(/active/)
+  await findings().getByLabel('Keep: Magic number').uncheck()
+  await expect(findings()).toContainText('2 of 3 kept')
+  await expect(card('Magic number')).toHaveClass(/off/)
+  await card('Magic number').getByRole('button', { name: 'Keep' }).click()
+  await expect(findings()).toContainText('3 of 3 kept')
+})
+
+test('prepare fixes: unstaged changes only, a fix whose lines changed is skipped, Undo reverts', async () => {
+  // My own edit on the lines of the "Off by one" fix: that fix must not be forced.
+  writeFileSync(join(fx.alpha, 'calc.c'), CALC.replace('  sum += v[i];', '  sum += v[i]; // mine'))
+  await refresh()
+  await expect(panel()).toContainText('You already have 1 unstaged file (calc.c). They are kept; fixes only change lines that still read as reviewed.')
+  await card('Division by zero').getByLabel('Suggested fix').fill('int ratio = n > 0 ? total / n : 0;')
+  await expect(panel()).toContainText('2 of 3 have a fix')
+  await panel().getByRole('button', { name: 'Prepare fixes (2)' }).click()
+  await expect(panel().getByRole('status')).toContainText('calc.c:3 · applied')
+  await expect(panel().getByRole('status')).toContainText('calc.c:9 · skipped: the lines changed since the review')
+  expect(read('calc.c').split('\n')[2]).toBe('int ratio = n > 0 ? total / n : 0;')
+  expect(read('calc.c')).toContain('// mine')
+  expect(git('diff', '--cached', '--name-only')).toBe('')
+  expect(git('log', '-1', '--format=%s')).toBe('feat: sum')
+  await expect(v.getByRole('button', { name: 'Undo', exact: true })).toHaveAttribute('title', 'Undo Prepare 1 review fix')
+  await page.screenshot({ path: 'e2e-artifacts/review-fixes.png' })
+  await panel().getByRole('button', { name: 'Show in Changes' }).click()
+  await expect(v.getByRole('region', { name: 'Review' })).toHaveCount(0)
+  await expect(v.locator('aside.right .file', { hasText: 'calc.c' })).toBeVisible()
+  await v.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect.poll(() => read('calc.c').split('\n')[2]).toBe('int ratio = total / n;')
+  expect(read('calc.c')).toContain('// mine')
+})
+
+test('re-run and exit', async () => {
+  await startReview()
+  await v.getByRole('button', { name: 'Re-run' }).click()
+  await expect(v.getByRole('button', { name: 'Re-run' })).toBeEnabled()
+  await expect(findings()).toContainText('3 of 3 kept')
+  await v.getByRole('button', { name: 'Exit review' }).click()
+  await expect(v.getByRole('region', { name: 'Review' })).toHaveCount(0)
+  await expect(v.locator('.graph-rows')).toBeVisible()
+})
+
+test('the review keeps its edits when another view is shown, and Prepare fixes works again after an Undo', async () => {
+  await startReview()
+  await card('Division by zero').getByLabel('Comment').fill('edited comment')
+  await findings().getByLabel('Keep: Magic number').uncheck()
+  // A merge that conflicts shows another view; the Review button brings the review back as it was.
+  git('restore', 'calc.c')
+  git('branch', 'other', 'main')
+  git('switch', '-q', 'other')
+  writeFileSync(join(fx.alpha, 'calc.c'), 'other\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'other calc')
+  git('switch', '-q', 'feature/calc')
+  await refresh()
+  await expect(v.getByRole('button', { name: 'Re-run' })).toBeVisible()
+  expect(() => git('merge', 'other')).toThrow()
+  await refresh()
+  await v.getByRole('button', { name: 'Show conflicts' }).click()
+  await expect(v.getByRole('region', { name: 'Review' })).toHaveCount(0)
+  await v.getByRole('button', { name: 'Review', exact: true }).click()
+  await expect(card('Division by zero').getByLabel('Comment')).toHaveValue('edited comment')
+  await expect(findings()).toContainText('2 of 3 kept')
+  await card('Magic number').getByRole('button', { name: 'Keep' }).click()
+  git('merge', '--abort')
+  await refresh()
+  await panel().getByRole('button', { name: 'Prepare fixes (2)' }).click()
+  await expect(panel().getByRole('status')).toContainText('calc.c:3 · applied')
+  await expect(panel().getByRole('button', { name: 'Prepare fixes (2)' })).toBeDisabled()
+  await expect(panel()).toContainText('Fixes applied. Undo to prepare them again.')
+  await v.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(panel().getByRole('button', { name: 'Prepare fixes (2)' })).toBeEnabled()
+  await v.getByRole('button', { name: 'Exit review' }).click()
+})
+
+test('Exit during a re-run stays exited', async () => {
+  await startReview()
+  writeFileSync(join(fx.root, 'review-delay'), '3')
+  await v.getByRole('button', { name: 'Re-run' }).click()
+  await v.getByRole('button', { name: 'Exit review' }).click()
+  await page.waitForTimeout(4500)
+  await expect(v.getByRole('region', { name: 'Review' })).toHaveCount(0)
+  await expect(v.locator('.graph-rows')).toBeVisible()
+})

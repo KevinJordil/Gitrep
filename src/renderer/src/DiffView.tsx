@@ -177,7 +177,7 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
 }
 
 // Syntax colors of the diff, computed after the plain diff is shown; null until then, or without a grammar.
-function useHighlight(diff: FileDiff | null | undefined, path: string): (Token[] | null)[][] | null {
+export function useHighlight(diff: FileDiff | null | undefined, path: string): (Token[] | null)[][] | null {
   const [done, setDone] = useState<{ diff: FileDiff; lines: (Token[] | null)[][] } | null>(null)
   useEffect(() => {
     const lang = langFor(path)
@@ -194,7 +194,7 @@ function useHighlight(diff: FileDiff | null | undefined, path: string): (Token[]
   return done && done.diff === diff ? done.lines : null
 }
 
-function Code({ tokens }: { tokens: Token[] }) {
+export function Code({ tokens }: { tokens: Token[] }) {
   return (
     <>
       {tokens.map((t, i) => (
