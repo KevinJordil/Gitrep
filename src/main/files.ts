@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { chmod, lstat, mkdtemp, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, sep } from 'node:path'
@@ -24,6 +25,9 @@ export async function filePatch(path: string, from: string, to: string): Promise
   }
 }
 
+// Unusual names would need quoting in the undo patch, a leading dash could pass for an option.
+export const unusualName = (rel: string): boolean => /["\\\t\n\r]/.test(rel) || rel.startsWith('-')
+
 // Why a path cannot be written: a symbolic link on the way (it could lead outside the repository), not a regular file, gone.
 export async function unfit(root: string, rel: string): Promise<{ reason: string } | { mode: number; size: number }> {
   let cur = root
@@ -35,7 +39,7 @@ export async function unfit(root: string, rel: string): Promise<{ reason: string
       if (last.isSymbolicLink()) return { reason: 'is a symbolic link' }
     }
   } catch {
-    return { reason: 'the file no longer exists' }
+    return { reason: 'no longer exists' }
   }
   if (!last?.isFile()) return { reason: 'is not a regular file' }
   return { mode: last.mode & 0o7777, size: last.size }
@@ -43,9 +47,9 @@ export async function unfit(root: string, rel: string): Promise<{ reason: string
 
 // Replaces a file through a temporary file in the same directory, keeping its mode.
 export async function replaceFile(full: string, content: Buffer | string, mode: number): Promise<void> {
-  const tmp = join(dirname(full), `.${basename(full)}.gitrep-${process.pid}.tmp`)
+  const tmp = join(dirname(full), `.${basename(full)}.gitrep-${randomUUID().slice(0, 8)}.tmp`)
   try {
-    await writeFile(tmp, content, { mode })
+    await writeFile(tmp, content, { mode, flag: 'wx' })
     await chmod(tmp, mode)
     await rename(tmp, full)
   } catch (e) {

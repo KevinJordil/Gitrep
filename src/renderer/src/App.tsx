@@ -8,7 +8,7 @@ import { errorText } from './format'
 import { Icon, Logo } from './icons'
 import { RepoView } from './RepoView'
 import { ToastContext, type Notify, type ToastAction, type ToastKind } from './toast'
-import { useLeaveGuard } from './unsaved'
+import { setUnsaved, unsavedRepos, useLeaveGuard } from './unsaved'
 
 interface Toast {
   id: number
@@ -50,10 +50,21 @@ export function App() {
     tabsRef.current?.querySelector('.tab.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
   }, [active, config?.openTabs.length])
 
+  // A reload (Ctrl+R) must not drop unsaved edits.
+  useEffect(() => {
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (!unsavedRepos().length) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onUnload)
+    return () => window.removeEventListener('beforeunload', onUnload)
+  }, [])
+
   // Ctrl+Tab and Ctrl+Shift+Tab cycle the tabs, Ctrl+1 selects the Dashboard.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.altKey || e.metaKey || document.querySelector('dialog[open], [role="dialog"]')) return
+      if (!e.ctrlKey || e.altKey || e.metaKey || document.querySelector('dialog[open], [role="dialog"], [role="menu"]')) return
       if (e.key === '1' && !e.shiftKey) setActive('dashboard')
       else if (e.key === 'Tab' && tabOrder.length > 1) setActive(tabOrder[(tabOrder.indexOf(active) + (e.shiftKey ? -1 : 1) + tabOrder.length) % tabOrder.length])
       else return
@@ -108,7 +119,10 @@ export function App() {
   }
   const { guard, guardAll, dialog: leaveDialog } = useLeaveGuard()
   // The window is closing while an editor holds unsaved edits: ask about each, then close.
-  useEffect(() => api.onCloseRequested(() => guardAll(() => void api.closeWindow())), [guardAll])
+  useEffect(() => api.onCloseRequested(() => guardAll(() => {
+        unsavedRepos().forEach((r) => setUnsaved(r, null)) // all answered: the page may unload without the reload guard
+        void api.closeWindow()
+      })), [guardAll])
   const closeTab = async (path: string) => {
     if (active === path) setActive('dashboard')
     await setTabs((tabs) => tabs.filter((t) => t !== path))
@@ -184,11 +198,11 @@ export function App() {
           </button>
           <nav className="tabs" aria-label="Tabs" ref={tabsRef}>
             {config.openTabs.map((p) => (
-              <div key={p} className={`tab ${active === p ? 'active' : ''}`}>
+              <div key={p} className={`tab ${active === p ? 'active' : ''}`} aria-current={active === p ? 'page' : undefined}>
                 <button className="tab-label" onClick={() => setActive(p)} title={p}>
                   <span>{nameOf(p)}</span>
                 </button>
-                <button className="tab-close" aria-label={`Close ${nameOf(p)}`} onClick={() => guard(p, () => setClosing(p))}>
+                <button className="tab-close" aria-label={`Close ${nameOf(p)}`} onClick={() => setClosing(p)}>
                   <Icon name="close" size={12} stroke={2} />
                 </button>
               </div>
@@ -214,7 +228,7 @@ export function App() {
             onSubmit={() => {
               const p = closing
               setClosing(null)
-              void closeTab(p)
+              guard(p, () => void closeTab(p)) // the edits are only asked about once the close is confirmed
             }}
             onClose={() => setClosing(null)}
           >

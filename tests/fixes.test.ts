@@ -75,7 +75,7 @@ describe('prepareFixes', () => {
     expect(r.skipped).toEqual([
       { id: 4, path: 'a.c', reason: 'nothing to change' },
       { id: 1, path: 'a.c', reason: 'overlaps another fix' },
-      { id: 3, path: 'gone.c', reason: 'the file no longer exists' }
+      { id: 3, path: 'gone.c', reason: 'no longer exists' }
     ])
   })
 

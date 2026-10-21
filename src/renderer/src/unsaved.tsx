@@ -19,7 +19,7 @@ export const unsavedRepos = (): string[] => [...open.keys()]
 
 // guard(repo, next) runs `next` now, or after the user saved or discarded the unsaved edits of that repo.
 // Render `dialog` somewhere in the component.
-export function useLeaveGuard(): { guard: (repo: string, next: () => void) => void; guardAll: (next: () => void) => void; dialog: ReactNode } {
+export function useLeaveGuard(): { guard: (repo: string, next: () => void) => void; guardAll: (next: () => void, done?: Set<string>) => void; dialog: ReactNode } {
   const [pending, setPending] = useState<{ repo: string; unsaved: Unsaved; next: () => void } | null>(null)
   const [busy, setBusy] = useState(false)
   const guard = useCallback((repo: string, next: () => void) => {
@@ -29,17 +29,21 @@ export function useLeaveGuard(): { guard: (repo: string, next: () => void) => vo
   }, [])
   // Every repository with unsaved edits is asked, one after the other (closing the window).
   const guardAll = useCallback(
-    (next: () => void) => {
-      const [repo] = unsavedRepos()
+    (next: () => void, done: Set<string> = new Set()) => {
+      const repo = unsavedRepos().find((r) => !done.has(r)) // the ones already saved or discarded are not asked again
       if (repo === undefined) next()
-      else guard(repo, () => guardAll(next))
+      else
+        guard(repo, () => {
+          done.add(repo)
+          guardAll(next, done)
+        })
     },
     [guard]
   )
   const leave = () => {
     const p = pending
     setPending(null)
-    if (p) setUnsaved(p.repo, null) // discarded or saved: the editor is going away
+    // Discarded or saved: the editor goes away and unregisters itself; until then Cancel on a later step leaves it intact.
     p?.next()
   }
   const dialog = pending && (

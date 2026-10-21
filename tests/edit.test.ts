@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, stat, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readWorkingFile, saveWorkingFile, workingFileReason } from '../src/main/edit'
@@ -110,7 +110,52 @@ describe('workingFileReason and getHeadDiff', () => {
     expect(await workingFileReason(repo, 'link.txt')).toEqual(expect.any(String))
     await writeFile(join(repo, 'nul.bin'), Buffer.from('a\0b'))
     expect(await workingFileReason(repo, 'nul.bin')).toMatch(/UTF-8/)
-    expect(await workingFileReason(repo, 'missing.txt')).toEqual(expect.any(String))
+    expect(await workingFileReason(repo, 'missing.txt')).toBe('The file no longer exists.')
+  })
+
+  it('does not read the whole file: invalid UTF-8 without a NUL passes the light check, the read refuses it', async () => {
+    const repo = await setup()
+    await writeFile(join(repo, 'latin.txt'), Buffer.from([0x66, 0xff, 0x6f]))
+    expect(await workingFileReason(repo, 'latin.txt')).toBeNull()
+    expect(await readWorkingFile(repo, 'latin.txt')).toHaveProperty('reason')
+  })
+
+  it('refuses unusual names with a reason, for the check and for the save', async () => {
+    const repo = await setup()
+    await write(repo, '-dash.txt', 'x\n')
+    await write(repo, 'tab\there.txt', 'x\n')
+    expect(await workingFileReason(repo, '-dash.txt')).toMatch(/unusual file name/)
+    expect(await workingFileReason(repo, 'tab\there.txt')).toMatch(/unusual file name/)
+    await expect(saveWorkingFile(repo, '-dash.txt', 'y', 'x\n')).rejects.toThrow('unusual file name')
+  })
+
+  it('a conflicted file is found by the index, not by the status', async () => {
+    const repo = await setup()
+    await git(repo, ['switch', '-q', '-c', 'other'])
+    await write(repo, 'a.txt', 'other\ntwo\n')
+    await commitAll(repo, 'other')
+    await git(repo, ['switch', '-q', 'main'])
+    await write(repo, 'a.txt', 'main\ntwo\n')
+    await commitAll(repo, 'main')
+    await git(repo, ['merge', 'other'], { okCodes: [1] })
+    expect(await workingFileReason(repo, 'a.txt')).toBe('Use the conflict editor for this file.')
+  })
+
+  it('leaves no temporary file behind after a save', async () => {
+    const repo = await setup()
+    await saveWorkingFile(repo, 'a.txt', 'new\n', 'one\ntwo\n')
+    expect((await readdir(repo)).filter((f) => f.includes('.tmp'))).toEqual([])
+  })
+
+  it('a literal name with a glob character is diffed alone', async () => {
+    const repo = await setup()
+    await write(repo, 'a*b.txt', 'star\n')
+    await write(repo, 'axb.txt', 'x\n')
+    await commitAll(repo, 'files')
+    await write(repo, 'a*b.txt', 'star2\n')
+    await write(repo, 'axb.txt', 'x2\n')
+    const d = await getHeadDiff(repo, 'a*b.txt')
+    expect(d?.hunks.flatMap((h) => h.lines.filter((l) => l.kind === 'add').map((l) => l.text))).toEqual(['star2'])
   })
 
   it('diffs against HEAD whatever is staged, and an untracked file is all added', async () => {

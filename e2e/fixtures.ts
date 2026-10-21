@@ -123,6 +123,8 @@ export async function launchFixture(): Promise<Fixture> {
   return {
     root, alpha, beta, gamma, remote, terminalLog, app, page, git, gitAt,
     close: async () => {
+      // A dirty editor would hold the window open: destroy it first.
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.destroy())).catch(() => undefined)
       await app.close().catch(() => undefined)
       rmSync(root, { recursive: true, force: true })
     }

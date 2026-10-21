@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell, type OpenDialogOptions } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, safeStorage, shell, type OpenDialogOptions } from 'electron'
 import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -291,6 +291,11 @@ function createWindow(): void {
     e.preventDefault()
     win?.webContents.send('close-requested')
   })
+  // A page that is gone or reloading cannot ask: the close block is released with it.
+  const release = () => void (unsavedEdits = false)
+  win.webContents.on('render-process-gone', release)
+  win.webContents.on('unresponsive', release)
+  win.webContents.on('did-start-loading', release)
   win.on('closed', () => {
     win = null
   })
@@ -312,6 +317,7 @@ app.on('second-instance', () => {
 })
 
 void app.whenReady().then(() => {
+  if (app.isPackaged) Menu.setApplicationMenu(null) // the default menu reloads the page (Ctrl+R) and offers dev tools
   createWindow()
   if (SMOKE) return
   setTimeout(() => void fetchAll(), 15_000)

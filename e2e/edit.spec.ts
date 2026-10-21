@@ -144,9 +144,54 @@ test('CRLF files keep their line endings and the absence of a final newline', as
   await open('crlf.txt')
   await edit().click()
   await typeFirst('X')
+  await page.keyboard.press('Enter')
+  // Pasted text takes the file's line break too.
+  await editor().evaluate((el) => {
+    const data = new DataTransfer()
+    data.setData('text/plain', 'p\nq')
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  })
   await page.keyboard.press('Control+s')
   await expect(page.locator('.toast', { hasText: 'Saved crlf.txt' })).toBeVisible()
-  expect(readFileSync(join(fx.beta, 'crlf.txt')).toString('latin1')).toBe('Xa\r\nb\r\nc')
+  expect(readFileSync(join(fx.beta, 'crlf.txt')).toString('latin1')).toBe('X\r\np\r\nqa\r\nb\r\nc')
+})
+
+test('the gutter marks a file against HEAD even when part of it is staged', async () => {
+  await back()
+  await reset()
+  fx.git(fx.beta, 'add', 'file.txt')
+  writeFileSync(join(fx.beta, 'file.txt'), lines(20, { 3: 'line 3 CHANGED', 10: 'line 10 CHANGED', 15: 'line 15 CHANGED' }))
+  await refresh()
+  await open('file.txt')
+  await edit().click()
+  await expect(v.locator('.cm-change-gutter .cm-chg')).toHaveCount(3)
+  await v.getByRole('button', { name: 'Diff', exact: true }).click()
+  fx.git(fx.beta, 'reset', '-q', 'file.txt')
+  await reset()
+})
+
+test('closing a tab with unsaved edits asks about the edits only after the tab close is confirmed', async () => {
+  await back()
+  await open('file.txt')
+  await edit().click()
+  await typeFirst('tab ')
+  await page.getByRole('button', { name: 'Close beta' }).click()
+  const close = page.getByRole('dialog', { name: 'Close beta?' })
+  await close.getByRole('button', { name: 'Close tab' }).click()
+  const leave = page.getByRole('dialog', { name: 'Discard your unsaved edits to file.txt?' })
+  await leave.getByRole('button', { name: 'Discard' }).waitFor() // asked after the confirmation
+  await leave.getByRole('button', { name: 'Cancel' }).click()
+  await expect(editor()).toContainText('tab line 1')
+  await expect(v.getByText('Unsaved')).toBeVisible()
+  await undoButton().click() // still registered: repository Undo is refused
+  const refused = page.locator('.toast', { hasText: 'Save or discard your edits to file.txt first.' })
+  await expect(refused).toBeVisible()
+  await refused.getByRole('button', { name: 'Dismiss notification' }).click()
+  await page.getByRole('button', { name: 'Close beta' }).click()
+  await close.getByRole('button', { name: 'Cancel' }).click() // no edit question when the close is cancelled
+  await expect(leave).toBeHidden()
+  await v.getByRole('button', { name: 'Revert edits' }).click()
+  await v.getByRole('button', { name: 'Diff', exact: true }).click()
 })
 
 test('a dirty editor stays open when the file no longer has changes in git', async () => {
@@ -157,7 +202,7 @@ test('a dirty editor stays open when the file no longer has changes in git', asy
   await edit().click()
   await typeFirst('kept ')
   await v.getByRole('button', { name: 'Discard changes to file.txt' }).click()
-  await expect(v.locator('.editor-banner', { hasText: 'This file no longer has changes in git: your edits are kept here; Save writes them back.' })).toBeVisible()
+  await expect(v.locator('.editor-banner', { hasText: 'This file no longer has changes in git: your edits are kept here. Save writes them back only when the file still exists (if it was deleted, copy your edits before leaving).' })).toBeVisible()
   await expect(editor()).toContainText('kept line 1')
   await v.getByRole('button', { name: 'Revert edits' }).click()
   await v.getByRole('button', { name: 'Diff', exact: true }).click()

@@ -61,6 +61,10 @@ export function DiffView({ repo, selection, version, onBack, run, onChanged, gon
   }
 
   useEffect(() => {
+    setDiff(undefined)
+    setShowAll(false)
+  }, [side])
+  useEffect(() => {
     let alive = true
     const load = commit ? api.commitDiff(repo, commit, path, oldPath) : api.diff(repo, path, side)
     load

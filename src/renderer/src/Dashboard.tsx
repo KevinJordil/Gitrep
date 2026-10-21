@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RepoSummary } from '../../shared/types'
 import { api } from './api'
+import { unsavedOf } from './unsaved'
 import { changeCount, errorText, groupByFolder, matchesFilter, relativeDate, type DashFilter } from './format'
 import { Icon } from './icons'
 import { useToast } from './toast'
@@ -72,6 +73,8 @@ export function Dashboard({ repoCount, onOpen, onAdd, onChanged }: Props) {
   }
   const launch = (fn: () => Promise<void>) => fn().catch((e: unknown) => notify('error', errorText(e)))
   const remove = (r: RepoSummary) => {
+    const open = unsavedOf(r.path)
+    if (open) return notify('error', `Save or discard your edits to ${open.path} first.`)
     if (!window.confirm(`Remove ${r.name} from GitRep? The folder is not deleted.`)) return
     void act(`rm:${r.path}`, async () => {
       await api.removeRepo(r.path)

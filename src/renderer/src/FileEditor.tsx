@@ -1,34 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Compartment, RangeSet, StateEffectType } from '@codemirror/state'
 import type { EditorView, GutterMarker } from '@codemirror/view'
-import type { FileDiff } from '../../shared/types'
 import { api } from './api'
+import { changeMarks, type Marks } from './changeMarks'
 import { errorText, splitPath } from './format'
 import { langFor } from './fileTypes'
 import { Dialog } from './Dialog'
 import { setUnsaved } from './unsaved'
 import { useToast } from './toast'
 
-// Lines (1-based, in the new file) a diff adds or changes, and where it removes lines (the line after the removal).
-export function changeMarks(diff: FileDiff | null | undefined): Marks {
-  const add: number[] = []
-  const del: number[] = []
-  for (const h of diff?.hunks ?? []) {
-    let removed = false
-    for (const l of h.lines) {
-      if (l.kind === 'del') removed = true
-      else if (l.newNo !== null) {
-        if (l.kind === 'add') add.push(l.newNo)
-        else if (removed) del.push(l.newNo)
-        removed = false
-      }
-    }
-    if (removed) del.push(h.newStart + h.newLines)
-  }
-  return { add, del }
-}
-
-type Marks = { add: number[]; del: number[] }
 type Cm = Awaited<ReturnType<typeof loadCm>>
 // CodeMirror and its grammars are fetched when the first editor opens, not with the app.
 const loadCm = async () => {
@@ -178,6 +158,8 @@ export function FileEditor({ repo, path, initial, version, gone, onSaved, onRelo
             v.keymap.of([{ key: 'Mod-s', run: save, preventDefault: true }, ...search.searchKeymap, ...commands.historyKeymap, ...commands.defaultKeymap, commands.indentWithTab]),
             markers,
             theme(m),
+            // Pasted and dropped text takes the document's line break, so a CRLF file stays CRLF.
+            v.EditorView.clipboardInputFilter.of((text, st) => text.replace(/\r\n|\r|\n/g, st.lineBreak)),
             v.EditorView.contentAttributes.of({ 'aria-label': `Edit ${splitPath(path)[1]}` }),
             readOnly.of(state.EditorState.readOnly.of(false)),
             languageSlot.of([]),
@@ -321,7 +303,7 @@ export function FileEditor({ repo, path, initial, version, gone, onSaved, onRelo
           Save
         </button>
       </div>
-      {gone && <div className="banner editor-banner">This file no longer has changes in git: your edits are kept here; Save writes them back.</div>}
+      {gone && <div className="banner editor-banner">This file no longer has changes in git: your edits are kept here. Save writes them back only when the file still exists (if it was deleted, copy your edits before leaving).</div>}
       {external !== null && (
         <div className="banner editor-banner">
           <span>Changed on disk: the file was modified outside this editor.</span>

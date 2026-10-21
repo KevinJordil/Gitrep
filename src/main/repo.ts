@@ -78,7 +78,7 @@ export async function getBranches(repo: string): Promise<Branch[]> {
 export async function getHeadDiff(repo: string, path: string): Promise<FileDiff | null> {
   if (path.endsWith('/')) return null
   insideRepo(repo, path)
-  const tracked = (await git(repo, [...RO, 'ls-files', '--', path])).trim() !== ''
+  const tracked = (await git(repo, [...RO, 'ls-files', '--', path])).trim() !== '' // literal pathspecs: GIT_LITERAL_PATHSPECS is set by git()
   if (!tracked) return getDiff(repo, path, 'untracked')
   const head = await hasHead(repo)
   if (!head) return getDiff(repo, path, 'staged')

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { relative, resolve, sep } from 'node:path'
 import type { FixRequest, FixResult } from '../shared/types'
-import { filePatch, MAX_FILE, replaceFile, unfit, utf8Text } from './files'
+import { filePatch, MAX_FILE, replaceFile, unfit, unusualName, utf8Text } from './files'
 import { serialized } from './git'
 import { record } from './journal'
 import { getStatus, insideRepo } from './repo'
@@ -33,8 +33,7 @@ export async function prepareFixes(repo: string, branch: string, fixes: FixReque
   for (const f of fixes) {
     if (!f || !Number.isInteger(f.id) || typeof f.path !== 'string' || !Number.isInteger(f.line) || f.line < 1 || !Number.isInteger(f.endLine) || f.endLine < f.line || !lineList(f.original) || !lineList(f.lines) || f.original.length !== f.endLine - f.line + 1) throw new Error('Invalid fix')
     const rel = relative(root, insideRepo(repo, f.path))
-    // Unusual names would need quoting in the undo patch, a leading dash could pass for an option.
-    if (/["\\\t\n\r]/.test(rel) || rel.startsWith('-') || /["\\\t\n\r]/.test(f.path) || f.path.startsWith('-')) throw new Error(`Cannot prepare a fix in ${f.path}: unusual file name`)
+    if (unusualName(rel) || unusualName(f.path)) throw new Error(`Cannot prepare a fix in ${f.path}: unusual file name`)
     paths.set(f, rel.split(sep).join('/'))
     text += f.original.join('').length + f.lines.join('').length
   }
