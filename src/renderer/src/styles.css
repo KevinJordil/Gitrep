@@ -50,7 +50,7 @@
   --warn-bg: #2f2615;
   --warn-bd: #6a5426;
   --warn-fg: #f3dcae;
-  /* blame age, recent to old (blame.ts repeats these values) */
+  /* blame age, recent to old (blameHeat.ts repeats these values) */
   --heat-new: #e8b24a;
   --heat-mid: #7a5a24;
   --heat-old: #4a4f5a;

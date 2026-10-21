@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from 'react'
 import type { Blame, BlameCommit } from '../../shared/types'
-import { blameRows, heatOf, type BlameRow } from './blame'
+import { blameRows, heatOf, type BlameRow } from './blameHeat'
 import { colorFor, initials, relativeDate } from './format'
 
 // Limit: longer files draw this many lines until "Show all" (each line is a DOM row).

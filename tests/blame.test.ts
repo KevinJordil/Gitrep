@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { blameRows, heatColor, heatOf } from '../src/renderer/src/blame'
+import { blameRows, heatColor, heatOf } from '../src/renderer/src/blameHeat'
 import type { BlameCommit } from '../src/shared/types'
 
 const commit = (sha: string, date: number): BlameCommit => ({ sha, author: 'Ada', email: 'ada@example.com', date, subject: sha, previous: null })

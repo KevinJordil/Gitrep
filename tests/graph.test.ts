@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Commit } from '../src/shared/types'
-import { ancestorsOf, layoutGraph, searchCommits, splitMatch, type GraphNode } from '../src/renderer/src/graph'
+import { ancestorsOf, layoutGraph, searchCommits, splitMatch, type GraphNode } from '../src/renderer/src/graphLayout'
 
 const n = (sha: string, ...parents: string[]): GraphNode => ({ sha, parents })
 const seg = (kind: 'through' | 'top' | 'bottom', from: number, to: number, color: number, dashed = false) => ({ kind, from, to, color, dashed })

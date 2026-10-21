@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProper
 import { DEFAULT_GRAPH_COLUMNS, GRAPH_COLUMN_MAX, GRAPH_COLUMN_MIN, GRAPH_LANES_MIN, GRAPH_LIMIT, type Branch, type Commit, type GraphScope, type Settings, type SyncState } from '../../shared/types'
 import { colorFor, initials, laneColor, parseRef, relativeDate } from './format'
 import { dragBranch, dropOnBranch, type DropBranch } from './dnd'
-import { searchCommits, splitMatch, type GraphRow, type SearchField, type Segment } from './graph'
+import { searchCommits, splitMatch, type GraphRow, type SearchField, type Segment } from './graphLayout'
 import { Icon } from './icons'
 import type { Focus } from './model'
 import { useResizeHandle } from './useResize'
