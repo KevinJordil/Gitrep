@@ -121,6 +121,8 @@ export interface Api {
   reviewScope(repo: string, branch: string, base: string): Promise<ReviewScope>
   startReview(repo: string, req: ReviewRequest): Promise<Review> // asks Claude; nothing is written
   prepareFixes(repo: string, branch: string, fixes: FixRequest[]): Promise<FixResult> // unstaged changes, one undo step
+  readWorkingFile(repo: string, path: string): Promise<{ text: string } | { reason: string }> // reason: why it cannot be edited
+  saveWorkingFile(repo: string, path: string, text: string, base: string): Promise<void> // base: what the editor opened; refused when the disk differs. One undo step
   onRepoChanged(cb: (repo: string) => void): () => void
 }
 
@@ -202,7 +204,9 @@ export const API_METHODS = [
   'postReviewStep',
   'reviewScope',
   'startReview',
-  'prepareFixes'
+  'prepareFixes',
+  'readWorkingFile',
+  'saveWorkingFile'
 ] as const satisfies readonly InvokeMethod[]
 
 // Compile-time guard: every invoke method must be listed above.

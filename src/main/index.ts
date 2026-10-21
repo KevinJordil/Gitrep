@@ -10,6 +10,7 @@ import * as assist from './assist'
 import * as claude from './claude'
 import { addRepo, applyRepoSettings, applySettings, loadConfig, removeRepo, saveConfig } from './config'
 import * as conflicts from './conflicts'
+import * as edit from './edit'
 import * as fixes from './fixes'
 import { git, gitDir } from './git'
 import { isHost } from './forge'
@@ -246,7 +247,9 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   postReviewStep: forRepo((p, branch: string, head: string, draft: boolean, step: PostStep) => requests.postStep(p, String(branch), String(head), !!draft, step, forgeContext())),
   reviewScope: forRepo((p, branch: string, base: string) => review.reviewScope(p, String(branch), String(base))),
   startReview: forRepo((p, req: ReviewRequest) => review.startReview(p, req, claudeOptions())),
-  prepareFixes: forRepo((p, branch: string, list: FixRequest[]) => fixes.prepareFixes(p, String(branch), list))
+  prepareFixes: forRepo((p, branch: string, list: FixRequest[]) => fixes.prepareFixes(p, String(branch), list)),
+  readWorkingFile: forRepo((p, path: string) => edit.readWorkingFile(p, String(path))),
+  saveWorkingFile: forRepo((p, path: string, text: string, base: string) => edit.saveWorkingFile(p, String(path), text, base))
 }
 
 for (const name of API_METHODS) {

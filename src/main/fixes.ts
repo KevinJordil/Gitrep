@@ -1,60 +1,17 @@
-import { chmod, lstat, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { basename, dirname, join, relative, resolve, sep } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { relative, resolve, sep } from 'node:path'
 import type { FixRequest, FixResult } from '../shared/types'
-import { git, serialized } from './git'
+import { filePatch, MAX_FILE, replaceFile, unfit, utf8Text } from './files'
+import { serialized } from './git'
 import { record } from './journal'
 import { getStatus, insideRepo } from './repo'
 
 const MAX_FIXES = 50
 const MAX_LINE = 2000
 const MAX_TEXT = 200_000 // characters, replacements and originals together
-const MAX_FILE = 2 * 1024 * 1024
 const MAX_UNDO_PATCH = 20 * 1024 * 1024 // same limit as discarding changes
 const lineList = (v: unknown): v is string[] => Array.isArray(v) && v.length <= 200 && v.every((l) => typeof l === 'string' && l.length <= MAX_LINE && !l.includes('\n'))
 const noCr = (l: string) => l.replace(/\r$/, '')
-
-// The patch that turns `from` into `to` for one file, with the repository path in its headers (for the undo journal).
-async function filePatch(path: string, from: string, to: string): Promise<Buffer> {
-  const dir = await mkdtemp(join(tmpdir(), 'gitrep-fix-'))
-  try {
-    await Promise.all([writeFile(join(dir, 'from'), from), writeFile(join(dir, 'to'), to)])
-    const out = await git(dir, ['diff', '--no-index', '--no-color', '--no-ext-diff', '--', 'from', 'to'], { okCodes: [1] })
-    return Buffer.from(`diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n${out.slice(out.indexOf('\n@@') + 1)}`)
-  } finally {
-    await rm(dir, { recursive: true, force: true })
-  }
-}
-
-// Why a path cannot be written: a symbolic link on the way (it could lead outside the repository), not a regular file, gone.
-async function unfit(root: string, rel: string): Promise<{ reason: string } | { mode: number; size: number }> {
-  let cur = root
-  let last
-  try {
-    for (const part of rel.split(sep)) {
-      cur = join(cur, part)
-      last = await lstat(cur)
-      if (last.isSymbolicLink()) return { reason: 'is a symbolic link' }
-    }
-  } catch {
-    return { reason: 'the file no longer exists' }
-  }
-  if (!last?.isFile()) return { reason: 'is not a regular file' }
-  return { mode: last.mode & 0o7777, size: last.size }
-}
-
-// Replaces a file through a temporary file in the same directory, keeping its mode.
-async function replaceFile(full: string, content: Buffer | string, mode: number): Promise<void> {
-  const tmp = join(dirname(full), `.${basename(full)}.gitrep-${process.pid}.tmp`)
-  try {
-    await writeFile(tmp, content, { mode })
-    await chmod(tmp, mode)
-    await rename(tmp, full)
-  } catch (e) {
-    await rm(tmp, { force: true })
-    throw e
-  }
-}
 
 interface Planned {
   full: string
@@ -103,8 +60,8 @@ export async function prepareFixes(repo: string, branch: string, fixes: FixReque
         continue
       }
       const before = await readFile(full).catch(() => null)
-      const content = before?.toString('utf8')
-      if (!before || before.includes(0) || !Buffer.from(content!, 'utf8').equals(before)) {
+      const content = before && utf8Text(before)
+      if (!before || content === null) {
         skipAll('not a UTF-8 text file')
         continue
       }
