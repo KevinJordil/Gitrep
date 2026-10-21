@@ -1,3 +1,4 @@
+import { unquote } from './diff'
 import type { Blame, BlameChunk, BlameCommit, Branch, Commit, FileChange, FileCommit, FileStatus, RepoStatus, Stash, Tag } from '../shared/types'
 
 // Parses `git status --porcelain=v2 --branch -z`.
@@ -65,8 +66,8 @@ export function parseLog(out: string): Commit[] {
 }
 
 function toCommit(record: string): Commit {
-  const [sha, parents, author, email, at, ct, refs, subject] = record.split('\x1f')
-  return { sha, parents: parents ? parents.split(' ') : [], author, email, date: Number(at), committed: Number(ct), refs: refs ? refs.split(', ') : [], subject }
+  const [sha, parents, author, email, at, ct, refs, ...subject] = record.split('\x1f')
+  return { sha, parents: parents ? parents.split(' ') : [], author, email, date: Number(at), committed: Number(ct), refs: refs ? refs.split(', ') : [], subject: subject.join('\x1f') }
 }
 
 // Parses `git log -z --numstat --format=FILE_LOG_FORMAT -- <path>`; `path` is the file's name in the newest commit.
@@ -78,7 +79,7 @@ export function parseFileLog(out: string, path: string): FileCommit[] {
   const records: string[] = []
   for (const part of out.split('\x1e')) {
     const fields = part.split('\0')[0].split('\x1f')
-    if (fields.length === 8 && /^[0-9a-f]{40,64}$/.test(fields[0])) records.push(part)
+    if (fields.length >= 8 && /^[0-9a-f]{40,64}$/.test(fields[0])) records.push(part)
     else if (records.length) records[records.length - 1] += '\x1e' + part
   }
   for (const record of records) {
@@ -136,7 +137,7 @@ export function parseBlame(out: string): Pick<Blame, 'lines' | 'chunks' | 'commi
       else if (key === 'previous') {
         const at = value.indexOf(' ')
         if (at < 0 || !SHA.test(value.slice(0, at)) || at === value.length - 1) bad('previous')
-        c.previous = { sha: value.slice(0, at), path: value.slice(at + 1) }
+        c.previous = { sha: value.slice(0, at), path: unquote(value.slice(at + 1)) }
       }
       continue
     }

@@ -3,11 +3,12 @@ import type { FileDiff, Hunk } from '../shared/types'
 const ESCAPES: Record<string, string> = { t: '\t', n: '\n', '"': '"', '\\': '\\' }
 
 // git quotes unusual paths C-style. Limitation: octal escapes (\303…) are not decoded; with core.quotePath=false they only appear for control characters.
-function cleanPath(raw: string): string {
-  let p = raw.replace(/\t$/, '')
-  if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1).replace(/\\(.)/g, (_, c: string) => ESCAPES[c] ?? c)
-  return p.replace(/^[ab]\//, '')
+export function unquote(raw: string): string {
+  const p = raw.replace(/\t$/, '')
+  return p.startsWith('"') && p.endsWith('"') ? p.slice(1, -1).replace(/\\(.)/g, (_, c: string) => ESCAPES[c] ?? c) : p
 }
+
+const cleanPath = (raw: string): string => unquote(raw).replace(/^[ab]\//, '')
 
 export function parseDiff(text: string): FileDiff[] {
   const files: FileDiff[] = []

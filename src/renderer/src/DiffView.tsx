@@ -120,9 +120,9 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
       <div className="diff-body">
         {diff === undefined && <span className="faint">Loading…</span>}
         {diff === null && <span className="faint">No changes to display.</span>}
-        {diff && diff.oldPath !== diff.newPath && (
+        {diff && oldPath && (
           <div className="banner">
-            Renamed from <span className="mono">{diff.oldPath}</span>
+            Renamed from <span className="mono">{oldPath}</span>
           </div>
         )}
         {diff?.binary && <div className="banner">Binary file: no preview.</div>}

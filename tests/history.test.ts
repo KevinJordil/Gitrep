@@ -118,6 +118,13 @@ describe('getFileHistory', () => {
     expect(rows(await getFileHistory(repo, 'a\x1eb.txt', null, true))).toEqual([['one', 'a\x1eb.txt', null, 1, 0]])
   })
 
+  it('keeps a subject that contains the field separator', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.txt', '1\n')
+    await commitAll(repo, 'one\x1ftwo')
+    expect(rows(await getFileHistory(repo, 'a.txt', null, true))).toEqual([['one\x1ftwo', 'a.txt', null, 1, 0]])
+  })
+
   it('is empty before the first commit and refuses bad paths and revisions', async () => {
     const repo = await makeRepo()
     expect(await getFileHistory(repo, 'a.txt', null, true)).toEqual([])
@@ -161,6 +168,19 @@ describe('getBlame', () => {
     expect(b.commits[edit]).toMatchObject({ author: 'Test User', email: 'test@example.com', subject: 'edit old', previous: { sha: unrelated, path: 'old.txt' } })
     expect(b.commits[move].previous).toEqual({ sha: edit, path: 'old.txt' })
     expect(b.commits[add].previous).toBeNull()
+  })
+
+  it('reads the previous path of a file whose name needs quoting', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'q"u\\o.txt', lines(5))
+    await commitAll(repo, 'add')
+    await git(repo, ['rm', '-q', 'q"u\\o.txt'])
+    await write(repo, 'r"en.txt', lines(5, (i) => (i === 1 ? 'one' : `line ${i}`)))
+    await commitAll(repo, 'rename')
+    const parent = (await git(repo, ['rev-parse', 'HEAD~1'])).trim()
+    const b = await getBlame(repo, null, 'r"en.txt')
+    expect(b.commits[b.chunks[0].sha].previous).toEqual({ sha: parent, path: 'q"u\\o.txt' })
+    expect((await getBlame(repo, parent, 'q"u\\o.txt')).lines.length).toBe(5)
   })
 
   it('blames at a revision and refuses missing and binary files, bad paths and revisions', async () => {
