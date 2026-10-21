@@ -140,11 +140,17 @@ button:not(:disabled):hover { filter: brightness(1.18); }
 /* title bar and tabs */
 .titlebar { display: flex; align-items: flex-end; gap: 12px; padding: 0 12px; height: 42px; border-bottom: 1px solid var(--line); flex: none; }
 .brand { display: flex; align-items: center; gap: 8px; align-self: center; font-weight: 600; padding-right: 8px; }
-.tabs { display: flex; align-items: flex-end; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; }
-.tab { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 14px; border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; color: var(--muted); white-space: nowrap; flex: none; }
+.titlebar > .tab { align-self: flex-end; margin-bottom: 6px; }
+/* the list scrolls sideways; its slim scrollbar always owns the bottom 6px, so the tabs never jump */
+.tabs { display: flex; align-items: flex-start; gap: 2px; flex: 1; min-width: 0; height: 100%; box-sizing: border-box; padding-top: 4px; overflow-x: scroll; overflow-y: hidden; }
+.tabs::-webkit-scrollbar { height: 6px; background: transparent; }
+.tabs::-webkit-scrollbar-track { background: transparent; }
+.tabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.tabs::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+@supports not selector(::-webkit-scrollbar) { .tabs { scrollbar-width: thin; scrollbar-color: var(--line) transparent; } }
+.tab { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px 0 14px; border: 1px solid transparent; border-radius: 8px; color: var(--muted); white-space: nowrap; flex: none; }
 .tab.active { color: var(--text); background: var(--raised); border-color: var(--line); }
 .tab-label { display: flex; align-items: center; gap: 8px; }
-.tab-branch { font: 11px var(--mono); color: var(--faint); }
 .tab-close { width: 20px; height: 20px; border-radius: 4px; display: grid; place-items: center; color: var(--faint); flex: none; }
 .tab-close:hover { background: var(--hover); }
 .tab .tab-close { opacity: 0; transition: opacity 0.12s; }

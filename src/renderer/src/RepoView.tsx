@@ -43,12 +43,11 @@ interface Props {
   onSettings: (patch: Partial<Settings>) => Promise<boolean> // false when the save failed
   entry?: RepoEntry
   onRepoSettings: (path: string, patch: RepoSettingsPatch) => Promise<boolean>
-  onBranch: (path: string, label: string) => void
   accountsVersion: number // changes when an account is saved or removed
   onAccounts: (suggest: AccountSuggestion | null) => void
 }
 
-export function RepoView({ path, active, settings, entry, onSettings, onRepoSettings, onBranch, accountsVersion, onAccounts }: Props) {
+export function RepoView({ path, active, settings, entry, onSettings, onRepoSettings, accountsVersion, onAccounts }: Props) {
   const { activeDays } = settings
   // The saved pane widths, clamped to the current window so the center keeps its minimum (the saved values are left as they are).
   const [winW, setWinW] = useState(window.innerWidth)
@@ -119,11 +118,10 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
       lastStatus.current = json
       setStatus(s)
       setVersion((v) => v + 1)
-      onBranch(path, s.branch ?? 'Detached HEAD')
     } catch (e) {
       report(e)
     }
-  }, [path, onBranch, report])
+  }, [path, report])
 
   const request = useRef(0)
   // Keeps the previous object when the new one is JSON-equal, so memoized children do not re-render.
