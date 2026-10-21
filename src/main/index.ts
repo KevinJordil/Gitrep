@@ -36,6 +36,7 @@ const configFile = join(app.getPath('userData'), 'config.json')
 const accountsFile = join(app.getPath('userData'), 'accounts.json') // forge tokens, encrypted; never in config.json
 let config: Config = loadConfig(configFile)
 let win: BrowserWindow | null = null
+let unsavedEdits = false // an editor of the renderer holds unsaved edits
 const fetchErrors = new Map<string, string>()
 const watchers = new Map<string, FSWatcher[]>()
 const pending = new Map<string, NodeJS.Timeout>()
@@ -164,7 +165,7 @@ async function addRepos(): Promise<RepoEntry[]> {
   return added
 }
 
-const handlers: Omit<Api, 'onRepoChanged'> = {
+const handlers: Omit<Api, 'onRepoChanged' | 'onCloseRequested'> = {
   getConfig: async () => config,
   addRepos,
   removeRepo: async (path) => {
@@ -249,6 +250,13 @@ const handlers: Omit<Api, 'onRepoChanged'> = {
   startReview: forRepo((p, req: ReviewRequest) => review.startReview(p, req, claudeOptions())),
   prepareFixes: forRepo((p, branch: string, list: FixRequest[]) => fixes.prepareFixes(p, String(branch), list)),
   readWorkingFile: forRepo((p, path: string) => edit.readWorkingFile(p, String(path))),
+  workingFileReason: forRepo((p, path: string) => edit.workingFileReason(p, String(path))),
+  headDiff: forRepo((p, path: string) => repo.getHeadDiff(p, String(path))),
+  setUnsavedEdits: async (has) => void (unsavedEdits = !!has),
+  closeWindow: async () => {
+    unsavedEdits = false
+    win?.close()
+  },
   saveWorkingFile: forRepo((p, path: string, text: string, base: string) => edit.saveWorkingFile(p, String(path), text, base))
 }
 
@@ -276,6 +284,12 @@ function createWindow(): void {
     // Test support: GITREP_HIDDEN=1 keeps the window hidden (end-to-end runs).
     show: !SMOKE && !process.env.GITREP_HIDDEN,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
+  })
+  // Closing with unsaved edits: the renderer asks what to do, then calls closeWindow.
+  win.on('close', (e) => {
+    if (!unsavedEdits) return
+    e.preventDefault()
+    win?.webContents.send('close-requested')
   })
   win.on('closed', () => {
     win = null

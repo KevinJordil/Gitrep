@@ -20,11 +20,12 @@ interface Props {
   onBack: () => void
   run: RunOp
   onChanged?: () => void // the working tree changed behind the repository watcher (a saved edit): refresh
+  gone?: boolean // the file no longer has changes in git (an editor with unsaved edits stays open)
   hideHead?: boolean // the parent shows its own header (stash view, file history)
   onFile?: (path: string, rev: string | null, view: FileView) => void // opens the file's history or blame (at this commit, or HEAD)
 }
 
-export function DiffView({ repo, selection, version, onBack, run, onChanged, hideHead = false, onFile }: Props) {
+export function DiffView({ repo, selection, version, onBack, run, onChanged, gone = false, hideHead = false, onFile }: Props) {
   const notify = useToast()
   const { path } = selection
   const commit = selection.commit ?? null // a file of a commit: read-only
@@ -42,7 +43,7 @@ export function DiffView({ repo, selection, version, onBack, run, onChanged, hid
   useEffect(() => {
     if (!editable || opened) return
     let alive = true
-    api.readWorkingFile(repo, path).then((r) => alive && setReason('reason' in r ? r.reason : null), () => undefined)
+    api.workingFileReason(repo, path).then((r) => alive && setReason(r), () => undefined)
     return () => {
       alive = false
     }
@@ -156,7 +157,7 @@ export function DiffView({ repo, selection, version, onBack, run, onChanged, hid
       )}
       {leaveDialog}
       {opened ? (
-        <FileEditor key={opened.n} repo={repo} path={path} initial={opened.text} diff={diff} onSaved={onChanged} onReload={() => void openEditor()} />
+        <FileEditor key={opened.n} repo={repo} path={path} initial={opened.text} version={version} gone={gone} onSaved={onChanged} onReload={() => void openEditor()} />
       ) : (
       <div className="diff-body">
         {diff === undefined && <span className="faint">Loading…</span>}

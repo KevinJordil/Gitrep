@@ -106,7 +106,9 @@ export function App() {
     await setTabs((tabs) => (tabs.includes(path) ? tabs : [...tabs, path]))
     setActive(path)
   }
-  const { guard, dialog: leaveDialog } = useLeaveGuard()
+  const { guard, guardAll, dialog: leaveDialog } = useLeaveGuard()
+  // The window is closing while an editor holds unsaved edits: ask about each, then close.
+  useEffect(() => api.onCloseRequested(() => guardAll(() => void api.closeWindow())), [guardAll])
   const closeTab = async (path: string) => {
     if (active === path) setActive('dashboard')
     await setTabs((tabs) => tabs.filter((t) => t !== path))

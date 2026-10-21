@@ -723,3 +723,4 @@ body.resizing { user-select: none; cursor: col-resize; }
 .editor-bar .btn-primary:disabled, .editor-bar .head-btn:disabled { opacity: 0.5; }
 .editor-host { flex: 1; min-height: 0; }
 .seg button:disabled { opacity: 0.45; cursor: default; }
+.editor-banner { display: flex; align-items: center; gap: 8px; margin: 8px 14px 0; flex: none; }

@@ -74,6 +74,17 @@ export async function getBranches(repo: string): Promise<Branch[]> {
   return parseBranches(await git(repo, [...RO, 'for-each-ref', `--format=${BRANCH_FORMAT}`, 'refs/heads', 'refs/remotes']))
 }
 
+// The changes of a working file against HEAD, whatever is staged (an untracked file is all added).
+export async function getHeadDiff(repo: string, path: string): Promise<FileDiff | null> {
+  if (path.endsWith('/')) return null
+  insideRepo(repo, path)
+  const tracked = (await git(repo, [...RO, 'ls-files', '--', path])).trim() !== ''
+  if (!tracked) return getDiff(repo, path, 'untracked')
+  const head = await hasHead(repo)
+  if (!head) return getDiff(repo, path, 'staged')
+  return parseDiff(await git(repo, [...RO, 'diff', '--no-color', '--no-ext-diff', '--no-renames', 'HEAD', '--', path]))[0] ?? null
+}
+
 export async function getDiff(repo: string, path: string, side: DiffSide): Promise<FileDiff | null> {
   if (path.endsWith('/')) return null // untracked folder: no single-file diff
   if (side === 'untracked') insideRepo(repo, path)

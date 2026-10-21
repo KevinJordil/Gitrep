@@ -1,7 +1,8 @@
 import { chmod, mkdir, readFile, stat, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readWorkingFile, saveWorkingFile } from '../src/main/edit'
+import { readWorkingFile, saveWorkingFile, workingFileReason } from '../src/main/edit'
+import { getHeadDiff } from '../src/main/repo'
 import { git } from '../src/main/git'
 import { undoState } from '../src/main/journal'
 import { redo, undo } from '../src/main/undo'
@@ -98,5 +99,28 @@ describe('saveWorkingFile', () => {
     expect(await disk(repo, 'd/new.txt')).toBe('fresh\nmore\n')
     await undo(repo)
     expect(await disk(repo, 'd/new.txt')).toBe('fresh\n')
+  })
+})
+
+describe('workingFileReason and getHeadDiff', () => {
+  it('gives the reason without reading the file, null when it can be edited', async () => {
+    const repo = await setup()
+    await symlink(join(repo, 'a.txt'), join(repo, 'link.txt'))
+    expect(await workingFileReason(repo, 'a.txt')).toBeNull()
+    expect(await workingFileReason(repo, 'link.txt')).toEqual(expect.any(String))
+    await writeFile(join(repo, 'nul.bin'), Buffer.from('a\0b'))
+    expect(await workingFileReason(repo, 'nul.bin')).toMatch(/UTF-8/)
+    expect(await workingFileReason(repo, 'missing.txt')).toEqual(expect.any(String))
+  })
+
+  it('diffs against HEAD whatever is staged, and an untracked file is all added', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'one\nTWO\n')
+    await git(repo, ['add', 'a.txt'])
+    await write(repo, 'a.txt', 'one\nTWO\nthree\n')
+    const d = await getHeadDiff(repo, 'a.txt')
+    expect(d?.hunks.flatMap((h) => h.lines.filter((l) => l.kind === 'add').map((l) => l.text))).toEqual(['TWO', 'three'])
+    await write(repo, 'new.txt', 'x\ny\n')
+    expect((await getHeadDiff(repo, 'new.txt'))?.hunks[0].lines.filter((l) => l.kind === 'add')).toHaveLength(2)
   })
 })

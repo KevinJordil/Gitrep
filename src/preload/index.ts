@@ -20,4 +20,12 @@ api.onRepoChanged = (cb) => {
   }
 }
 
+api.onCloseRequested = (cb) => {
+  const handler = () => cb()
+  ipcRenderer.on('close-requested', handler)
+  return () => {
+    ipcRenderer.removeListener('close-requested', handler)
+  }
+}
+
 contextBridge.exposeInMainWorld('api', api)

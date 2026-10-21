@@ -123,10 +123,15 @@ export interface Api {
   prepareFixes(repo: string, branch: string, fixes: FixRequest[]): Promise<FixResult> // unstaged changes, one undo step
   readWorkingFile(repo: string, path: string): Promise<{ text: string } | { reason: string }> // reason: why it cannot be edited
   saveWorkingFile(repo: string, path: string, text: string, base: string): Promise<void> // base: what the editor opened; refused when the disk differs. One undo step
+  workingFileReason(repo: string, path: string): Promise<string | null> // null: it can be edited
+  headDiff(repo: string, path: string): Promise<FileDiff | null> // the file's changes against HEAD, whatever is staged
+  setUnsavedEdits(has: boolean): Promise<void> // an editor holds unsaved edits: closing the window asks the renderer first
+  closeWindow(): Promise<void> // closes the window without asking again
   onRepoChanged(cb: (repo: string) => void): () => void
+  onCloseRequested(cb: () => void): () => void // the window was asked to close while edits are unsaved
 }
 
-export type InvokeMethod = Exclude<keyof Api, 'onRepoChanged'>
+export type InvokeMethod = Exclude<keyof Api, 'onRepoChanged' | 'onCloseRequested'>
 
 export const API_METHODS = [
   'getConfig',
@@ -206,7 +211,11 @@ export const API_METHODS = [
   'startReview',
   'prepareFixes',
   'readWorkingFile',
-  'saveWorkingFile'
+  'saveWorkingFile',
+  'workingFileReason',
+  'headDiff',
+  'setUnsavedEdits',
+  'closeWindow'
 ] as const satisfies readonly InvokeMethod[]
 
 // Compile-time guard: every invoke method must be listed above.

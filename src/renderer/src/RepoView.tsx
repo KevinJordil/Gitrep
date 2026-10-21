@@ -30,7 +30,7 @@ import { clampPane } from './panes'
 import { Splitter } from './Splitter'
 import { StashDialog, StashPanel, StashView } from './Stash'
 import { useToast } from './toast'
-import { useLeaveGuard } from './unsaved'
+import { unsavedOf, useLeaveGuard } from './unsaved'
 
 const ALL: GraphScope = { only: null, hidden: [] }
 const WIP = 'WIP' // sha of the work-in-progress graph row (never a real sha)
@@ -209,8 +209,9 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     if (here) return
     if (selection.side !== 'staged' && inStaged) setSelection({ path: selection.path, side: 'staged' })
     else if (selection.side === 'staged' && inUnstaged) setSelection({ path: selection.path, side: inUnstaged.status === '?' ? 'untracked' : 'unstaged' })
+    else if (unsavedOf(path)?.path === selection.path) return // an editor with unsaved edits stays open on a file git no longer lists
     else setSelection(null)
-  }, [status, selection])
+  }, [status, selection, path])
 
   // Only what changed is sent; each call reports its own failure.
   const saveInstructions = async (global?: string, repo?: string) =>
@@ -298,6 +299,8 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   // The toast says what was undone and offers the opposite move.
   const replay = useCallback(
     (dir: 'undo' | 'redo'): void => {
+      const open = unsavedOf(path)
+      if (open) return notify('error', `Save or discard your edits to ${open.path} first.`)
       void run(dir, async () => {
         const back = dir === 'undo' ? 'redo' : 'undo'
         notify('info', await api[dir](path), { label: back === 'redo' ? 'Redo' : 'Undo', run: () => replay(back) })
@@ -608,7 +611,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
         ) : (
           <section className="center">
             {selection ? (
-              <DiffView key={`${selection.path}:${selection.commit ?? ''}`} repo={path} selection={selection} version={version} onBack={() => select(null)} run={run} onChanged={() => void refreshAll()} onFile={openFile} />
+              <DiffView key={`${selection.path}:${selection.commit ?? ''}`} repo={path} selection={selection} version={version} onBack={() => select(null)} run={run} onChanged={() => void refreshAll()} gone={!!status && !selection.commit && ![...status.staged, ...status.unstaged].some((f) => f.path === selection.path)} onFile={openFile} />
             ) : stash ? (
               <StashView key={stash.sha} repo={path} stash={stash} version={version} run={run} onBack={() => focusOn({ kind: 'wip' })} />
             ) : inConflicts && info ? (

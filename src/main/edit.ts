@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { open, readFile } from 'node:fs/promises'
 import { relative, resolve, sep } from 'node:path'
 import { filePatch, MAX_FILE, replaceFile, unfit, utf8Text } from './files'
 import { serialized } from './git'
@@ -6,10 +6,11 @@ import { record } from './journal'
 import { getStatus, insideRepo } from './repo'
 
 const CONFLICTED = 'Use the conflict editor for this file.'
+const NOT_UTF8 = 'The file is not a UTF-8 text file.'
 const CHANGED = 'The file changed on disk since you opened it.'
 
-// The working file as text, or why it cannot be edited here.
-async function load(repo: string, path: string): Promise<{ reason: string } | { text: string; full: string; mode: number }> {
+// Why the working file cannot be edited (without reading it), or its place on disk.
+async function check(repo: string, path: string): Promise<{ reason: string } | { full: string; mode: number }> {
   const root = resolve(repo)
   const full = insideRepo(repo, path)
   const rel = relative(root, full)
@@ -17,9 +18,30 @@ async function load(repo: string, path: string): Promise<{ reason: string } | { 
   const fit = await unfit(root, rel)
   if ('reason' in fit) return { reason: `The file ${fit.reason}.` }
   if (fit.size > MAX_FILE) return { reason: 'The file is too large to edit (over 2 MB).' }
-  const text = utf8Text(await readFile(full))
-  if (text === null) return { reason: 'The file is not a UTF-8 text file.' }
-  return { text, full, mode: fit.mode }
+  return { full, mode: fit.mode }
+}
+
+// The working file as text, or why it cannot be edited here.
+async function load(repo: string, path: string): Promise<{ reason: string } | { text: string; full: string; mode: number }> {
+  const c = await check(repo, path)
+  if ('reason' in c) return c
+  const text = utf8Text(await readFile(c.full))
+  if (text === null) return { reason: NOT_UTF8 }
+  return { text, ...c }
+}
+
+// A light check for the Edit button: the reason it cannot be edited, or null (the content is checked when it is read).
+export async function workingFileReason(repo: string, path: string): Promise<string | null> {
+  const c = await check(repo, path)
+  if ('reason' in c) return c.reason
+  // Binary files show a NUL in their first bytes; any other invalid UTF-8 is caught when the file is read.
+  const fh = await open(c.full, 'r')
+  try {
+    const { bytesRead, buffer } = await fh.read(Buffer.alloc(8192), 0, 8192, 0)
+    return buffer.subarray(0, bytesRead).includes(0) ? NOT_UTF8 : null
+  } finally {
+    await fh.close()
+  }
 }
 
 export async function readWorkingFile(repo: string, path: string): Promise<{ text: string } | { reason: string }> {
