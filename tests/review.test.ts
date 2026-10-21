@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { git } from '../src/main/git'
@@ -100,7 +100,7 @@ describe('review diff of a renamed file', () => {
     await write(repo, 'new.c', lines(10, (i) => (i === 5 ? 'line 5 changed' : `line ${i}`)))
     await commitAll(repo, 'rename and edit')
     const f = await fakeClaude(finding(['severity: minor', 'file: new.c', 'line: R4', 'title: Ctx']))
-    const r = await startReview(repo, { branch: 'feature', base: 'main', prompt: { name: 'Mine', text: '' } }, f.opts)
+    const r = await startReview(repo, { branch: 'feature', base: 'main', prompt: { name: 'Mine', text: '' }, worktree: false }, f.opts)
     expect(r.files).toHaveLength(1)
     expect(r.files[0]).toMatchObject({ oldPath: 'old.c', newPath: 'new.c' })
     expect(r.files[0].hunks[0].lines.filter((l) => l.kind !== 'context')).toHaveLength(2)
@@ -165,7 +165,7 @@ describe('reviews on a real repository', () => {
     const repo = await branchRepo()
     const answer = [finding(['severity: important', 'file: a.c', 'line: R3', 'title: Wrong'], ['Use the old text.'], ['line 3']), finding(['severity: minor', 'file: b.c', 'line: R1'], ['Same text.'], ['int b;'])].join('\n')
     const f = await fakeClaude(answer)
-    const r = await startReview(repo, { branch: 'feature', base: 'main', prompt: { name: 'Mine', text: 'Look at a.c.' } }, f.opts)
+    const r = await startReview(repo, { branch: 'feature', base: 'main', prompt: { name: 'Mine', text: 'Look at a.c.' }, worktree: false }, f.opts)
     expect(r).toMatchObject({ branch: 'feature', base: 'main', prompt: 'Mine', excluded: ['.env'], skipped: [], dropped: 0 })
     expect(r.files.map((x) => x.newPath)).toEqual(['a.c', 'b.c'])
     expect(r.findings[0].fix).toEqual({ original: ['line 3 changed'], lines: ['line 3'] })
@@ -187,9 +187,9 @@ describe('reviews on a real repository', () => {
   it('refuses an invalid prompt and a branch without changes', async () => {
     const repo = await branchRepo()
     const f = await fakeClaude('=== none')
-    await expect(startReview(repo, { branch: 'feature', base: 'main', prompt: { name: '', text: 'x' } }, f.opts)).rejects.toThrow('Invalid review prompt')
-    await expect(startReview(repo, { branch: 'main', base: 'feature', prompt: { name: 'P', text: '' } }, f.opts)).resolves.toMatchObject({ findings: [] })
-    await expect(startReview(repo, { branch: 'main~1', base: 'main', prompt: { name: 'P', text: '' } }, f.opts)).rejects.toThrow('main~1 has no changes compared with main')
+    await expect(startReview(repo, { branch: 'feature', base: 'main', prompt: { name: '', text: 'x' }, worktree: false }, f.opts)).rejects.toThrow('Invalid review prompt')
+    await expect(startReview(repo, { branch: 'main', base: 'feature', prompt: { name: 'P', text: '' }, worktree: false }, f.opts)).resolves.toMatchObject({ findings: [] })
+    await expect(startReview(repo, { branch: 'main~1', base: 'main', prompt: { name: 'P', text: '' }, worktree: false }, f.opts)).rejects.toThrow('main~1 has no changes compared with main')
   })
 
   it('refuses when every changed file is sensitive or too large', async () => {
@@ -200,14 +200,14 @@ describe('reviews on a real repository', () => {
     await write(repo, '.env', 'TOKEN=1\n')
     await commitAll(repo, 'feat: env')
     const f = await fakeClaude('=== none')
-    await expect(startReview(repo, { branch: 'feature', base: 'main', prompt: { name: 'P', text: '' } }, f.opts)).rejects.toThrow('Every changed file is sensitive')
+    await expect(startReview(repo, { branch: 'feature', base: 'main', prompt: { name: 'P', text: '' }, worktree: false }, f.opts)).rejects.toThrow('Every changed file is sensitive')
     await git(repo, ['switch', '-q', '-c', 'huge', 'main'])
     await write(repo, 'h.c', lines(20000, (i) => `line ${i} ${'x'.repeat(10)}`))
     await commitAll(repo, 'feat: huge')
-    await expect(startReview(repo, { branch: 'huge', base: 'main', prompt: { name: 'P', text: '' } }, f.opts)).rejects.toThrow('too large')
+    await expect(startReview(repo, { branch: 'huge', base: 'main', prompt: { name: 'P', text: '' }, worktree: false }, f.opts)).rejects.toThrow('too large')
     await write(repo, 'ok.c', 'int ok;\n')
     await commitAll(repo, 'feat: ok')
-    const r = await startReview(repo, { branch: 'huge', base: 'main', prompt: { name: 'P', text: '' } }, f.opts)
+    const r = await startReview(repo, { branch: 'huge', base: 'main', prompt: { name: 'P', text: '' }, worktree: false }, f.opts)
     expect(r.skipped).toEqual(['h.c'])
     expect(r.files.map((x) => x.newPath)).toEqual(['h.c', 'ok.c']) // files keeps the whole diff; skipped says what Claude did not see
   })
@@ -220,7 +220,93 @@ describe('reviews on a real repository', () => {
     await write(repo, 'a.c', 'one\r\ntwo changed\r\n')
     await commitAll(repo, 'feat: change')
     const f = await fakeClaude(finding(['severity: minor', 'file: a.c', 'line: R2'], ['c'], ['two fixed']))
-    const r = await startReview(repo, { branch: 'feature', base: 'main', prompt: { name: 'P', text: '' } }, f.opts)
+    const r = await startReview(repo, { branch: 'feature', base: 'main', prompt: { name: 'P', text: '' }, worktree: false }, f.opts)
     expect(r.findings[0].fix).toEqual({ original: ['two changed\r'], lines: ['two fixed'] })
+  })
+})
+
+// main: a.c (10 lines), d.c; feature (checked out): one commit adding b.c, then local changes:
+// a.c modified (staged), d.c deleted, new.c untracked, .env untracked (sensitive), bin.dat untracked (binary), link untracked (symlink).
+async function dirtyRepo(commit = true) {
+  const repo = await makeRepo()
+  await write(repo, 'a.c', lines(10))
+  await write(repo, 'd.c', 'int d;\n')
+  await commitAll(repo, 'init')
+  await git(repo, ['switch', '-q', '-c', 'feature'])
+  if (commit) {
+    await write(repo, 'b.c', 'int b;\n')
+    await commitAll(repo, 'feat: add b')
+  }
+  await write(repo, 'a.c', lines(10, (i) => (i === 3 ? 'line 3 local' : `line ${i}`)))
+  await git(repo, ['add', 'a.c'])
+  await rm(join(repo, 'd.c'))
+  await write(repo, 'new.c', 'int fresh;\r\nint more;\r\n')
+  await write(repo, '.env', 'TOKEN=secret-value\n')
+  await writeFile(join(repo, 'bin.dat'), Buffer.from([1, 0, 2]))
+  await symlink('a.c', join(repo, 'link'))
+  return repo
+}
+const REQ = { branch: 'feature', base: 'main', prompt: { name: 'P', text: '' }, worktree: true }
+
+describe('reviews that include the working tree', () => {
+  it('measures the commits and the uncommitted files', async () => {
+    const repo = await dirtyRepo()
+    expect(await reviewScope(repo, 'feature', 'main', true)).toMatchObject({ commits: 1, uncommitted: 6 })
+    expect(await reviewScope(repo, 'feature', 'main')).toMatchObject({ commits: 1, uncommitted: 0 })
+    await expect(reviewScope(repo, 'main', 'feature', true)).rejects.toThrow('Check out main to include its uncommitted changes.')
+  })
+
+  it('sends the commits, modified, deleted and untracked files, but no sensitive or unreadable ones', async () => {
+    const repo = await dirtyRepo()
+    const f = await fakeClaude('=== none')
+    const r = await startReview(repo, REQ, f.opts)
+    const stdin = await readFile(join(f.dir, 'stdin'), 'utf8')
+    expect(stdin).toContain('=== file b.c')
+    expect(stdin).toContain('+line 3 local')
+    expect(stdin).toContain('=== file d.c (deleted)')
+    expect(stdin).toContain('=== file new.c (new file)')
+    expect(stdin).toContain('int fresh;')
+    expect(stdin).toContain('uncommitted changes')
+    expect(stdin).not.toContain('.env')
+    expect(stdin).not.toContain('secret-value')
+    expect(r.files.map((x) => x.newPath).sort()).toEqual(['a.c', 'b.c', 'd.c', 'new.c'])
+    expect(r.excluded).toEqual(['.env'])
+    expect(r.skipped).toEqual(expect.arrayContaining(['bin.dat (not a UTF-8 text file)', 'link (is a symbolic link)']))
+    expect(r.skipped).toHaveLength(2)
+  })
+
+  it('reviews a branch with no commit ahead of its base but with local changes', async () => {
+    const repo = await dirtyRepo(false)
+    const f = await fakeClaude('=== none')
+    expect(await reviewScope(repo, 'feature', 'main', true)).toMatchObject({ commits: 0, uncommitted: 6 })
+    await expect(startReview(repo, REQ, f.opts)).resolves.toMatchObject({ findings: [] })
+    expect(await readFile(join(f.dir, 'stdin'), 'utf8')).toContain('No commits on this branch yet.')
+    await expect(startReview(repo, { ...REQ, worktree: false }, f.opts)).rejects.toThrow('feature has no changes compared with main')
+  })
+
+  it('refuses the working tree of a branch that is not checked out', async () => {
+    const repo = await dirtyRepo()
+    await git(repo, ['branch', 'other', 'main'])
+    const f = await fakeClaude('=== none')
+    await expect(startReview(repo, { ...REQ, branch: 'other' }, f.opts)).rejects.toThrow('Check out other to include its uncommitted changes.')
+  })
+
+  it('leaves the working tree out when the request does not ask for it', async () => {
+    const repo = await dirtyRepo()
+    const f = await fakeClaude('=== none')
+    await startReview(repo, { ...REQ, worktree: false }, f.opts)
+    const stdin = await readFile(join(f.dir, 'stdin'), 'utf8')
+    expect(stdin).toContain('=== file b.c')
+    expect(stdin).not.toContain('line 3 local')
+    expect(stdin).not.toContain('new.c')
+    expect(stdin).not.toContain('uncommitted')
+  })
+
+  it('reads the original lines of a fix from the working file, CRLF kept', async () => {
+    const repo = await dirtyRepo()
+    const f = await fakeClaude([finding(['severity: minor', 'file: new.c', 'line: R2'], ['c'], ['int less;']), finding(['severity: minor', 'file: a.c', 'line: R3'], ['c'], ['line 3 fixed'])].join('\n'))
+    const r = await startReview(repo, REQ, f.opts)
+    expect(r.findings[0].fix).toEqual({ original: ['int more;\r'], lines: ['int less;'] })
+    expect(r.findings[1].fix).toEqual({ original: ['line 3 local'], lines: ['line 3 fixed'] })
   })
 })

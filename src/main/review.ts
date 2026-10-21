@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { DiffLine, FileDiff, Review, ReviewFinding, ReviewRequest, ReviewScope, Severity } from '../shared/types'
 import { askClaude, isSensitive, MAX_DIFF_CHARS, type ClaudeOptions } from './claude'
 import { isPrompt } from './config'
 import { parseDiff } from './diff'
+import { MAX_FILE, unfit, utf8Text } from './files'
 import { git } from './git'
 import { RO } from './repo'
 
@@ -21,15 +24,48 @@ export async function commitOf(repo: string, ref: string): Promise<string> {
   return sha
 }
 
-// What a review of branch against base covers: the commits of branch since it left base (three-dot diff).
-export async function reviewScope(repo: string, branch: string, base: string): Promise<ReviewScope> {
+const NO_BRANCH = (branch: string) => `Check out ${branch} to include its uncommitted changes.`
+
+// The local changes of the checked-out branch: tracked files that differ from HEAD (staged or not, deleted too) and untracked ones.
+async function uncommittedPaths(repo: string, branch: string): Promise<{ changed: string[]; untracked: string[] }> {
+  if ((await git(repo, [...RO, 'symbolic-ref', '-q', '--short', 'HEAD'], { okCodes: [1] })).trim() !== branch) throw new Error(NO_BRANCH(branch))
+  const list = async (args: string[]) => (await git(repo, [...RO, ...args, '-z'])).split('\0').filter(Boolean)
+  const [changed, untracked] = await Promise.all([list(['diff', '--name-only', '-M', 'HEAD']), list(['ls-files', '--others', '--exclude-standard'])])
+  return { changed, untracked }
+}
+
+// What a review of branch against base covers: the commits of branch since it left base (three-dot diff),
+// plus, with worktree, its uncommitted changes (the branch must be the checked-out one).
+export async function reviewScope(repo: string, branch: string, base: string, worktree = false): Promise<ReviewScope> {
   const [head, target] = await Promise.all([commitOf(repo, branch), commitOf(repo, base)])
   const mergeBase = (await git(repo, [...RO, 'merge-base', target, head], { okCodes: [1] })).trim()
   if (!mergeBase) throw new Error(`${branch} and ${base} have no common history`)
-  const [count, numstat] = await Promise.all([git(repo, [...RO, 'rev-list', '--count', `${mergeBase}..${head}`]), git(repo, [...RO, 'diff', '--numstat', ...DIFF, mergeBase, head])])
+  const local = worktree ? await uncommittedPaths(repo, branch) : null
+  const [count, numstat] = await Promise.all([git(repo, [...RO, 'rev-list', '--count', `${mergeBase}..${head}`]), git(repo, [...RO, 'diff', '--numstat', ...DIFF, mergeBase, ...(worktree ? [] : [head])])])
   const rows = numstat.split('\n').filter(Boolean).map((l) => l.split('\t'))
   const sum = (i: number) => rows.reduce((n, r) => n + (Number(r[i]) || 0), 0)
-  return { head, mergeBase, commits: Number(count.trim()), files: rows.length, add: sum(0), del: sum(1) }
+  return { head, mergeBase, commits: Number(count.trim()), uncommitted: local ? local.changed.length + local.untracked.length : 0, files: rows.length, add: sum(0), del: sum(1) }
+}
+
+// The text of a working file, empty when it is gone, not a regular file or not UTF-8.
+async function workingText(repo: string, rel: string): Promise<string> {
+  const fit = await unfit(repo, join(...rel.split('/')))
+  return 'reason' in fit ? '' : (utf8Text(await readFile(join(repo, ...rel.split('/')))) ?? '')
+}
+
+// A new file as a diff. Null (with the reason) when it is not safe or useful to send: a symbolic link, too large, binary, not UTF-8.
+async function untrackedDiff(repo: string, rel: string): Promise<{ diff: string } | { reason: string }> {
+  const fit = await unfit(repo, join(...rel.split('/')))
+  if ('reason' in fit) return fit
+  if (fit.size > MAX_FILE) return { reason: 'too large' }
+  const text = utf8Text(await readFile(join(repo, ...rel.split('/'))))
+  if (text === null) return { reason: 'not a UTF-8 text file' }
+  const rows = text ? text.split('\n') : []
+  const endsLine = text.endsWith('\n')
+  if (endsLine) rows.pop()
+  const body = rows.map((l) => `+${l}`)
+  if (rows.length && !endsLine) body.push('\\ No newline at end of file')
+  return { diff: [`diff --git a/${rel} b/${rel}`, 'new file mode 100644', '--- /dev/null', `+++ b/${rel}`, ...(rows.length ? [`@@ -0,0 +1,${rows.length} @@`, ...body] : []), ''].join('\n') }
 }
 
 // The diff as Claude reads it: every line carries its position, R<n> on the branch's version, L<n> on the base's.
@@ -193,24 +229,45 @@ export function parseFindings(out: string, files: FileDiff[], firstId = 1): { fi
   return { findings, dropped }
 }
 
-// Reviews merge-base(base, branch)..branch with the user's prompt. Sensitive files are never sent; a proposal only, nothing is written.
+// Reviews merge-base(base, branch)..branch (or merge-base..working tree, untracked files included, with worktree) with the user's prompt.
+// Sensitive files are never sent; a proposal only, nothing is written.
 export async function startReview(repo: string, req: ReviewRequest, opts: ClaudeOptions): Promise<Review> {
   if (!isPrompt(req?.prompt)) throw new Error('Invalid review prompt')
   const branch = String(req.branch)
   const base = String(req.base)
-  const scope = await reviewScope(repo, branch, base)
-  const [raw, log] = await Promise.all([git(repo, [...RO, 'diff', ...DIFF, scope.mergeBase, scope.head]), git(repo, [...RO, 'log', '--reverse', '-50', '--format=%s', `${scope.mergeBase}..${scope.head}`])])
+  const worktree = req.worktree === true
+  const scope = await reviewScope(repo, branch, base, worktree)
+  const [raw, log] = await Promise.all([git(repo, [...RO, 'diff', ...DIFF, scope.mergeBase, ...(worktree ? [] : [scope.head])]), git(repo, [...RO, 'log', '--reverse', '-50', '--format=%s', `${scope.mergeBase}..${scope.head}`])])
   const all = parseDiff(raw)
   const excluded: string[] = []
+  const skippedLocal: string[] = []
+  if (worktree) {
+    for (const rel of (await uncommittedPaths(repo, branch)).untracked) {
+      if (isSensitive(rel)) {
+        excluded.push(rel)
+        continue
+      }
+      const r = await untrackedDiff(repo, rel)
+      if ('diff' in r) all.push(...parseDiff(r.diff))
+      else skippedLocal.push(`${rel} (${r.reason})`)
+    }
+  }
   const files = all.filter((f) => {
     const paths = [...new Set([f.oldPath, f.newPath])]
     const bad = paths.filter((p) => !p || isSensitive(p))
     excluded.push(...bad.map((p) => p || '(unreadable path)'))
     return bad.length === 0
   })
-  if (!files.length) throw new Error(all.length ? 'Every changed file is sensitive: nothing is sent to Claude.' : `${branch} has no changes compared with ${base}`)
-  const intro = [`Branch ${branch} compared with ${base} (merge base ${scope.mergeBase.slice(0, 7)}).`, 'Commits, oldest first:', ...log.split('\n').filter(Boolean).map((s) => `- ${s}`), '', 'Diff:'].join('\n')
-  const { parts, skipped } = splitParts(files, Math.max(0, MAX_DIFF_CHARS - intro.length))
+  if (!files.length) throw new Error(all.length || excluded.length ? 'Every changed file is sensitive: nothing is sent to Claude.' : `${branch} has no changes compared with ${base}`)
+  const commits = log.split('\n').filter(Boolean)
+  const intro = [
+    `Branch ${branch} compared with ${base} (merge base ${scope.mergeBase.slice(0, 7)}).`,
+    ...(commits.length ? ['Commits, oldest first:', ...commits.map((s) => `- ${s}`)] : worktree ? ['No commits on this branch yet.'] : ['Commits, oldest first:']),
+    ...(worktree ? ['The diff includes the uncommitted changes (staged, unstaged and untracked files) on top of these commits.'] : []),
+    '',
+    'Diff:'
+  ].join('\n')
+  const { parts, skipped: tooLarge } = splitParts(files, Math.max(0, MAX_DIFF_CHARS - intro.length))
   if (!parts.length) throw new Error('Every changed file is too large to send to Claude.')
   const findings: ReviewFinding[] = []
   let dropped = 0
@@ -220,14 +277,14 @@ export async function startReview(repo: string, req: ReviewRequest, opts: Claude
     findings.push(...r.findings)
     dropped += r.dropped
   }
-  // A fix replaces lines of the reviewed commit: keep those lines to check the working file against them later.
+  // A fix replaces lines of the reviewed commit (of the working file with worktree): keep those lines to check the working file against them later.
   const contents = new Map<string, string[]>()
   for (const f of findings) {
     if (!f.fix) continue
-    if (!contents.has(f.path)) contents.set(f.path, (await git(repo, [...RO, 'show', `${scope.head}:${f.path}`]).catch(() => '')).split('\n'))
+    if (!contents.has(f.path)) contents.set(f.path, (await (worktree ? workingText(repo, f.path) : git(repo, [...RO, 'show', `${scope.head}:${f.path}`]).catch(() => ''))).split('\n'))
     const original = contents.get(f.path)!.slice(f.line - 1, f.endLine)
     if (original.length === f.endLine - f.line + 1 && original.join('\n') !== f.fix.lines.join('\n')) f.fix.original = original
     else f.fix = null
   }
-  return { branch, base, head: scope.head, mergeBase: scope.mergeBase, prompt: req.prompt.name, files, findings, excluded, skipped, dropped }
+  return { branch, base, head: scope.head, mergeBase: scope.mergeBase, prompt: req.prompt.name, files, findings, excluded, skipped: [...tooLarge, ...skippedLocal], dropped }
 }

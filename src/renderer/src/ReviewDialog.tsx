@@ -32,6 +32,7 @@ export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, se
   const [forge, setForge] = useState<ForgeInfo | null | undefined>(undefined) // undefined: looking; null: not on a forge
   const [picked, setPicked] = useState<ReviewMode | undefined>(asked)
   const mode: ReviewMode = forge?.request ? (picked ?? 'request') : 'branch'
+  const worktree = mode === 'branch' && !!branches.find((b) => b.name === branch && !b.remote)?.current // the uncommitted changes belong to the checked-out branch
   const [scope, setScope] = useState<ReviewScope | string | null>(null) // string: why it cannot be measured
   const choices = useMemo(() => promptChoices(settings, entry), [settings, entry])
   const [key, setKey] = useState(choices[0]?.key ?? '')
@@ -73,20 +74,20 @@ export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, se
     if (!base) return setScope('No other branch to compare with.')
     let live = true
     setScope(null)
-    api.reviewScope(repo, branch, base).then(
+    api.reviewScope(repo, branch, base, worktree).then(
       (s) => live && setScope(s),
       (e: unknown) => live && setScope(errorText(e))
     )
     return () => {
       live = false
     }
-  }, [repo, branch, base])
+  }, [repo, branch, base, worktree])
 
   const start = async () => {
     if (!choice) return
     setBusy(true)
     setError('')
-    const request = { branch, base, prompt: choice.prompt }
+    const request = { branch, base, prompt: choice.prompt, worktree }
     try {
       const review = await api.startReview(repo, request)
       if (alive.current) onStart({ started: Date.now(), review, request, mode, forge: forge ?? null })
@@ -98,7 +99,7 @@ export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, se
   }
 
   const others = choices.filter((c) => c.key !== choice?.key)
-  const ready = typeof scope === 'object' && scope !== null && scope.commits > 0
+  const ready = typeof scope === 'object' && scope !== null && (scope.commits > 0 || scope.uncommitted > 0)
   const behind = mode === 'request' && typeof scope === 'object' && scope !== null && forge?.request && forge.request.head !== scope.head ? forge.request : null // the request is not the branch as it is here
   return (
     <Dialog
@@ -154,9 +155,12 @@ export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, se
           'Measuring…'
         ) : typeof scope === 'string' ? (
           <span className="err">{scope}</span>
+        ) : scope.commits === 0 && scope.uncommitted === 0 ? (
+          <span className="err">Nothing to review.</span>
         ) : (
           <>
-            {scope.commits} commit{scope.commits === 1 ? '' : 's'} · {scope.files} file{scope.files === 1 ? '' : 's'} · <span className="add-n">+{scope.add}</span> <span className="del-n">−{scope.del}</span> · merge base <span className="mono">{scope.mergeBase.slice(0, 7)}</span>
+            {scope.commits === 0 ? 'Only uncommitted changes' : `${scope.commits} commit${scope.commits === 1 ? '' : 's'}`}
+            {scope.commits > 0 && scope.uncommitted > 0 && ` · ${scope.uncommitted} uncommitted file${scope.uncommitted === 1 ? '' : 's'}`} · {scope.files} file{scope.files === 1 ? '' : 's'} · <span className="add-n">+{scope.add}</span> <span className="del-n">−{scope.del}</span> · merge base <span className="mono">{scope.mergeBase.slice(0, 7)}</span>
           </>
         )}
       </div>

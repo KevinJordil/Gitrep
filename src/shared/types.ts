@@ -374,6 +374,7 @@ export interface ReviewScope {
   head: string
   mergeBase: string
   commits: number
+  uncommitted: number // changed and untracked files of the working tree, 0 unless asked for
   files: number
   add: number
   del: number
@@ -406,7 +407,7 @@ export interface Review {
   files: FileDiff[] // the reviewed diff, sensitive files left out
   findings: ReviewFinding[]
   excluded: string[] // sensitive files, never sent to Claude
-  skipped: string[] // files too large to send
+  skipped: string[] // files not sent, with the reason when it is not their size
   dropped: number // findings that pointed outside the diff, or over the limit
 }
 
@@ -417,6 +418,7 @@ export interface ReviewRequest {
   branch: string
   base: string
   prompt: ReviewPrompt
+  worktree: boolean // include the uncommitted changes: only for the checked-out branch
 }
 
 // A kept fix: replaces lines line..endLine of the working file, only when they still read `original`.

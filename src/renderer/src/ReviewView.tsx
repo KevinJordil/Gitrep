@@ -37,6 +37,7 @@ export function ReviewBanner({ session, rerunning, posting, onRerun, onMode, onE
         ) : (
           <>
             Reviewing your branch <b className="mono">{review.branch}</b> against <b className="mono">{review.base}</b>
+            {session.request.worktree && ' · includes uncommitted changes'}
           </>
         )}{' '}
         · {n} finding{n === 1 ? '' : 's'} · {review.prompt}
@@ -149,7 +150,7 @@ export function ReviewView({ repo, session, status, remote, undoLabel, ui, setUi
         {review.findings.length === 0 && <div className="note">Claude found nothing to report.</div>}
         <div className="note">Unchecked findings are dropped. Edit any text in the diff.</div>
         {review.excluded.length > 0 && <div className="note">Not sent to Claude (sensitive): {review.excluded.join(', ')}</div>}
-        {review.skipped.length > 0 && <div className="note err">Not reviewed (too large to send): {review.skipped.join(', ')}</div>}
+        {review.skipped.length > 0 && <div className="note err">Not reviewed: {review.skipped.join(', ')}</div>}
         {review.dropped > 0 && (
           <div className="note">
             {review.dropped} finding{review.dropped === 1 ? '' : 's'} pointed outside the diff and {review.dropped === 1 ? 'was' : 'were'} left out.

@@ -246,7 +246,7 @@ const handlers: Omit<Api, 'onRepoChanged' | 'onCloseRequested'> = {
   removeAccount: async (host) => accounts.removeAccount(accountsFile, hostArg(host)),
   forgeInfo: forRepo((p, branch: string) => requests.forgeInfo(p, String(branch), forgeContext())),
   postReviewStep: forRepo((p, branch: string, head: string, draft: boolean, step: PostStep) => requests.postStep(p, String(branch), String(head), !!draft, step, forgeContext())),
-  reviewScope: forRepo((p, branch: string, base: string) => review.reviewScope(p, String(branch), String(base))),
+  reviewScope: forRepo((p, branch: string, base: string, worktree: boolean) => review.reviewScope(p, String(branch), String(base), worktree === true)),
   startReview: forRepo((p, req: ReviewRequest) => review.startReview(p, req, claudeOptions())),
   prepareFixes: forRepo((p, branch: string, list: FixRequest[]) => fixes.prepareFixes(p, String(branch), list)),
   readWorkingFile: forRepo((p, path: string) => edit.readWorkingFile(p, String(path))),

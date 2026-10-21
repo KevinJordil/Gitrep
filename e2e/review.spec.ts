@@ -29,12 +29,12 @@ async function startReview() {
   await v.getByRole('button', { name: 'Review', exact: true }).click()
   // The remote-tracking branch first: it is what a merge request compares with. Here local main is one commit ahead.
   await expect(dialog().getByLabel('Compare with')).toHaveValue('origin/main')
-  await expect(dialog().getByRole('status')).toContainText('3 commits · 3 files')
+  await expect(dialog().getByRole('status')).toContainText(/3 commits · (1 uncommitted file · )?3 files/) // my own edit of calc.c may be there, uncommitted
   await dialog().getByLabel('Compare with').selectOption('main')
-  await expect(dialog().getByRole('status')).toContainText('2 commits · 2 files · +13 −0 · merge base')
+  await expect(dialog().getByRole('status')).toContainText(/2 commits · (1 uncommitted file · )?2 files · \+13 −0 · merge base/)
   await dialog().getByRole('button', { name: 'Start review' }).click()
   await expect(dialog()).toHaveCount(0)
-  await expect(v.getByRole('region', { name: 'Review' })).toContainText('Reviewing your branch feature/calc against main · 3 findings · Default review')
+  await expect(v.getByRole('region', { name: 'Review' })).toContainText('Reviewing your branch feature/calc against main · includes uncommitted changes · 3 findings · Default review')
 }
 
 test.beforeAll(async () => {
@@ -228,4 +228,20 @@ test('review prompts: a prompt of this repository overrides the global ones, and
   await expect(v.getByRole('region', { name: 'Review' })).toContainText('Firmware safety review')
   expect(readFileSync(join(fx.root, 'review-args'), 'utf8')).toContain('Review instructions from the user:\nFocus on ISR re-entrancy.')
   await v.getByRole('button', { name: 'Exit review' }).click()
+})
+
+test('My branch also reviews the uncommitted changes, and Prepare fixes applies to them', async () => {
+  writeFileSync(join(fx.alpha, 'extra.c'), lines(4, { 2: 'int unchecked = v[n];' }))
+  writeFileSync(join(fx.root, 'review-answer'), finding(['severity: important', 'file: extra.c', 'line: R2', 'title: Out of bounds'], 'v[n] is past the end.', ['int unchecked = v[n - 1];']))
+  await refresh()
+  await v.getByRole('button', { name: 'Review', exact: true }).click()
+  await dialog().getByLabel('Compare with').selectOption('main')
+  await expect(dialog().getByRole('status')).toContainText('2 commits · 1 uncommitted file')
+  await dialog().getByRole('button', { name: 'Start review' }).click()
+  await expect(v.getByRole('region', { name: 'Review' })).toContainText('includes uncommitted changes')
+  expect(readFileSync(join(fx.root, 'review-stdin'), 'utf8')).toContain('=== file extra.c (new file)')
+  await expect(card('Out of bounds')).toBeVisible()
+  await panel().getByRole('button', { name: 'Prepare fixes (1)' }).click()
+  await expect(panel().getByRole('status')).toContainText('extra.c:2 · applied')
+  expect(read('extra.c').split('\n')[1]).toBe('int unchecked = v[n - 1];')
 })

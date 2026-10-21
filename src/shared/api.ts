@@ -118,7 +118,7 @@ export interface Api {
   removeAccount(host: string): Promise<void>
   forgeInfo(repo: string, branch: string): Promise<ForgeInfo | null> // null: the branch's remote is not on a forge
   postReviewStep(repo: string, branch: string, head: string, draft: boolean, step: PostStep): Promise<void>
-  reviewScope(repo: string, branch: string, base: string): Promise<ReviewScope>
+  reviewScope(repo: string, branch: string, base: string, worktree: boolean): Promise<ReviewScope>
   startReview(repo: string, req: ReviewRequest): Promise<Review> // asks Claude; nothing is written
   prepareFixes(repo: string, branch: string, fixes: FixRequest[]): Promise<FixResult> // unstaged changes, one undo step
   readWorkingFile(repo: string, path: string): Promise<{ text: string } | { reason: string }> // reason: why it cannot be edited
