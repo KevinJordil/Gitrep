@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Branch, Commit, GraphScope, OperationInfo, RepoEntry, RepoSettingsPatch, RepoStatus, ResetMode, ReviewPrompt, Settings, Stash, SyncState, Tag, UndoState } from '../../shared/types'
+import type { Branch, Commit, ForgeInfo, GraphScope, OperationInfo, RepoEntry, RepoSettingsPatch, RepoStatus, ResetMode, ReviewPrompt, Settings, Stash, SyncState, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
 import { CommitMenu, type CommitAction, type RefItem } from './CommitMenu'
@@ -18,7 +18,8 @@ import { InteractiveRebase } from './InteractiveRebase'
 import { MergeMenu } from './MergeMenu'
 import type { FileView, Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
-import { newUi, type ReviewSession, type ReviewUi } from './review'
+import type { AccountSuggestion } from './AccountsDialog'
+import { FORGE_NAME, newUi, requestLabel, requestWord, type ReviewSession, type ReviewUi } from './review'
 import { PromptsDialog } from './PromptsDialog'
 import { ReviewDialog, ReviewMenuItems } from './ReviewDialog'
 import { ReviewBanner, ReviewView } from './ReviewView'
@@ -42,9 +43,11 @@ interface Props {
   entry?: RepoEntry
   onRepoSettings: (path: string, patch: RepoSettingsPatch) => Promise<boolean>
   onBranch: (path: string, label: string) => void
+  accountsVersion: number // changes when an account is saved or removed
+  onAccounts: (suggest: AccountSuggestion | null) => void
 }
 
-export function RepoView({ path, active, settings, entry, onSettings, onRepoSettings, onBranch }: Props) {
+export function RepoView({ path, active, settings, entry, onSettings, onRepoSettings, onBranch, accountsVersion, onAccounts }: Props) {
   const { activeDays } = settings
   // The saved pane widths, clamped to the current window so the center keeps its minimum (the saved values are left as they are).
   const [winW, setWinW] = useState(window.innerWidth)
@@ -83,6 +86,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const sessionRef = useRef(session)
   sessionRef.current = session
   const [editingPrompts, setEditingPrompts] = useState(false)
+  const [forges, setForges] = useState<Record<string, ForgeInfo | null>>({}) // what each looked-up branch has open on its forge
   const [version, setVersion] = useState(0)
   const lastError = useRef('')
   const lastStatus = useRef('')
@@ -323,6 +327,14 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const openFileMenu = useCallback((p: string, rev: string | null, x: number, y: number) => setFileMenu({ path: p, rev, x, y }), [])
   const closeFileMenu = useCallback(() => setFileMenu(null), [])
   const openFile = useCallback((p: string, rev: string | null, view: FileView) => focusOn({ kind: 'file', path: p, rev, view }), [focusOn])
+  // "Review MR !n" follows "Review with Claude…" once the branch's request is known.
+  const withRequest = (name: string, items: RefItem[]): RefItem[] => {
+    const f = forges[name]
+    if (!f?.request || !f.kind) return items
+    const i = items.findIndex((it) => it.claude)
+    const mr: RefItem = { label: `Review ${requestWord(f)} ${requestLabel(f)}`, hint: FORGE_NAME[f.kind], run: () => openReview(name), claude: true }
+    return i < 0 ? items : [...items.slice(0, i + 1), mr, ...items.slice(i + 1)]
+  }
   const openDrop = useCallback<DropBranch>((source, target, x, y) => setDrop({ source, target, x, y }), [])
   const closeDrop = useCallback(() => setDrop(null), [])
   // A rebase that stopped on conflicts has already moved to the conflict view: leave it there.
@@ -402,6 +414,29 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     }
   }
 
+  // Forge lookups: the current branch as soon as it is known, a branch when its menu opens. A new account or forge choice starts over.
+  // A lookup started before the forge choices or accounts changed never writes (generation counter).
+  const forgeGen = useRef(0)
+  const lookup = useCallback(
+    (branch: string) => {
+      const gen = forgeGen.current
+      return api.forgeInfo(path, branch).then((f) => gen === forgeGen.current && setForges((all) => ({ ...all, [branch]: f })), () => undefined)
+    },
+    [path]
+  )
+  const current = status?.branch ?? null
+  const forgeHostsKey = JSON.stringify(settings.forgeHosts) // a settings save makes a new object: only a real change starts over
+  useEffect(() => {
+    forgeGen.current++
+    setForges((all) => (current && all[current] ? { [current]: all[current] } : {})) // the badge stays while the lookup runs
+    if (active && current) void lookup(current)
+  }, [active, current, lookup, forgeHostsKey, accountsVersion])
+  const menuBranch = menu?.branchActions?.name ?? menuTip
+  useEffect(() => {
+    if (menuBranch) void lookup(menuBranch)
+  }, [menuBranch, lookup])
+  const requests = useMemo(() => Object.fromEntries(Object.entries(forges).flatMap(([b, f]) => (f?.request ? [[b, requestLabel(f)]] : []))), [forges])
+
   const changes = status ? status.staged.length + status.unstaged.length + status.conflicted.length : 0
   const hasWip = changes > 0
   const head = status?.head ?? null
@@ -479,6 +514,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
         <button className={`tbtn review ${inReview ? 'on' : ''}`} title={session ? 'Back to the review' : 'Review the current branch with Claude'} disabled={!session && !status?.branch} onClick={() => (session ? focusOn({ kind: 'review' }) : status?.branch && openReview(status.branch))}>
           <Icon name="sparkle" />
           <span>Review</span>
+          {current && requests[current] && <span className="mr">{requests[current]}</span>}
         </button>
         <div className="grow" />
         <button className="tbtn boxed" onClick={() => void openCode()}>
@@ -521,6 +557,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           onScope={setScope}
           onDrop={openDrop}
           onDelete={deleteBranch}
+          requests={requests}
           onMenu={openBranchMenu}
           onSwitch={switchTo}
         />
@@ -574,10 +611,10 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} onFileMenu={openFileMenu} run={run} busy={busy} />
         )}
       </div>
-      {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} onReview={() => { closeMenu(); openReview(menuTip) }} />} />}
+      {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions && { name: menu.branchActions.name, items: withRequest(menu.branchActions.name, menu.branchActions.items) }} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} forge={forges[menuTip]} onReview={() => { closeMenu(); openReview(menuTip) }} />} />}
       {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
-      {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing} branches={branches} settings={settings} entry={entry} onStart={startReview} onEditPrompts={() => setEditingPrompts(true)} onClose={() => setReviewing(null)} />}
+      {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing} branches={branches} settings={settings} entry={entry} onStart={startReview} onEditPrompts={() => setEditingPrompts(true)} onSettings={onSettings} accountsVersion={accountsVersion} onAccounts={onAccounts} onClose={() => setReviewing(null)} />}
       {editingPrompts && <PromptsDialog repoName={entry?.name ?? path} prompts={settings.reviewPrompts} own={entry?.reviewPrompt ?? null} onSave={saveReviewPrompts} onClose={() => setEditingPrompts(false)} />}
       {dialog}
     </>

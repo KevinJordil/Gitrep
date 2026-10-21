@@ -10,10 +10,11 @@ interface DialogProps {
   children: ReactNode
   wide?: boolean
   foot?: ReactNode // at the left of the buttons
+  cancel?: boolean // false: the submit button alone closes it
 }
 
 // Modal form on the native <dialog> (focus trap, Escape, backdrop). Electron has no window.prompt.
-export function Dialog({ title, submit, busy = false, canSubmit = true, onSubmit, onClose, children, wide = false, foot }: DialogProps) {
+export function Dialog({ title, submit, busy = false, canSubmit = true, onSubmit, onClose, children, wide = false, foot, cancel = true }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   useEffect(() => {
@@ -41,9 +42,11 @@ export function Dialog({ title, submit, busy = false, canSubmit = true, onSubmit
         {children}
         <div className="dialog-actions">
           {foot && <span className="dialog-foot">{foot}</span>}
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
+          {cancel && (
+            <button type="button" className="btn" onClick={onClose}>
+              Cancel
+            </button>
+          )}
           <button type="submit" className="btn-primary" disabled={!canSubmit || busy}>
             {busy && <span className="spin" />}
             {submit}

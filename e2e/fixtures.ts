@@ -115,7 +115,7 @@ export async function launchFixture(): Promise<Fixture> {
   const app = await _electron.launch({
     args: ['.', '--no-sandbox'],
     cwd: projectRoot,
-    env: { ...env, GITREP_USER_DATA: userData, GITREP_HIDDEN: '1', GITREP_TERMINAL: fakeTerminal } as Record<string, string>
+    env: { ...env, GITREP_USER_DATA: userData, GITREP_HIDDEN: '1', GITREP_TERMINAL: fakeTerminal, GITREP_TEST_PLAIN_TOKENS: '1' } as Record<string, string>
   })
   const page = await app.firstWindow()
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))

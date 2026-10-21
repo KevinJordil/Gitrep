@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FAKE_TOKEN, startFakeForge, type FakeForge } from '../e2e/fakeForge'
-import { accountFor, listAccounts, removeAccount, saveAccount, testAccount, type Vault } from '../src/main/accounts'
+import { accountFor, listAccounts, plainTokensAllowed, removeAccount, saveAccount, testAccount, type Vault } from '../src/main/accounts'
 import { tempDir } from './helpers'
 
 // Reversible stand-in for safeStorage: the stored bytes must not be the token itself.
@@ -29,6 +29,12 @@ describe('accounts', () => {
     expect(accountFor(file, vault, 'github.com')).toBeNull()
     expect((await testAccount(file, vault, '127.0.0.1')).user).toBe('k.dubois')
     removeAccount(file, '127.0.0.1')
+    expect(listAccounts(file)).toEqual([])
+  })
+
+  it('refuses an instance URL that is not the host the account is for', async () => {
+    const file = join(await tempDir(), 'accounts.json')
+    await expect(saveAccount(file, vault, 'gitlab.example.com', 'gitlab', fake.url, FAKE_TOKEN)).rejects.toThrow('127.0.0.1')
     expect(listAccounts(file)).toEqual([])
   })
 
@@ -72,5 +78,13 @@ describe('accounts', () => {
     expect(listAccounts(file)).toEqual([])
     writeFileSync(file, JSON.stringify([{ host: 'x.ch', kind: 'svn', url: 'https://x.ch', token: 'aa' }]))
     expect(listAccounts(file)).toEqual([])
+  })
+})
+
+describe('plainTokensAllowed', () => {
+  it('honours the end-to-end switch only when unpackaged and exactly "1"', () => {
+    expect(plainTokensAllowed(false, '1')).toBe(true)
+    expect(plainTokensAllowed(true, '1')).toBe(false) // a packaged app ignores it
+    for (const v of [undefined, '', '0', 'true', 'yes', ' 1']) expect(plainTokensAllowed(false, v)).toBe(false)
   })
 })

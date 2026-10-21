@@ -56,6 +56,7 @@ export async function saveAccount(file: string, vault: Vault, host: string, kind
   const why = vault.unavailable()
   if (why) throw new Error(why)
   const account: AccountInfo = { host, kind, url: checkUrl(url), user: null }
+  if (new URL(account.url).hostname !== host) throw new Error(`The instance URL (${new URL(account.url).hostname}) is not ${host}`)
   account.user = await currentUser(account, secret)
   save(file, [...load(file).filter((a) => a.host !== host), { ...account, token: vault.encrypt(secret).toString('base64') }])
   return account
@@ -74,3 +75,7 @@ export function removeAccount(file: string, host: string): void {
   const list = load(file)
   if (list.some((a) => a.host === host)) save(file, list.filter((a) => a.host !== host))
 }
+
+// End-to-end runs start Electron with --password-store=basic and set GITREP_TEST_PLAIN_TOKENS=1 to store tokens anyway.
+// A packaged app never honours it: the switch cannot weaken a release.
+export const plainTokensAllowed = (packaged: boolean, flag: string | undefined): boolean => !packaged && flag === '1'

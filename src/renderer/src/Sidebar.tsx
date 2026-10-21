@@ -19,6 +19,7 @@ interface Props {
   onScope: (s: GraphScope) => void
   onDrop: DropBranch
   onDelete: (b: Branch) => void
+  requests?: Record<string, string> // the open merge / pull request of a branch: "!12", "#45"
   onMenu: (b: Branch, x: number, y: number) => void
 }
 
@@ -31,7 +32,7 @@ function Title({ title, count }: { title: string; count: number }) {
   )
 }
 
-export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeDays, onSwitch, onFocus, onScope, onDrop, onDelete, onMenu }: Props) {
+export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeDays, onSwitch, onFocus, onScope, onDrop, onDelete, onMenu, requests = {} }: Props) {
   const [unfolded, setUnfolded] = useState<string[]>([]) // titles of the sections showing their older branches
   const dot = (sha: string, fallback: string) => {
     const c = colors.get(sha)
@@ -72,6 +73,7 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeD
         <button className="name" title={b.name} onClick={() => onFocus({ kind: 'commit', sha: b.sha })}>
           {b.name}
         </button>
+        {requests[b.name] && <span className="mrtag">{requests[b.name]}</span>}
         <span className="faint">{[b.ahead ? `↑${b.ahead}` : '', b.behind ? `↓${b.behind}` : ''].join(' ').trim()}</span>
         {/* Over the end of the row, not beside the name: shown on hover and keyboard focus, or while a toggle is on. */}
         <span className="side-actions">

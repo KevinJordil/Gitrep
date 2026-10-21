@@ -45,13 +45,18 @@ function setConfig(next: Config): void {
 }
 
 // Linux without a keyring falls back to a fixed key ("basic_text"): that is not encryption, refuse it.
+// Test support: Playwright starts Electron with --password-store=basic; end-to-end runs (unpackaged, GITREP_TEST_PLAIN_TOKENS=1) accept that store.
+const plainTokens = accounts.plainTokensAllowed(app.isPackaged, process.env.GITREP_TEST_PLAIN_TOKENS)
 const vault: accounts.Vault = {
-  unavailable: () =>
-    !safeStorage.isEncryptionAvailable()
-      ? 'Encryption is not available on this computer: tokens cannot be stored.'
-      : process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text'
-        ? 'No system keyring (GNOME Keyring or KWallet) is running: tokens cannot be stored encrypted.'
-        : null,
+  unavailable: () => {
+    if (plainTokens) {
+      safeStorage.setUsePlainTextEncryption(true)
+      return null
+    }
+    if (!safeStorage.isEncryptionAvailable()) return 'Encryption is not available on this computer: tokens cannot be stored.'
+    if (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text') return 'No system keyring (GNOME Keyring or KWallet) is running: tokens cannot be stored encrypted.'
+    return null
+  },
   encrypt: (text) => safeStorage.encryptString(text),
   decrypt: (data) => safeStorage.decryptString(data)
 }

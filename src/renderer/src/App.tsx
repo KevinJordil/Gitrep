@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Config, RepoSettingsPatch, Settings } from '../../shared/types'
+import { AccountsDialog, type AccountSuggestion } from './AccountsDialog'
 import { api } from './api'
 import { Dashboard } from './Dashboard'
 import { Dialog } from './Dialog'
@@ -23,6 +24,9 @@ export function App() {
   const [branches, setBranches] = useState<Record<string, string>>({})
   const [toasts, setToasts] = useState<Toast[]>([])
   const [closing, setClosing] = useState<string | null>(null)
+  const [accounts, setAccounts] = useState<{ suggest: AccountSuggestion | null } | null>(null) // the open Accounts dialog
+  const [accountsVersion, setAccountsVersion] = useState(0) // changes when an account is saved or removed: repo views look again
+  const openAccounts = useCallback((suggest: AccountSuggestion | null) => setAccounts({ suggest }), [])
   const configRef = useRef<Config | null>(null)
   const queue = useRef<Promise<void>>(Promise.resolve())
 
@@ -159,11 +163,14 @@ export function App() {
               <Icon name="plus" size={14} stroke={2} />
             </button>
           </nav>
+          <button className="iconbtn" style={{ alignSelf: 'center' }} aria-label="Accounts" title="GitLab and GitHub accounts" onClick={() => openAccounts(null)}>
+            <Icon name="gear" size={15} />
+          </button>
         </header>
         {active === 'dashboard' && <Dashboard repoCount={config.repos.length} onOpen={(p) => void openTab(p)} onAdd={() => void addRepos()} onChanged={() => void reload()} />}
         {config.openTabs.map((p) => (
           <div key={p} className="repo" style={{ display: active === p ? 'flex' : 'none' }}>
-            <RepoView path={p} active={active === p} settings={config.settings} entry={config.repos.find((r) => r.path === p)} onSettings={updateSettings} onRepoSettings={updateRepoSettings} onBranch={onBranch} />
+            <RepoView path={p} active={active === p} settings={config.settings} entry={config.repos.find((r) => r.path === p)} onSettings={updateSettings} onRepoSettings={updateRepoSettings} onBranch={onBranch} accountsVersion={accountsVersion} onAccounts={openAccounts} />
           </div>
         ))}
         {closing && (
@@ -180,6 +187,7 @@ export function App() {
             <p className="note">The repository stays on the dashboard. You can open it again from there.</p>
           </Dialog>
         )}
+        {accounts && <AccountsDialog suggest={accounts.suggest} onChanged={() => setAccountsVersion((n) => n + 1)} onClose={() => setAccounts(null)} />}
         {toastList}
       </div>
     </ToastContext.Provider>

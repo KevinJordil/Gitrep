@@ -41,7 +41,8 @@ const PATHS = {
   trash: ['M4 7h16', 'M10 11v6M14 11v6', 'M6 7l1 13h10l1-13', 'M9 7V4h6v3'],
   rebaseI: ['M4 6h16M4 12h10M4 18h6', 'M17 15l3 3-3 3'],
   wand: ['m4 20 11-11', 'm14 5 5 5', 'M19 3v3M17.5 4.5h3', 'M5 4v2M4 5h2'],
-  grip: ['M9 6h.01M9 12h.01M9 18h.01', 'M15 6h.01M15 12h.01M15 18h.01']
+  grip: ['M9 6h.01M9 12h.01M9 18h.01', 'M15 6h.01M15 12h.01M15 18h.01'],
+  gear: ['M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', 'M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1']
 } as const
 
 export type IconName = keyof typeof PATHS
