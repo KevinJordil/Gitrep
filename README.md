@@ -1,6 +1,12 @@
-# GitRep
+<p align="center"><img src="resources/icon.png" width="96" alt="GitRep icon"></p>
+
+<h1 align="center">GitRep</h1>
 
 Local multi-repo git client (Electron + React). A dashboard of all your repositories; a commit graph of every branch with search, isolate/hide, commit details and a context menu (checkout, branch, tag, cherry-pick, revert, reset); stashes; drag a branch onto another to merge, rebase or fast-forward, with conflict prediction; interactive rebase (reorder, reword, squash, fixup, drop, with a plan proposed by Claude) and push with `--force-with-lease` after a rewrite; undo and redo of every operation; a conflict editor (both sides named, block by block, editable result, rebase steps) with resolutions proposed by Claude or handed over to Claude Code in a terminal; diffs with staging per file, hunk or line, and an editor (Diff | Edit in the header of a working-tree file) to change the file while looking at its changes: syntax colors, search, gutter marks, Ctrl+S, one undo step per save; the history of a file through its renames and its blame, colored by age, back to any revision; and commit, merge and stash messages, commit explanations and merge advice suggested by Claude.
+
+![The history of a repository with its branches, tags, commits not pushed and not pulled, and the changes being worked on](docs/images/history.png)
+
+![The diff of a changed file, staged by hunk or by line](docs/images/diff.png)
 
 ## Download
 
