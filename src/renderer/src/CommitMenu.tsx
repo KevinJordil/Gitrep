@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { Commit, ResetMode } from '../../shared/types'
 
 export type CommitAction = 'checkout' | 'branch' | 'tag' | 'cherry-pick' | 'revert' | 'copy' | 'explain' | 'rebase-i' | `reset-${ResetMode}`
@@ -15,6 +15,7 @@ export interface RefItem {
   run: () => void
   disabled?: boolean
   danger?: boolean
+  claude?: boolean
 }
 
 interface Props {
@@ -27,9 +28,10 @@ interface Props {
   canRebase: boolean // a strict ancestor of HEAD on a checked-out branch
   onAction: (a: CommitAction) => void
   onClose: () => void // must be stable (useCallback)
+  extra?: ReactNode // more items before Copy SHA (Review with Claude… on a branch tip)
 }
 
-export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebase, onAction, onClose }: Props) {
+export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebase, onAction, onClose, extra }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [sub, setSub] = useState(false)
   const target = branch ?? 'HEAD'
@@ -119,7 +121,7 @@ export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebas
       {branchActions && (
         <>
           {branchActions.items.map((it) => (
-            <button key={it.label} role="menuitem" className={`menu-item ${it.danger ? 'danger' : ''}`} disabled={it.disabled} onMouseEnter={closeSub} onClick={() => actRef(it.run)}>
+            <button key={it.label} role="menuitem" className={`menu-item ${it.danger ? 'danger' : ''} ${it.claude ? 'claude' : ''}`} disabled={it.disabled} onMouseEnter={closeSub} onClick={() => actRef(it.run)}>
               <span>{it.label}</span>
             </button>
           ))}
@@ -153,6 +155,7 @@ export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebas
         )}
       </div>
       {item('Rebase interactively from here…', 'rebase-i', '', !canRebase)}
+      {extra}
       <div className="menu-sep" role="separator" />
       {item('Copy SHA', 'copy', 'Ctrl C')}
       {item('Explain with Claude', 'explain')}

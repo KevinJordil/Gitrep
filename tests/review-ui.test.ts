@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CONFIG } from '../src/main/config'
+import { promptProblem } from '../src/renderer/src/PromptsDialog'
 import { defaultBase, initialEdits, keptFixes, promptChoices, visibleFindings } from '../src/renderer/src/review'
 import type { Branch, Review, ReviewFinding } from '../src/shared/types'
 
@@ -56,5 +57,15 @@ describe('findings', () => {
       { id: 3, path: 'a.c', line: 5, endLine: 5, original: ['old 5'], lines: [] }
     ])
     expect(keptFixes(review, { ...edits, 2: { ...edits[2], keep: false }, 3: { ...edits[3], fix: 'a\nb' } })).toEqual([{ id: 3, path: 'a.c', line: 5, endLine: 5, original: ['old 5'], lines: ['a', 'b'] }])
+  })
+})
+
+describe('promptProblem', () => {
+  it('needs a unique name for each prompt', () => {
+    expect(promptProblem([{ name: 'A', text: '' }], { name: 'A', text: 'own may reuse a global name' })).toBe('')
+    expect(promptProblem([{ name: ' ', text: '' }], null)).toBe('Every prompt needs a name.')
+    expect(promptProblem([{ name: 'A', text: '' }], { name: '', text: '' })).toBe('Every prompt needs a name.')
+    expect(promptProblem([{ name: 'A', text: '' }, { name: 'A ', text: '' }], null)).toBe('Two prompts have the same name.')
+    expect(promptProblem([{ name: 'x'.repeat(61), text: '' }], null)).toBe('A name is limited to 60 characters.')
   })
 })

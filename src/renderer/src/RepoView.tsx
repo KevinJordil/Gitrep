@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Branch, Commit, GraphScope, OperationInfo, RepoEntry, RepoSettingsPatch, RepoStatus, ResetMode, Settings, Stash, SyncState, Tag, UndoState } from '../../shared/types'
+import type { Branch, Commit, GraphScope, OperationInfo, RepoEntry, RepoSettingsPatch, RepoStatus, ResetMode, ReviewPrompt, Settings, Stash, SyncState, Tag, UndoState } from '../../shared/types'
 import { api } from './api'
 import { ChangesPanel } from './ChangesPanel'
 import { CommitMenu, type CommitAction, type RefItem } from './CommitMenu'
@@ -19,7 +19,8 @@ import { MergeMenu } from './MergeMenu'
 import type { FileView, Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
 import { newUi, type ReviewSession, type ReviewUi } from './review'
-import { ReviewDialog } from './ReviewDialog'
+import { PromptsDialog } from './PromptsDialog'
+import { ReviewDialog, ReviewMenuItems } from './ReviewDialog'
 import { ReviewBanner, ReviewView } from './ReviewView'
 import { applySuggestions, blocksOf, hunkOf, newDraft, textOf, type Draft } from './resolve'
 import { toggleHide, toggleOnly } from '../../shared/branches'
@@ -81,6 +82,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const [rerunning, setRerunning] = useState(false)
   const sessionRef = useRef(session)
   sessionRef.current = session
+  const [editingPrompts, setEditingPrompts] = useState(false)
   const [version, setVersion] = useState(0)
   const lastError = useRef('')
   const lastStatus = useRef('')
@@ -310,6 +312,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
       { label: `Merge or rebase ${b.name} into ${current?.name ?? 'the current branch'}…`, run: () => current && openDrop(b, current, x, y), disabled: !current || current.name === b.name },
       { label: isolated ? 'Show all branches' : `Show only ${b.name}`, run: () => setScope(toggleOnly(scope, b.name)) },
       { label: hidden ? `Show ${b.name}` : `Hide ${b.name}`, run: () => setScope(toggleHide(scope, b.name)), disabled: b.current },
+      { label: 'Review with Claude…', run: () => openReview(b.name), claude: true },
       ...(b.remote ? [] : [{ label: `Delete ${b.name}`, run: () => deleteBranch(b), disabled: b.current, danger: true }])
     ]
     const commit = log.find((c) => c.sha === b.sha) ?? { sha: b.sha, parents: [], author: '', email: '', date: b.date, committed: b.date, subject: b.name, refs: [] }
@@ -367,6 +370,11 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   }
 
   const openReview = (branch: string) => (session && session.review.branch === branch ? focusOn({ kind: 'review' }) : setReviewing(branch))
+  const saveReviewPrompts = async (prompts?: ReviewPrompt[], own?: ReviewPrompt | null) =>
+    (prompts === undefined || (await onSettings({ reviewPrompts: prompts }))) && (own === undefined || (await onRepoSettings(path, { reviewPrompt: own })))
+  // The branch at a commit, for the graph menu: a local one first.
+  const tipOf = (sha: string) => (branches.find((b) => !b.remote && b.sha === sha) ?? branches.find((b) => b.sha === sha))?.name
+  const menuTip = menu && !menu.branchActions ? tipOf(menu.commit.sha) : undefined
   const startReview = (s: ReviewSession) => {
     setReviewing(null)
     setSession(s)
@@ -566,10 +574,11 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} onFileMenu={openFileMenu} run={run} busy={busy} />
         )}
       </div>
-      {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
+      {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} onReview={() => { closeMenu(); openReview(menuTip) }} />} />}
       {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
-      {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing} branches={branches} settings={settings} entry={entry} onStart={startReview} onClose={() => setReviewing(null)} />}
+      {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing} branches={branches} settings={settings} entry={entry} onStart={startReview} onEditPrompts={() => setEditingPrompts(true)} onClose={() => setReviewing(null)} />}
+      {editingPrompts && <PromptsDialog repoName={entry?.name ?? path} prompts={settings.reviewPrompts} own={entry?.reviewPrompt ?? null} onSave={saveReviewPrompts} onClose={() => setEditingPrompts(false)} />}
       {dialog}
     </>
   )

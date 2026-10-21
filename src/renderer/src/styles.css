@@ -673,3 +673,8 @@ body.resizing { user-select: none; cursor: col-resize; }
 .pbar { align-self: stretch; height: 4px; border-radius: 2px; background: var(--hover); overflow: hidden; }
 .pbar i { display: block; height: 100%; background: var(--accent); }
 .fixfiles .file .path { height: auto; }
+.menu-item.claude span:first-child { color: var(--claude-fg); }
+.lnk { color: var(--accent); font-size: 12px; }
+.lnk:hover { text-decoration: underline; }
+.prompt-card { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.prompt-card .lbl-row .field { min-width: 0; }
