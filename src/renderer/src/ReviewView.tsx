@@ -7,7 +7,7 @@ import { FileIcon, StatusBadge } from './FileIcon'
 import { Icon } from './icons'
 import type { RunOp } from './model'
 import type { AccountSuggestion } from './AccountsDialog'
-import { countBy, defaultSummary, HEAD_MOVED, isMoved, MOVED_TEXT, postStatus, FORGE_NAME, initialEdits, keptComments, keptFixes, postPlan, requestLabel, requestName, requestWord, SEVERITIES, SEVERITY_CLASS, SEVERITY_LABEL, shortPath, visibleFindings, where, type FindingEdit, type PostState, type PostStepState, type ReviewMode, type ReviewSession, type ReviewUi } from './review'
+import { countBy, HEAD_MOVED, isMoved, MOVED_TEXT, postStatus, FORGE_NAME, initialEdits, keptComments, keptFixes, postPlan, requestLabel, requestName, requestWord, SEVERITIES, SEVERITY_CLASS, SEVERITY_LABEL, shortPath, visibleFindings, where, type FindingEdit, type PostState, type PostStepState, type ReviewMode, type ReviewSession, type ReviewUi } from './review'
 
 interface BannerProps {
   session: ReviewSession
@@ -96,11 +96,11 @@ export function ReviewView({ repo, session, status, remote, undoLabel, ui, setUi
   const edit = (id: number, p: Partial<FindingEdit>) => setUi((u) => ({ ...u, edits: { ...u.edits, [id]: { ...u.edits[id], ...p } } }))
   const at = visible.findIndex((f) => f.id === selected)
   const step = (d: number) => visible.length && show(visible[(Math.max(at, 0) + d + visible.length) % visible.length].id)
-  // ArrowUp / ArrowDown move through the list: focusing a row's checkbox selects it.
+  // ArrowUp / ArrowDown move through the list: focusing a row selects it.
   const arrows = (e: KeyboardEvent<HTMLDivElement>) => {
     const d = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0
-    const boxes = [...e.currentTarget.querySelectorAll('input')]
-    const i = boxes.indexOf(document.activeElement as HTMLInputElement)
+    const boxes = [...e.currentTarget.querySelectorAll('button')]
+    const i = boxes.indexOf(document.activeElement as HTMLButtonElement)
     if (!d || i < 0) return
     e.preventDefault()
     boxes[Math.min(boxes.length - 1, Math.max(0, i + d))]?.focus()
@@ -132,16 +132,18 @@ export function ReviewView({ repo, session, status, remote, undoLabel, ui, setUi
         <input className="field" placeholder="Filter findings" aria-label="Filter findings" value={query} onChange={(e) => patch({ query: e.target.value })} />
         <div className="flist" onKeyDown={arrows}>
           {visible.map((f) => (
-            <label key={f.id} className={`fitem ${f.id === selected ? 'sel' : ''} ${edits[f.id]?.keep ? '' : 'off'}`} onClick={(e) => !(e.target instanceof HTMLInputElement) && show(f.id)}>
-              <input type="checkbox" onFocus={() => show(f.id)} disabled={locked} aria-label={`Keep: ${f.title}`} checked={!!edits[f.id]?.keep} onChange={(e) => edit(f.id, { keep: e.target.checked })} />
+            <button key={f.id} type="button" className={`fitem ${f.id === selected ? 'sel' : ''} ${edits[f.id]?.keep ? '' : 'off'}`} aria-current={f.id === selected} onFocus={() => show(f.id)} onClick={() => show(f.id)}>
               <div>
                 <div className="fmeta">
                   <span className={`sev ${SEVERITY_CLASS[f.severity]}`}>{SEVERITY_LABEL[f.severity]}</span>
                   <span className="mono faint">{where(f)}</span>
                 </div>
-                <div className="fsum">{f.title}</div>
+                <div className="fsum">
+                  {f.title}
+                  {!edits[f.id]?.keep && <span className="sr-only"> (ignored)</span>}
+                </div>
               </div>
-            </label>
+            </button>
           ))}
         </div>
         {review.findings.length === 0 && <div className="note">Claude found nothing to report.</div>}
@@ -462,7 +464,6 @@ function PostPanel({ repo, session, edits, post, setUi, current, onAccounts }: P
   const request = forge.request!
   const kind = forge.kind ?? 'gitlab'
   const { steps, posting, moved, draft } = post
-  const summary = post.summary ?? defaultSummary(review, edits)
   const comments = keptComments(review, edits)
   const kept = review.findings.filter((f) => edits[f.id]?.keep)
   const ignored = review.findings.length - kept.length
@@ -501,9 +502,9 @@ function PostPanel({ repo, session, edits, post, setUi, current, onAccounts }: P
   }
   const start = () => {
     if (!forge.account) return onAccounts(forge.kind ? { host: forge.host, kind: forge.kind, url: forge.url } : null)
-    const list = postPlan(kind, draft, summary, comments).map((p): PostStepState => ({ ...p, state: 'todo' }))
+    const list = postPlan(kind, draft, comments).map((p): PostStepState => ({ ...p, state: 'todo' }))
     const id = Date.now()
-    patch({ id, summary, steps: list, posting: true, moved: false })
+    patch({ id, steps: list, posting: true, moved: false })
     void send(list, id, draft)
   }
   const resume = () => {
@@ -541,10 +542,6 @@ function PostPanel({ repo, session, edits, post, setUi, current, onAccounts }: P
             </button>
           )}
         </div>
-        <label className="dialog-field">
-          Summary comment
-          <textarea className="field" rows={4} value={summary} disabled={!!steps} onChange={(e) => patch({ summary: e.target.value })} />
-        </label>
         <div className="sumlist">
           {SEVERITIES.filter((s) => counts[s]).map((s) => (
             <div key={s}>
@@ -557,7 +554,7 @@ function PostPanel({ repo, session, edits, post, setUi, current, onAccounts }: P
           <input type="checkbox" checked={draft} disabled={!!steps} onChange={(e) => patch({ draft: e.target.checked })} /> {kind === 'github' ? 'Post as a pending review (submit it on GitHub)' : 'Post as a draft review (publish all at once)'}
         </label>
         {!steps && (
-          <button className="btn-primary" disabled={posting || (!comments.length && !summary.trim())} onClick={start}>
+          <button className="btn-primary" disabled={posting || !comments.length} onClick={start}>
             Post {comments.length} comment{comments.length === 1 ? '' : 's'} to {word}
           </button>
         )}

@@ -161,7 +161,6 @@ export async function postStep(repo: string, branch: string, head: string, draft
   if (account.kind === 'gitlab') {
     const base = `/projects/${encodeURIComponent(t.project)}/merge_requests/${req.number}`
     if (step.kind === 'publish') return void (await post(`${base}/draft_notes/bulk_publish`))
-    if (step.kind === 'summary') return void (await post(draft ? `${base}/draft_notes` : `${base}/notes`, draft ? { note: body(step.body) } : { body: body(step.body) }))
     if (step.kind !== 'comment') throw new Error('Unknown step')
     if (!t.refs) throw new Error('GitLab gave no diff references for this merge request: try again later')
     const c = comment(step.comment)
@@ -169,7 +168,6 @@ export async function postStep(repo: string, branch: string, head: string, draft
   }
   const base = `/repos/${segments(t.project)}/pulls/${req.number}`
   if (step.kind === 'comment') return void (await post(`${base}/comments`, { commit_id: head, ...githubComment(comment(step.comment)) }))
-  if (step.kind === 'summary') return void (await post(`${base}/reviews`, { commit_id: head, body: body(step.body), event: 'COMMENT' }))
   if (step.kind !== 'review' || !Array.isArray(step.comments) || step.comments.length > MAX_COMMENTS) throw new Error('Unknown step')
   // No event: the review stays pending, for the user to submit on GitHub.
   await post(`${base}/reviews`, { commit_id: head, body: step.body ? body(step.body) : '', comments: step.comments.map((c) => githubComment(comment(c))) })

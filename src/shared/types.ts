@@ -356,8 +356,8 @@ export interface ReviewComment {
   body: string
 }
 
-// What one call posts. GitLab: comments, the summary note, then publish when drafting. GitHub: comments and a summary review, or one pending review.
-export type PostStep = { kind: 'summary'; body: string } | { kind: 'comment'; comment: ReviewComment } | { kind: 'publish' } | { kind: 'review'; body: string; comments: ReviewComment[] }
+// What one call posts. GitLab: comments, then publish when drafting. GitHub: comments, or one pending review.
+export type PostStep = { kind: 'comment'; comment: ReviewComment } | { kind: 'publish' } | { kind: 'review'; body: string; comments: ReviewComment[] }
 
 // What Claude is asked to look for in a review, besides the fixed output rules.
 export interface ReviewPrompt {

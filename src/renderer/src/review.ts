@@ -90,14 +90,7 @@ export function keptFixes(review: Review, edits: Record<number, FindingEdit>): F
 export const shortPath = (path: string) => path.slice(path.lastIndexOf('/') + 1)
 export const where = (f: ReviewFinding) => `${f.path}:${f.endLine}`
 
-export const newUi = (review: Review): ReviewUi => ({ edits: initialEdits(review.findings), severity: 'all', query: '', allFiles: false, selected: sortFindings(review.findings)[0]?.id ?? null, post: { id: 0, summary: null, draft: true, steps: null, posting: false, moved: false } })
-
-// "Automated review (prompt). 1 critical, 2 minor." from the kept findings: the default summary comment.
-export function defaultSummary(review: Review, edits: Record<number, FindingEdit>): string {
-  const counts = countBy(review.findings.filter((f) => edits[f.id]?.keep))
-  const parts = SEVERITIES.filter((s) => counts[s]).map((s) => `${counts[s]} ${s}`)
-  return `Automated review (${review.prompt}). ${parts.length ? `${parts.join(', ')}.` : 'Nothing to report.'}`
-}
+export const newUi = (review: Review): ReviewUi => ({ edits: initialEdits(review.findings), severity: 'all', query: '', allFiles: false, selected: sortFindings(review.findings)[0]?.id ?? null, post: { id: 0, draft: true, steps: null, posting: false, moved: false } })
 
 // The kept findings as inline comments, with their edited text. Empty comments are left out.
 export function keptComments(review: Review, edits: Record<number, FindingEdit>): { label: string; comment: ReviewComment }[] {
@@ -116,11 +109,9 @@ export interface PlannedStep {
 
 // What Post sends, in order. GitHub pending review: everything in one call, submitted later on GitHub.
 // GitLab draft: draft notes, then one publish (only once every other step went through).
-export function postPlan(kind: ForgeKind, draft: boolean, summary: string, comments: { label: string; comment: ReviewComment }[]): PlannedStep[] {
-  const body = summary.trim()
-  if (kind === 'github' && draft) return comments.length || body ? [{ label: `Pending review (${comments.length} comment${comments.length === 1 ? '' : 's'})`, step: { kind: 'review', body, comments: comments.map((c) => c.comment) } }] : []
+export function postPlan(kind: ForgeKind, draft: boolean, comments: { label: string; comment: ReviewComment }[]): PlannedStep[] {
+  if (kind === 'github' && draft) return comments.length ? [{ label: `Pending review (${comments.length} comment${comments.length === 1 ? '' : 's'})`, step: { kind: 'review', body: '', comments: comments.map((c) => c.comment) } }] : []
   const steps: PlannedStep[] = comments.map((c) => ({ label: c.label, step: { kind: 'comment', comment: c.comment } }))
-  if (body) steps.unshift({ label: 'Summary comment', step: { kind: 'summary', body } })
   if (kind === 'gitlab' && draft && steps.length) steps.push({ label: 'Publish the draft review', step: { kind: 'publish' } })
   return steps
 }
@@ -130,10 +121,9 @@ export interface PostStepState extends PlannedStep {
   error?: string
 }
 
-// Posting to a request. summary: null until edited (then it follows the kept findings). id: tells a stale loop from the current one.
+// Posting to a request. id: tells a stale loop from the current one.
 export interface PostState {
   id: number
-  summary: string | null
   draft: boolean
   steps: PostStepState[] | null
   posting: boolean

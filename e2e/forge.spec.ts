@@ -132,27 +132,27 @@ test('merge request mode: an account added from the dialog finds the request, a 
   await expect(v.getByRole('region', { name: 'Review' })).toContainText('Reviewing MR !7 feature/mr → main · 3 findings · Default review')
   await expect(post()).toContainText('127.0.0.1')
   await expect(post()).toContainText('team/sub/alpha · posting as @k.dubois')
-  await expect(post().getByLabel('Summary comment')).toHaveValue('Automated review (Default review). 1 critical, 1 important, 1 minor.')
+  await expect(post().getByLabel('Summary comment')).toHaveCount(0)
   await post().getByLabel('Post as a draft review (publish all at once)').uncheck()
   forge.calls.length = 0
   forge.fail.push({ match: '/discussions', status: 400, message: 'line_code can not be blank', times: 1 })
   await page.screenshot({ path: 'e2e-artifacts/review-mr.png' })
   await post().getByRole('button', { name: 'Post 3 comments to MR !7' }).click()
-  await expect(progress()).toContainText('3 of 4')
+  await expect(progress()).toContainText('2 of 3')
   await expect(progress().locator('.pstep.fail')).toContainText('mr.c:1 · GitLab (127.0.0.1) refused the data (400): line_code can not be blank')
   await page.screenshot({ path: 'e2e-artifacts/review-mr-failed.png' })
   await progress().getByRole('button', { name: 'Retry failed (1)' }).click()
-  await expect(progress()).toContainText('4 of 4')
+  await expect(progress()).toContainText('3 of 3')
   await expect(progress().getByRole('link', { name: 'Open MR !7 on GitLab' })).toBeVisible()
   const posted = forge.calls.filter((c) => c.method === 'POST').map((c) => [c.path.split('/merge_requests/7')[1], c.body])
   const position = (lines: object) => ({ position_type: 'text', base_sha: forge.mrs[0].base, start_sha: forge.mrs[0].base, head_sha: forge.mrs[0].sha, ...lines })
   expect(posted).toEqual([
-    ['/notes', { body: 'Automated review (Default review). 1 critical, 1 important, 1 minor.' }],
     ['/discussions', { body: 'Avoid a global.', position: position({ old_path: 'mr.c', new_path: 'mr.c', new_line: 1 }) }],
     ['/discussions', { body: 'Two stays.', position: position({ old_path: 'a.txt', new_path: 'a.txt', new_line: 2, old_line: 2 }) }],
     ['/discussions', { body: 'Why remove one?', position: position({ old_path: 'a.txt', new_path: 'a.txt', old_line: 1 }) }],
     ['/discussions', { body: 'Avoid a global.', position: position({ old_path: 'mr.c', new_path: 'mr.c', new_line: 1 }) }]
   ])
+  expect(posted.some(([path]) => String(path).startsWith('/notes'))).toBe(false) // no summary note
 })
 
 test('a draft review on GitLab is published once every note is in; switching mode keeps the edits', async () => {
@@ -167,8 +167,8 @@ test('a draft review on GitLab is published once every note is in; switching mod
   await expect(post()).toContainText('1 ignored')
   forge.calls.length = 0
   await post().getByRole('button', { name: 'Post 2 comments to MR !7' }).click()
-  await expect(progress()).toContainText('4 of 4')
-  expect(forge.calls.filter((c) => c.method === 'POST').map((c) => c.path.split('/merge_requests/7')[1])).toEqual(['/draft_notes', '/draft_notes', '/draft_notes', '/draft_notes/bulk_publish'])
+  await expect(progress()).toContainText('3 of 3')
+  expect(forge.calls.filter((c) => c.method === 'POST').map((c) => c.path.split('/merge_requests/7')[1])).toEqual(['/draft_notes', '/draft_notes', '/draft_notes/bulk_publish'])
 })
 
 test('posting locks the screen and survives a mode switch; a rejected draft note can be skipped, then the draft is published', async () => {
@@ -185,7 +185,7 @@ test('posting locks the screen and survives a mode switch; a rejected draft note
   await expect(post()).toContainText('Posting uses the text as it was when you clicked Post.')
   await expect(progress()).toContainText('Stopped')
   forge.delay = 0
-  await expect(progress().locator('.pstep.fail')).toContainText('Summary comment · GitLab (127.0.0.1) refused the data (400): note rejected')
+  await expect(progress().locator('.pstep.fail')).toContainText('mr.c:1 · GitLab (127.0.0.1) refused the data (400): note rejected')
   await expect(progress().locator('.pstep.fail .sr-only')).toHaveText('failed: ')
   // Switching mode and back shows the same progress.
   await v.getByRole('button', { name: 'Switch to my branch mode' }).click()
@@ -193,11 +193,11 @@ test('posting locks the screen and survives a mode switch; a rejected draft note
   await expect(progress()).toContainText('Stopped')
   await expect(progress().getByRole('button', { name: 'Retry failed (1)' })).toBeVisible()
   await progress().locator('.pstep.fail').getByRole('button', { name: 'Skip' }).click()
-  await expect(progress().locator('.pstep.skip')).toContainText('Summary comment')
+  await expect(progress().locator('.pstep.skip')).toContainText('mr.c:1')
   await progress().getByRole('button', { name: 'Continue' }).click()
   await expect(progress()).toContainText('Posted')
-  await expect(progress()).toContainText('4 of 5 · 1 skipped')
-  expect(forge.calls.filter((c) => c.method === 'POST').map((c) => c.path.split('/merge_requests/7')[1])).toEqual(['/draft_notes', '/draft_notes', '/draft_notes', '/draft_notes', '/draft_notes/bulk_publish'])
+  await expect(progress()).toContainText('3 of 4 · 1 skipped')
+  expect(forge.calls.filter((c) => c.method === 'POST').map((c) => c.path.split('/merge_requests/7')[1])).toEqual(['/draft_notes', '/draft_notes', '/draft_notes', '/draft_notes/bulk_publish'])
 })
 
 test('a request that moved since the review stops the posting with one message', async () => {
@@ -210,7 +210,7 @@ test('a request that moved since the review stops the posting with one message',
   await post().getByRole('button', { name: 'Post 3 comments to MR !7' }).click()
   await expect(progress()).toContainText('Stopped')
   await expect(progress().getByText('The request moved since this review: re-run the review.')).toHaveCount(1)
-  await expect(progress().locator('.pstep.fail')).toHaveCount(5)
+  await expect(progress().locator('.pstep.fail')).toHaveCount(4)
   await expect(progress().getByRole('button', { name: /Retry|Skip|Continue/ })).toHaveCount(0)
   expect(forge.calls.filter((c) => c.method === 'POST')).toEqual([])
   await v.getByRole('button', { name: 'Exit review' }).click()
@@ -252,7 +252,7 @@ test('GitHub: the pull request of a branch gets one pending review', async () =>
       '/repos/acme/beta/pulls/45/reviews',
       {
         commit_id: head,
-        body: 'Automated review (Default review). 1 important, 1 minor.',
+        body: '',
         comments: [
           { path: 'gh.c', line: 2, side: 'RIGHT', body: 'Group them.' },
           { path: 'gh.c', line: 1, side: 'RIGHT', body: 'Rename gh.' }
@@ -260,14 +260,13 @@ test('GitHub: the pull request of a branch gets one pending review', async () =>
       }
     ]
   ])
-  // Without the pending review: a summary review, then one comment per finding.
+  // Without the pending review: one comment per finding, no summary review.
   await b.getByRole('button', { name: 'Re-run' }).click()
   await panel.getByLabel('Post as a pending review (submit it on GitHub)').uncheck()
   forge.calls.length = 0
   await panel.getByRole('button', { name: 'Post 2 comments to PR #45' }).click()
-  await expect(panel.getByRole('status', { name: 'Posting' })).toContainText('3 of 3')
+  await expect(panel.getByRole('status', { name: 'Posting' })).toContainText('2 of 2')
   expect(forge.calls.filter((c) => c.method === 'POST').map((c) => [c.path, (c.body as { event?: string }).event])).toEqual([
-    ['/repos/acme/beta/pulls/45/reviews', 'COMMENT'],
     ['/repos/acme/beta/pulls/45/comments', undefined],
     ['/repos/acme/beta/pulls/45/comments', undefined]
   ])
