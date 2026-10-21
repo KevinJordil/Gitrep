@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { getConflictFile, getOperationInfo, handOver, handOverContext, resolveFile, resolveSide } from '../src/main/conflicts'
+import { getConflictFile, getOperationInfo, handOver, handOverContext, parseSteps, resolveFile, resolveSide } from '../src/main/conflicts'
 import { git } from '../src/main/git'
 import { undoState } from '../src/main/journal'
 import { cherryPick, integrate, skipOperation } from '../src/main/ops'
@@ -216,5 +216,15 @@ describe('hand-over safety', () => {
     expect(rec.argv[1]).toBe(handOverContext(await getOperationInfo(repo), ['a.txt']))
     expect(await realpath(rec.cwd)).toBe(await realpath(repo))
     expect(rec.path.startsWith('/opt/cc/bin:')).toBe(true)
+  })
+})
+
+describe('parseSteps', () => {
+  it('reads both todo formats: before and after git 2.44', () => {
+    const old = 'pick 1111111 first\nexec git commit --amend\nfixup -C 2222222 second\n'
+    const now = 'pick 1111111 # first\nfixup -C 2222222 # second\n'
+    const want = [{ sha: '1111111', subject: 'first' }, { sha: '2222222', subject: 'second' }]
+    expect(parseSteps(old)).toEqual(want)
+    expect(parseSteps(now)).toEqual(want)
   })
 })

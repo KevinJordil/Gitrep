@@ -23,12 +23,13 @@ async function branchAt(repo: string, sha: string): Promise<string | null> {
 
 // Kept steps of a git-rebase-todo file (exec lines are the app's own message steps: hidden).
 const STEP_ACTIONS = new Set(['pick', 'p', 'reword', 'r', 'edit', 'e', 'squash', 's', 'fixup', 'f'])
-function parseSteps(text: string): { sha: string; subject: string }[] {
+export function parseSteps(text: string): { sha: string; subject: string }[] {
   return text.split('\n').flatMap((line) => {
     const words = line.trim().split(/\s+/)
     if (!STEP_ACTIONS.has(words[0])) return []
     if (words[1]?.startsWith('-')) words.splice(1, 1) // fixup -C / -c
-    return words[1] ? [{ sha: words[1], subject: words.slice(2).join(' ') }] : []
+    // git 2.44+ writes `pick <sha> # <subject>`
+    return words[1] ? [{ sha: words[1], subject: words.slice(2).join(' ').replace(/^# /, '') }] : []
   })
 }
 

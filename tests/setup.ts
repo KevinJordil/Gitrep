@@ -10,3 +10,5 @@ writeFileSync(
 )
 process.env.GIT_CONFIG_GLOBAL = file
 process.env.GIT_CONFIG_NOSYSTEM = '1'
+// No editor ever opens in tests (CI has none): a git call that would need one fails fast instead of hanging.
+process.env.GIT_EDITOR = 'false'
