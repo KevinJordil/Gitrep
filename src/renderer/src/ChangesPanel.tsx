@@ -257,8 +257,8 @@ function FileGroup({ title, files, side, selection, onSelect, onMenu, action, hi
             <StatusBadge status={f.status} />
             <FileIcon path={f.path} />
             <button className="path" disabled={!onSelect} onClick={() => onSelect?.({ path: f.path, side: target })}>
-              <span className="faint">{dir}</span>
               {name}
+              {dir && <span className="fdir">{dir.slice(0, -1)}</span>}
             </button>
             {f.add ? <span className="add-n">+{f.add}</span> : null}
             {f.del ? <span className="del-n">−{f.del}</span> : null}
