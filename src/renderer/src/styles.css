@@ -696,3 +696,13 @@ body.resizing { user-select: none; cursor: col-resize; }
 .ok { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-size: 12px; white-space: nowrap; }
 .acc .err { display: inline-flex; align-items: center; gap: 5px; color: var(--faint); font-size: 12px; }
 .btnlink { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; }
+.seg { display: flex; gap: 6px; }
+.seg-b { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
+.seg-b b { color: var(--text); font-weight: 500; }
+.seg-b span { font-size: 12px; color: var(--faint); }
+.seg-b.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); box-shadow: inset 0 0 0 1px var(--accent); }
+.forge { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); }
+.forge .ok, .forge .lnk { margin-left: auto; }
+.sumlist { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.sumlist div { display: flex; align-items: center; gap: 8px; }
+.rp .dialog-field { flex: none; }

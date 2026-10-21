@@ -40,6 +40,7 @@ export interface FakeForge {
   prs: FakePr[]
   calls: FakeCall[]
   fail: { match: string; status: number; message: string; times: number }[] // the next `times` calls whose path contains `match` fail
+  delay: number // ms each POST waits before it is answered, to look at the screen while posting
   close: () => Promise<void>
 }
 
@@ -62,7 +63,7 @@ const readBody = (req: IncomingMessage) =>
   })
 
 export async function startFakeForge(): Promise<FakeForge> {
-  const forge = { mrs: [], prs: [], calls: [], fail: [] } as unknown as FakeForge
+  const forge = { mrs: [], prs: [], calls: [], fail: [], delay: 0 } as unknown as FakeForge
   const server = createServer((req, res) => {
     void (async () => {
       const raw = req.url ?? ''
@@ -73,6 +74,7 @@ export async function startFakeForge(): Promise<FakeForge> {
       const token = String(kind === 'gitlab' ? req.headers['private-token'] ?? '' : (req.headers.authorization ?? '').replace(/^Bearer /, ''))
       const body = await readBody(req)
       forge.calls.push({ method: req.method ?? '', path, body, token })
+      if (req.method === 'POST' && forge.delay) await new Promise((r) => setTimeout(r, forge.delay))
       if (token !== FAKE_TOKEN) return send(res, 401, { message: '401 Unauthorized' })
       const f = forge.fail.find((x) => x.times > 0 && path.includes(x.match))
       if (f) {

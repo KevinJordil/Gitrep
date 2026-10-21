@@ -6,29 +6,51 @@ import { Code, useHighlight } from './DiffView'
 import { FileIcon, StatusBadge } from './FileIcon'
 import { Icon } from './icons'
 import type { RunOp } from './model'
-import { countBy, initialEdits, keptFixes, SEVERITIES, SEVERITY_CLASS, SEVERITY_LABEL, shortPath, visibleFindings, where, type FindingEdit, type ReviewSession, type ReviewUi } from './review'
+import type { AccountSuggestion } from './AccountsDialog'
+import { countBy, defaultSummary, isMoved, MOVED_TEXT, postStatus, FORGE_NAME, initialEdits, keptComments, keptFixes, postPlan, requestLabel, requestName, requestWord, SEVERITIES, SEVERITY_CLASS, SEVERITY_LABEL, shortPath, visibleFindings, where, type FindingEdit, type PostState, type PostStepState, type ReviewMode, type ReviewSession, type ReviewUi } from './review'
 
 interface BannerProps {
   session: ReviewSession
   rerunning: boolean
+  posting: boolean // comments are being sent: leaving would lose track of them
   onRerun: () => void
+  onMode: (m: ReviewMode) => void
   onExit: () => void
 }
 
-export function ReviewBanner({ session, rerunning, onRerun, onExit }: BannerProps) {
-  const { review } = session
+export function ReviewBanner({ session, rerunning, posting, onRerun, onMode, onExit }: BannerProps) {
+  const { review, forge } = session
   const n = review.findings.length
+  const request = forge?.request ? forge : null
   return (
     <div className="rbanner" role="region" aria-label="Review">
       <Icon name="sparkle" size={14} />
       <span>
-        Reviewing your branch <b className="mono">{review.branch}</b> against <b className="mono">{review.base}</b> · {n} finding{n === 1 ? '' : 's'} · {review.prompt}
+        {session.mode === 'request' && request ? (
+          <>
+            Reviewing{' '}
+            <b>
+              {requestWord(request)} {requestLabel(request)}
+            </b>{' '}
+            <b className="mono">{review.branch}</b> → <b className="mono">{review.base}</b>
+          </>
+        ) : (
+          <>
+            Reviewing your branch <b className="mono">{review.branch}</b> against <b className="mono">{review.base}</b>
+          </>
+        )}{' '}
+        · {n} finding{n === 1 ? '' : 's'} · {review.prompt}
       </span>
       <span className="grow" />
-      <button className="btn sm" disabled={rerunning} onClick={onRerun}>
+      {request && (
+        <button className="btn sm" disabled={posting} onClick={() => onMode(session.mode === 'request' ? 'branch' : 'request')}>
+          {session.mode === 'request' ? 'Switch to my branch mode' : `Switch to ${requestWord(request)} mode`}
+        </button>
+      )}
+      <button className="btn sm" disabled={rerunning || posting} onClick={onRerun}>
         {rerunning ? <span className="spin" /> : <Icon name="fetch" size={12} />} Re-run
       </button>
-      <button className="btn sm" onClick={onExit}>
+      <button className="btn sm" disabled={posting} onClick={onExit}>
         Exit review
       </button>
     </div>
@@ -42,12 +64,14 @@ interface Props {
   undoLabel: string | null // what Undo would revert
   ui: ReviewUi
   setUi: (f: (u: ReviewUi) => ReviewUi) => void
+  current: () => ReviewUi | null // the live state, for a posting loop that outlives this screen
   run: RunOp
   onShowChanges: () => void
+  onAccounts: (suggest: AccountSuggestion | null) => void
 }
 
 // The review screen: findings on the left, the branch diff with a card under each finding, what to do with them on the right.
-export function ReviewView({ repo, session, status, undoLabel, ui, setUi, run, onShowChanges }: Props) {
+export function ReviewView({ repo, session, status, undoLabel, ui, setUi, current, run, onShowChanges, onAccounts }: Props) {
   const { review } = session
   const { edits, severity, query, allFiles } = ui
   const patch = (p: Partial<ReviewUi>) => setUi((u) => ({ ...u, ...p }))
@@ -67,6 +91,7 @@ export function ReviewView({ repo, session, status, undoLabel, ui, setUi, run, o
     body.current?.querySelector(`[data-finding="${selected}"]`)?.scrollIntoView({ block: 'center' })
   }, [selected, allFiles])
 
+  const locked = session.mode === 'request' && !!ui.post.steps // posting started: the text is what was sent
   const edit = (id: number, p: Partial<FindingEdit>) => setUi((u) => ({ ...u, edits: { ...u.edits, [id]: { ...u.edits[id], ...p } } }))
   const at = visible.findIndex((f) => f.id === selected)
   const step = (d: number) => visible.length && show(visible[(Math.max(at, 0) + d + visible.length) % visible.length].id)
@@ -107,7 +132,7 @@ export function ReviewView({ repo, session, status, undoLabel, ui, setUi, run, o
         <div className="flist" onKeyDown={arrows}>
           {visible.map((f) => (
             <label key={f.id} className={`fitem ${f.id === selected ? 'sel' : ''} ${edits[f.id]?.keep ? '' : 'off'}`} onClick={(e) => !(e.target instanceof HTMLInputElement) && show(f.id)}>
-              <input type="checkbox" onFocus={() => show(f.id)} aria-label={`Keep: ${f.title}`} checked={!!edits[f.id]?.keep} onChange={(e) => edit(f.id, { keep: e.target.checked })} />
+              <input type="checkbox" onFocus={() => show(f.id)} disabled={locked} aria-label={`Keep: ${f.title}`} checked={!!edits[f.id]?.keep} onChange={(e) => edit(f.id, { keep: e.target.checked })} />
               <div>
                 <div className="fmeta">
                   <span className={`sev ${SEVERITY_CLASS[f.severity]}`}>{SEVERITY_LABEL[f.severity]}</span>
@@ -165,12 +190,16 @@ export function ReviewView({ repo, session, status, undoLabel, ui, setUi, run, o
         </div>
         <div className="diff-body" ref={body}>
           {files.map((f) => (
-            <FileBlock key={f.newPath} file={f} findings={review.findings.filter((x) => x.path === f.newPath)} edits={edits} selected={selected} mode={session.mode} onSelect={(id) => patch({ selected: id })} onEdit={edit} />
+            <FileBlock key={f.newPath} file={f} findings={review.findings.filter((x) => x.path === f.newPath)} edits={edits} selected={selected} mode={session.mode} locked={locked} onSelect={(id) => patch({ selected: id })} onEdit={edit} />
           ))}
           {files.length === 0 && <span className="faint">No finding to show.</span>}
         </div>
       </section>
-      <FixPanel repo={repo} session={session} edits={edits} status={status} undoLabel={undoLabel} run={run} onShowChanges={onShowChanges} />
+      {session.mode === 'request' && session.forge?.request ? (
+        <PostPanel repo={repo} session={session} edits={edits} post={ui.post} setUi={setUi} current={current} onAccounts={onAccounts} />
+      ) : (
+        <FixPanel repo={repo} session={session} edits={edits} status={status} undoLabel={undoLabel} run={run} onShowChanges={onShowChanges} />
+      )}
     </>
   )
 }
@@ -181,13 +210,14 @@ interface FileProps {
   edits: Record<number, FindingEdit>
   selected: number | null
   mode: ReviewSession['mode']
+  locked: boolean
   onSelect: (id: number) => void
   onEdit: (id: number, patch: Partial<FindingEdit>) => void
 }
 
 const anchored = (f: ReviewFinding, l: DiffLine) => (f.side === 'new' ? l.kind !== 'del' && l.newNo === f.endLine : l.kind === 'del' && l.oldNo === f.endLine)
 
-function FileBlock({ file, findings, edits, selected, mode, onSelect, onEdit }: FileProps) {
+function FileBlock({ file, findings, edits, selected, mode, locked, onSelect, onEdit }: FileProps) {
   const colored = useHighlight(file, file.newPath)
   const add = file.hunks.reduce((n, h) => n + h.lines.filter((l) => l.kind === 'add').length, 0)
   const del = file.hunks.reduce((n, h) => n + h.lines.filter((l) => l.kind === 'del').length, 0)
@@ -223,7 +253,7 @@ function FileBlock({ file, findings, edits, selected, mode, onSelect, onEdit }: 
                 {findings
                   .filter((f) => anchored(f, l))
                   .map((f) => (
-                    <Card key={f.id} finding={f} edit={edits[f.id]} active={f.id === selected} mode={mode} onSelect={() => onSelect(f.id)} onEdit={(p) => onEdit(f.id, p)} />
+                    <Card key={f.id} finding={f} edit={edits[f.id]} active={f.id === selected} mode={mode} locked={locked} onSelect={() => onSelect(f.id)} onEdit={(p) => onEdit(f.id, p)} />
                   ))}
               </div>
             ))}
@@ -239,13 +269,14 @@ interface CardProps {
   edit: FindingEdit
   active: boolean
   mode: ReviewSession['mode']
+  locked: boolean
   onSelect: () => void
   onEdit: (patch: Partial<FindingEdit>) => void
 }
 
 const rows = (text: string) => Math.min(12, text.split('\n').length + 1)
 
-function Card({ finding: f, edit, active, mode, onSelect, onEdit }: CardProps) {
+function Card({ finding: f, edit, active, mode, locked, onSelect, onEdit }: CardProps) {
   const fix = mode === 'branch' && f.fix && edit.fix !== null ? f.fix : null
   return (
     <div className={`ccard ${active ? 'active' : ''} ${edit.keep ? '' : 'off'}`} data-finding={f.id} role="group" aria-label={`Finding: ${f.title}`} onFocus={onSelect} onClick={onSelect}>
@@ -257,7 +288,7 @@ function Card({ finding: f, edit, active, mode, onSelect, onEdit }: CardProps) {
           <Icon name="sparkle" size={12} /> Claude
         </span>
       </div>
-      <textarea className="field ctext" aria-label="Comment" rows={rows(edit.body)} value={edit.body} onChange={(e) => onEdit({ body: e.target.value })} />
+      <textarea className="field ctext" aria-label="Comment" readOnly={locked} rows={rows(edit.body)} value={edit.body} onChange={(e) => onEdit({ body: e.target.value })} />
       {fix && (
         <div className="fix">
           <div className="fix-head">
@@ -276,10 +307,10 @@ function Card({ finding: f, edit, active, mode, onSelect, onEdit }: CardProps) {
         </div>
       )}
       <div className="ccard-foot">
-        <button className={`btn sm keep ${edit.keep ? 'on' : ''}`} aria-pressed={edit.keep} onClick={() => onEdit({ keep: true })}>
+        <button className={`btn sm keep ${edit.keep ? 'on' : ''}`} aria-pressed={edit.keep} disabled={locked} onClick={() => onEdit({ keep: true })}>
           <Icon name="check" size={12} stroke={2.4} /> Keep
         </button>
-        <button className={`btn sm ${edit.keep ? '' : 'on'}`} aria-pressed={!edit.keep} onClick={() => onEdit({ keep: false })}>
+        <button className={`btn sm ${edit.keep ? '' : 'on'}`} aria-pressed={!edit.keep} disabled={locked} onClick={() => onEdit({ keep: false })}>
           <Icon name="close" size={12} stroke={2.2} /> Ignore
         </button>
         <span className="grow" />
@@ -405,6 +436,173 @@ function FixPanel({ repo, session, edits, status, undoLabel, run, onShowChanges 
           </div>
         )}
         <div className="note">A fix that no longer applies is skipped and listed, never forced.</div>
+      </div>
+    </aside>
+  )
+}
+
+interface PostPanelProps {
+  repo: string
+  session: ReviewSession
+  edits: Record<number, FindingEdit>
+  post: PostState
+  setUi: (f: (u: ReviewUi) => ReviewUi) => void
+  current: () => ReviewUi | null
+  onAccounts: (suggest: AccountSuggestion | null) => void
+}
+
+// Merge or pull request: the kept findings become comments on the request's diff lines, posted one call at a time.
+// The state lives in the review session (not here): the loop stops when the session changes, and the progress is still there when the panel comes back.
+// A failed call stays in the list: Retry sends only the failed ones, Skip leaves one out; nothing is pushed to the branch.
+function PostPanel({ repo, session, edits, post, setUi, current, onAccounts }: PostPanelProps) {
+  const { review } = session
+  const forge = session.forge!
+  const request = forge.request!
+  const kind = forge.kind ?? 'gitlab'
+  const { steps, posting, moved, draft } = post
+  const summary = post.summary ?? defaultSummary(review, edits)
+  const comments = keptComments(review, edits)
+  const kept = review.findings.filter((f) => edits[f.id]?.keep)
+  const ignored = review.findings.length - kept.length
+  const counts = countBy(kept)
+  const word = `${requestWord(forge)} ${requestLabel(forge)}`
+  const patch = (p: Partial<PostState>) => setUi((u) => ({ ...u, post: { ...u.post, ...p } }))
+
+  const send = async (list: PostStepState[], id: number, asDraft: boolean) => {
+    const next = list.map((s) => ({ ...s }))
+    const mine = (f: (p: PostState) => PostState) => setUi((u) => (u.post.id === id ? { ...u, post: f(u.post) } : u))
+    const push = () => mine((p) => ({ ...p, steps: next.map((x) => ({ ...x })) }))
+    for (const s of next) {
+      if (current()?.post.id !== id) return // another review or a new session is shown: this one is over
+      if (s.state === 'done' || s.state === 'skip') continue
+      // The draft is published only once every other call went through (or was skipped).
+      if (s.step.kind === 'publish' && next.some((o) => o !== s && o.state !== 'done' && o.state !== 'skip')) continue
+      s.state = 'run'
+      push()
+      try {
+        await api.postReviewStep(repo, review.branch, review.head, asDraft, s.step)
+        s.state = 'done'
+        s.error = undefined
+      } catch (e) {
+        s.state = 'fail'
+        s.error = errorText(e)
+        if (isMoved(e)) {
+          // The forge moved: nothing else would land on the right lines.
+          for (const o of next) if (o.state !== 'done' && o.state !== 'skip') Object.assign(o, { state: 'fail', error: 'not sent' })
+          mine((p) => ({ ...p, moved: true }))
+          break
+        }
+      }
+      push()
+    }
+    mine((p) => ({ ...p, steps: next.map((x) => ({ ...x })), posting: false }))
+  }
+  const start = () => {
+    if (!forge.account) return onAccounts(forge.kind ? { host: forge.host, kind: forge.kind, url: forge.url } : null)
+    const list = postPlan(kind, draft, summary, comments).map((p): PostStepState => ({ ...p, state: 'todo' }))
+    const id = Date.now()
+    patch({ id, summary, steps: list, posting: true, moved: false })
+    void send(list, id, draft)
+  }
+  const resume = () => {
+    patch({ posting: true })
+    void send(steps ?? [], post.id, draft)
+  }
+  const skip = (i: number) => patch({ steps: (steps ?? []).map((s, j) => (j === i ? { ...s, state: 'skip', error: undefined } : s)) })
+  const { done, skipped, failed, todo, finished } = postStatus(steps ?? [])
+
+  return (
+    <aside className="right">
+      <div className="right-head">
+        <b>Post to {requestName(forge).toLowerCase()}</b>
+        <span className="faint">{word}</span>
+      </div>
+      <div className="rp">
+        <div className="forge">
+          <span className={`forge-ico ${kind === 'gitlab' ? 'gl' : 'gh'}`} aria-hidden>
+            {kind === 'gitlab' ? 'GL' : 'GH'}
+          </span>
+          <div>
+            {forge.host}
+            <div className="note">
+              {forge.project}
+              {forge.account?.user ? ` · posting as @${forge.account.user}` : ''}
+            </div>
+          </div>
+          {forge.account ? (
+            <span className="ok">
+              <Icon name="check" size={12} stroke={2.4} /> token OK
+            </span>
+          ) : (
+            <button className="lnk" onClick={() => onAccounts(forge.kind ? { host: forge.host, kind: forge.kind, url: forge.url } : null)}>
+              Accounts…
+            </button>
+          )}
+        </div>
+        <label className="dialog-field">
+          Summary comment
+          <textarea className="field" rows={4} value={summary} disabled={!!steps} onChange={(e) => patch({ summary: e.target.value })} />
+        </label>
+        <div className="sumlist">
+          {SEVERITIES.filter((s) => counts[s]).map((s) => (
+            <div key={s}>
+              <span className={`sev ${SEVERITY_CLASS[s]}`}>{SEVERITY_LABEL[s]}</span> {counts[s]} inline comment{counts[s] === 1 ? '' : 's'}
+            </div>
+          ))}
+          {ignored > 0 && <div className="note">{ignored} ignored</div>}
+        </div>
+        <label className="check">
+          <input type="checkbox" checked={draft} disabled={!!steps} onChange={(e) => patch({ draft: e.target.checked })} /> {kind === 'github' ? 'Post as a pending review (submit it on GitHub)' : 'Post as a draft review (publish all at once)'}
+        </label>
+        {!steps && (
+          <button className="btn-primary" disabled={posting || (!comments.length && !summary.trim())} onClick={start}>
+            Post {comments.length} comment{comments.length === 1 ? '' : 's'} to {word}
+          </button>
+        )}
+        {steps && <div className="note">Posting uses the text as it was when you clicked Post.</div>}
+        <div className="note">Comments are attached to the diff lines of the {requestWord(forge)}. Nothing is pushed to the branch.</div>
+        {steps && (
+          <div className="progress" role="status" aria-label="Posting">
+            <div className="ptitle">{finished ? 'Posted' : posting ? 'While posting' : 'Stopped'}</div>
+            {steps.map((s, i) => (
+              <div key={i} className={`pstep ${s.state}`}>
+                {s.state === 'run' ? <span className="spin" /> : s.state === 'done' ? <Icon name="check" size={12} stroke={2.4} /> : s.state === 'fail' || s.state === 'skip' ? <Icon name="warn" size={12} stroke={2} /> : null}
+                <span className="sr-only">{{ todo: 'waiting', run: 'sending', done: 'sent', fail: 'failed', skip: 'skipped' }[s.state]}: </span>
+                {s.label}
+                {s.error ? ` · ${s.error}` : ''}
+                {s.state === 'fail' && !posting && !moved && (
+                  <button className="lnk" onClick={() => skip(i)}>
+                    Skip
+                  </button>
+                )}
+              </div>
+            ))}
+            <div className="pbar">
+              <i style={{ width: `${(100 * done) / Math.max(1, steps.length)}%` }} />
+            </div>
+            <div className="note">
+              {done} of {steps.length}
+              {skipped ? ` · ${skipped} skipped` : ''}
+              {failed && !moved ? ' · stays here: retry sends only the failed ones' : ''}
+            </div>
+            {moved && <div className="note err">{MOVED_TEXT}</div>}
+            {!moved && !posting && failed > 0 && (
+              <button className="btn" onClick={resume}>
+                Retry failed ({failed})
+              </button>
+            )}
+            {!moved && !posting && failed === 0 && todo > 0 && (
+              <button className="btn" onClick={resume}>
+                Continue
+              </button>
+            )}
+            {finished && (
+              <a className="lnk" href={request.url} target="_blank" rel="noreferrer">
+                Open {word} on {FORGE_NAME[kind]}
+              </a>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   )

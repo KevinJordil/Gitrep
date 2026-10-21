@@ -19,7 +19,7 @@ import { MergeMenu } from './MergeMenu'
 import type { FileView, Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
 import type { AccountSuggestion } from './AccountsDialog'
-import { FORGE_NAME, newUi, requestLabel, requestWord, type ReviewSession, type ReviewUi } from './review'
+import { FORGE_NAME, newUi, requestLabel, requestWord, type ReviewMode, type ReviewSession, type ReviewUi } from './review'
 import { PromptsDialog } from './PromptsDialog'
 import { ReviewDialog, ReviewMenuItems } from './ReviewDialog'
 import { ReviewBanner, ReviewView } from './ReviewView'
@@ -79,12 +79,20 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const draftsRef = useRef(drafts)
   draftsRef.current = drafts
   const [asking, setAsking] = useState(false)
-  const [reviewing, setReviewing] = useState<string | null>(null) // the branch of the open start dialog
+  const [reviewing, setReviewing] = useState<{ branch: string; mode?: ReviewMode } | null>(null) // the open start dialog
   const [session, setSession] = useState<ReviewSession | null>(null)
   const [ui, setUi] = useState<ReviewUi | null>(null) // what the review screen remembers while another view is shown
   const [rerunning, setRerunning] = useState(false)
   const sessionRef = useRef(session)
   sessionRef.current = session
+  const uiRef = useRef(ui)
+  uiRef.current = ui
+  // Applied at once to the ref too: a posting loop reads it before the next render.
+  const updateUi = (f: (u: ReviewUi) => ReviewUi) => {
+    if (!uiRef.current) return
+    uiRef.current = f(uiRef.current)
+    setUi(uiRef.current)
+  }
   const [editingPrompts, setEditingPrompts] = useState(false)
   const [forges, setForges] = useState<Record<string, ForgeInfo | null>>({}) // what each looked-up branch has open on its forge
   const [version, setVersion] = useState(0)
@@ -332,7 +340,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     const f = forges[name]
     if (!f?.request || !f.kind) return items
     const i = items.findIndex((it) => it.claude)
-    const mr: RefItem = { label: `Review ${requestWord(f)} ${requestLabel(f)}`, hint: FORGE_NAME[f.kind], run: () => openReview(name), claude: true }
+    const mr: RefItem = { label: `Review ${requestWord(f)} ${requestLabel(f)}`, hint: FORGE_NAME[f.kind], run: () => openReview(name, 'request'), claude: true }
     return i < 0 ? items : [...items.slice(0, i + 1), mr, ...items.slice(i + 1)]
   }
   const openDrop = useCallback<DropBranch>((source, target, x, y) => setDrop({ source, target, x, y }), [])
@@ -381,7 +389,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     }
   }
 
-  const openReview = (branch: string) => (session && session.review.branch === branch ? focusOn({ kind: 'review' }) : setReviewing(branch))
+  const openReview = (branch: string, mode?: ReviewMode) => (session && session.review.branch === branch ? focusOn({ kind: 'review' }) : setReviewing({ branch, mode }))
   const saveReviewPrompts = async (prompts?: ReviewPrompt[], own?: ReviewPrompt | null) =>
     (prompts === undefined || (await onSettings({ reviewPrompts: prompts }))) && (own === undefined || (await onRepoSettings(path, { reviewPrompt: own })))
   // The branch at a commit, for the graph menu: a local one first.
@@ -397,8 +405,14 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     setSession(null)
     focusOn({ kind: 'wip' })
   }
+  // A new account (added from the post panel) or forge choice: the open review looks its request up again, keeping the edits.
+  const reviewBranch = session?.review.branch
+  useEffect(() => {
+    if (!reviewBranch) return
+    api.forgeInfo(path, reviewBranch).then((forge) => setSession((s) => (s && s.review.branch === reviewBranch ? { ...s, forge } : s)), () => undefined)
+  }, [path, reviewBranch, accountsVersion, settings.forgeHosts])
   const rerun = async () => {
-    if (!session) return
+    if (!session || uiRef.current?.post.posting) return
     setRerunning(true)
     try {
       const review = await api.startReview(path, session.request)
@@ -538,12 +552,12 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           onResolveAll={() => void resolveAll()}
         />
       )}
-      {inReview && session && <ReviewBanner session={session} rerunning={rerunning} onRerun={() => void rerun()} onExit={exitReview} />}
+      {inReview && session && <ReviewBanner session={session} rerunning={rerunning} posting={!!ui?.post.posting} onRerun={() => void rerun()} onMode={(mode) => setSession({ ...session, mode })} onExit={exitReview} />}
       <div className="panes" style={{ '--side-w': `${sideW}px`, '--right-w': `${rightW}px` } as CSSProperties}>
         <Splitter pane="sidebar" width={sideW} other={rightW} onSave={(w) => onSettings({ sidebarWidth: w })} />
         <Splitter pane="right" width={rightW} other={sideW} onSave={(w) => onSettings({ rightWidth: w })} />
         {inReview && session && ui ? (
-          <ReviewView key={session.started} repo={path} session={session} status={status} undoLabel={undo.undo} ui={ui} setUi={(f) => setUi((u) => (u ? f(u) : u))} run={run} onShowChanges={exitReview} />
+          <ReviewView key={session.started} repo={path} session={session} status={status} undoLabel={undo.undo} ui={ui} setUi={updateUi} current={() => uiRef.current} run={run} onShowChanges={exitReview} onAccounts={onAccounts} />
         ) : (
         <Sidebar
           branches={branches}
@@ -611,10 +625,10 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} onFileMenu={openFileMenu} run={run} busy={busy} />
         )}
       </div>
-      {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions && { name: menu.branchActions.name, items: withRequest(menu.branchActions.name, menu.branchActions.items) }} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} forge={forges[menuTip]} onReview={() => { closeMenu(); openReview(menuTip) }} />} />}
+      {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions && { name: menu.branchActions.name, items: withRequest(menu.branchActions.name, menu.branchActions.items) }} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} forge={forges[menuTip]} onReview={(mode) => { closeMenu(); openReview(menuTip, mode) }} />} />}
       {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
-      {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing} branches={branches} settings={settings} entry={entry} onStart={startReview} onEditPrompts={() => setEditingPrompts(true)} onSettings={onSettings} accountsVersion={accountsVersion} onAccounts={onAccounts} onClose={() => setReviewing(null)} />}
+      {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing.branch} mode={reviewing.mode} branches={branches} settings={settings} entry={entry} onStart={startReview} onEditPrompts={() => setEditingPrompts(true)} onSettings={onSettings} accountsVersion={accountsVersion} onAccounts={onAccounts} onClose={() => setReviewing(null)} />}
       {editingPrompts && <PromptsDialog repoName={entry?.name ?? path} prompts={settings.reviewPrompts} own={entry?.reviewPrompt ?? null} onSave={saveReviewPrompts} onClose={() => setEditingPrompts(false)} />}
       {dialog}
     </>

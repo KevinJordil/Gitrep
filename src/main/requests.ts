@@ -150,7 +150,7 @@ export async function postStep(repo: string, branch: string, head: string, draft
   }
   if (!t?.request) throw new Error(`No open merge or pull request found for ${branch}`)
   const req = t.request
-  if (!/^[0-9a-f]{40}$/.test(String(head)) || req.head !== head) throw new Error(`The request is at ${req.head.slice(0, 7)} but the review was made on ${String(head).slice(0, 7)}: push or fetch, re-run the review, then post.`)
+  if (!/^[0-9a-f]{40}$/.test(String(head)) || req.head !== head) throw new Error(`HEAD_MOVED: The request is at ${req.head.slice(0, 7)} but the review was made on ${String(head).slice(0, 7)}: push or fetch, re-run the review, then post.`)
   const found = accountFor(ctx.accountsFile, ctx.vault, t.account.host)
   if (!found) throw new Error(`No account for ${t.account.host}: add one in Accounts`)
   const { account, token } = found

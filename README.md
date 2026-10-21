@@ -32,6 +32,17 @@ The graph lists the commits newest first across branches (`git log --date-order`
 
 The sliders button next to "Generate with Claude" opens free-text instructions that are added to what Claude is told when it writes a commit message (language, prefixes, length...): one text for all repositories and one for the current repository, up to 4000 characters each, which wins on a conflict. The fixed output rules (plain message, subject of at most 72 characters) always apply. They are stored in the GitRep config on this computer (`settings.commitInstructions` and `commitInstructions` on each repository), never in the repository. A dot on the button shows that instructions are active.
 
+## Review with Claude
+
+"Review" in the toolbar (or "Review with Claude…" in the menu of a branch, in the sidebar or the graph) asks Claude to review what a branch changes since it left another one (`git diff base...branch`), with a prompt you choose. Sensitive files (`.env`, keys, credentials…) are never sent; a very large branch is sent in up to four parts, and files that still do not fit are listed as not reviewed. The findings appear in the branch diff, each one in an editable card that you keep or ignore. Two modes:
+
+- My branch: "Prepare fixes" writes the kept suggested fixes into the working files of the checked-out branch, as unstaged changes. Review them in Changes, stage block by block or discard them; nothing is committed. A fix whose lines changed since the review is skipped, never forced, and Undo reverts all the prepared fixes at once.
+- Merge request (GitLab) or pull request (GitHub): when one is open for the branch, the kept findings are posted as comments on its diff lines, with a summary comment, after you click Post. On GitLab they can go as a draft review published at once, on GitHub as a pending review you submit there. A failed comment stays listed and Retry sends only the failed ones.
+
+The forge comes from the branch's remote URL: github.com, gitlab.com and hosts named like a GitLab instance are recognized, and you name any other host once (`settings.forgeHosts`). Accounts (the gear in the title bar) hold one personal access token per host: GitLab needs the `api` scope, GitHub "Pull requests: Read and write" and "Contents: Read". A token is stored only after a successful connection test, encrypted with the system keyring (Electron `safeStorage`) in `~/.config/GitRep/accounts.json`, never in `config.json`, and only sent to its forge. Without a keyring, tokens are not stored.
+
+Review prompts are free texts (up to 4000 characters) stored in the GitRep config, never in the repository: named prompts for every repository (`settings.reviewPrompts`, the first is the default) and an optional prompt of the repository itself (`reviewPrompt`), which is then its default. "Edit prompts…" in the review dialog edits them. The fixed output format Claude must follow always applies.
+
 ## Install in the GNOME launcher
 
     npm run package

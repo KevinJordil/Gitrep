@@ -73,7 +73,7 @@ describe('merge and pull requests', () => {
   })
 
   it('refuses to post when the request moved since the review, or with bad input', async () => {
-    await expect(postStep(repo, 'feature', 'c'.repeat(40), false, { kind: 'summary', body: 'x' }, ctx)).rejects.toThrow(`The request is at ${head.slice(0, 7)} but the review was made on ccccccc`)
+    await expect(postStep(repo, 'feature', 'c'.repeat(40), false, { kind: 'summary', body: 'x' }, ctx)).rejects.toThrow(`HEAD_MOVED: The request is at ${head.slice(0, 7)} but the review was made on ccccccc`)
     await expect(postStep(repo, 'feature', head, false, { kind: 'comment', comment: { ...ADDED, newLine: 0 } }, ctx)).rejects.toThrow('Invalid comment position')
     await expect(postStep(repo, 'feature', head, false, { kind: 'comment', comment: { ...ADDED, body: '  ' } }, ctx)).rejects.toThrow('Empty comment')
     await expect(forgeInfo(repo, 'nope', ctx)).rejects.toThrow('Unknown branch: nope')

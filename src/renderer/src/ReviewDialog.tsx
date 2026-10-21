@@ -5,12 +5,13 @@ import { api } from './api'
 import { Dialog } from './Dialog'
 import { Icon } from './icons'
 import { errorText } from './format'
-import { defaultBase, FORGE_NAME, promptChoices, requestLabel, requestName, requestWord, type ReviewSession } from './review'
+import { defaultBase, FORGE_NAME, promptChoices, requestLabel, requestName, requestWord, type ReviewMode, type ReviewSession } from './review'
 
 interface Props {
   repo: string
   repoName: string
   branch: string // the branch to review
+  mode?: ReviewMode // asked for by the entry ("Review MR !n"); otherwise from what the forge has open
   branches: Branch[]
   settings: Settings
   entry?: RepoEntry
@@ -23,11 +24,13 @@ interface Props {
 }
 
 // Start a review: what is compared, with which prompt. Claude runs while the dialog waits.
-export function ReviewDialog({ repo, repoName, branch, branches, settings, entry, onStart, onEditPrompts, onSettings, accountsVersion, onAccounts, onClose }: Props) {
+export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, settings, entry, onStart, onEditPrompts, onSettings, accountsVersion, onAccounts, onClose }: Props) {
   const id = useId()
   const [base, setBase] = useState(() => defaultBase(branches, branch))
   const baseTouched = useRef(false)
   const [forge, setForge] = useState<ForgeInfo | null | undefined>(undefined) // undefined: looking; null: not on a forge
+  const [picked, setPicked] = useState<ReviewMode | undefined>(asked)
+  const mode: ReviewMode = forge?.request ? (picked ?? 'request') : 'branch'
   const [scope, setScope] = useState<ReviewScope | string | null>(null) // string: why it cannot be measured
   const choices = useMemo(() => promptChoices(settings, entry), [settings, entry])
   const [key, setKey] = useState(choices[0]?.key ?? '')
@@ -83,7 +86,7 @@ export function ReviewDialog({ repo, repoName, branch, branches, settings, entry
     const request = { branch, base, prompt: choice.prompt }
     try {
       const review = await api.startReview(repo, request)
-      if (alive.current) onStart({ started: Date.now(), review, request, mode: 'branch', forge: null })
+      if (alive.current) onStart({ started: Date.now(), review, request, mode, forge: forge ?? null })
     } catch (e) {
       if (alive.current) setError(errorText(e))
     } finally {
@@ -94,7 +97,26 @@ export function ReviewDialog({ repo, repoName, branch, branches, settings, entry
   const others = choices.filter((c) => c.key !== choice?.key)
   const ready = typeof scope === 'object' && scope !== null && scope.commits > 0
   return (
-    <Dialog title="Review with Claude" submit={busy ? 'Reviewing…' : 'Start review'} wide busy={busy} canSubmit={ready && !!choice} onSubmit={() => void start()} onClose={onClose}>
+    <Dialog
+      title="Review with Claude"
+      submit={busy ? 'Reviewing…' : 'Start review'}
+      wide
+      busy={busy}
+      canSubmit={ready && !!choice}
+      onSubmit={() => void start()}
+      onClose={onClose}
+      foot={
+        mode === 'request' &&
+        forge?.account?.user && (
+          <>
+            Posting as{' '}
+            <b className="muted">
+              @{forge.account.user} · {FORGE_NAME[forge.account.kind]}
+            </b>
+          </>
+        )
+      }
+    >
       <div className="two-col">
         <label className="dialog-field">
           Branch
@@ -135,6 +157,19 @@ export function ReviewDialog({ repo, repoName, branch, branches, settings, entry
         )}
       </div>
       <ForgeBox forge={forge} onKind={(host, kind) => void onSettings({ forgeHosts: { ...forgeHosts, [host]: kind } })} onAccounts={onAccounts} />
+      <div className="dialog-field">
+        <span>Mode</span>
+        <div className="seg" role="radiogroup" aria-label="Mode">
+          <button type="button" role="radio" aria-checked={mode === 'branch'} className={`seg-b ${mode === 'branch' ? 'on' : ''}`} onClick={() => setPicked('branch')}>
+            <b>My branch</b>
+            <span>Prepare fixes in the working tree</span>
+          </button>
+          <button type="button" role="radio" aria-checked={mode === 'request'} className={`seg-b ${mode === 'request' ? 'on' : ''}`} disabled={!forge?.request} onClick={() => setPicked('request')}>
+            <b>{forge ? requestName(forge) : 'Merge request'}</b>
+            <span>{forge?.request ? `Post comments to ${requestWord(forge)} ${requestLabel(forge)}` : `No open ${forge?.kind === 'github' ? 'pull' : 'merge'} request`}</span>
+          </button>
+        </div>
+      </div>
       <div className="dialog-field">
         <div className="lbl-row">
           <label htmlFor={`${id}-prompt`}>Review prompt</label>
@@ -224,16 +259,16 @@ function ForgeBox({ forge, onKind, onAccounts }: ForgeBoxProps) {
 
 // The menu entry that starts a review of a branch (sidebar and graph menus). The caller closes its menu.
 // forge: what the branch's remote has open, when already looked up (adds "Review MR !n").
-export function ReviewMenuItems({ hint, forge, onReview }: { hint?: string; forge?: ForgeInfo | null; onReview: () => void }) {
+export function ReviewMenuItems({ hint, forge, onReview }: { hint?: string; forge?: ForgeInfo | null; onReview: (mode?: ReviewMode) => void }) {
   return (
     <>
       <div className="menu-sep" role="separator" />
-      <button role="menuitem" className="menu-item claude" onClick={onReview}>
+      <button role="menuitem" className="menu-item claude" onClick={() => onReview()}>
         <span>Review with Claude…</span>
         {hint && <span className="hint">{hint}</span>}
       </button>
       {forge?.request && forge.kind && (
-        <button role="menuitem" className="menu-item claude" onClick={onReview}>
+        <button role="menuitem" className="menu-item claude" onClick={() => onReview('request')}>
           <span>
             Review {requestWord(forge)} {requestLabel(forge)}
           </span>

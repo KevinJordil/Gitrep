@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CONFIG } from '../src/main/config'
 import { promptProblem } from '../src/renderer/src/PromptsDialog'
-import { defaultBase, initialEdits, keptFixes, promptChoices, visibleFindings } from '../src/renderer/src/review'
+import { type FindingEdit, defaultBase, defaultSummary, initialEdits, keptComments, isMoved, keptFixes, postPlan, postStatus, promptChoices, visibleFindings } from '../src/renderer/src/review'
 import type { Branch, Review, ReviewFinding } from '../src/shared/types'
 
 const branch = (name: string, remote = false): Branch => ({ name, remote, current: false, upstream: null, ahead: 0, behind: 0, sha: 'a'.repeat(40), date: 0 })
@@ -67,5 +67,48 @@ describe('promptProblem', () => {
     expect(promptProblem([{ name: 'A', text: '' }], { name: '', text: '' })).toBe('Every prompt needs a name.')
     expect(promptProblem([{ name: 'A', text: '' }, { name: 'A ', text: '' }], null)).toBe('Two prompts have the same name.')
     expect(promptProblem([{ name: 'x'.repeat(61), text: '' }], null)).toBe('A name is limited to 60 characters.')
+  })
+})
+
+describe('posting', () => {
+  const del: ReviewFinding = { ...finding(5, 'minor', 'a.c', 2), side: 'old', anchor: { oldNo: 2, newNo: null } }
+  const ctx: ReviewFinding = { ...finding(6, 'important', 'a.c', 7), anchor: { oldNo: 6, newNo: 7 } }
+  const review = { prompt: 'Mine', findings: [finding(1, 'critical', 'a.c', 3), del, ctx], files: [{ oldPath: 'a.c', newPath: 'a.c' }] } as Review
+
+  it('makes comments of the kept findings, with the line numbers each side has', () => {
+    const edits: Record<number, FindingEdit> = { ...initialEdits(review.findings), 6: { keep: true, body: '  edited  ', fix: null } }
+    expect(keptComments(review, edits)).toEqual([
+      { label: 'a.c:3', comment: { path: 'a.c', oldPath: 'a.c', newLine: 3, oldLine: null, body: 'body 1' } },
+      { label: 'a.c:7', comment: { path: 'a.c', oldPath: 'a.c', newLine: 7, oldLine: 6, body: 'edited' } },
+      { label: 'a.c:2', comment: { path: 'a.c', oldPath: 'a.c', newLine: null, oldLine: 2, body: 'body 5' } }
+    ])
+    expect(keptComments(review, { ...edits, 1: { ...edits[1], keep: false }, 5: { ...edits[5], body: ' ' } }).map((c) => c.label)).toEqual(['a.c:7'])
+    expect(defaultSummary(review, edits)).toBe('Automated review (Mine). 1 critical, 1 important, 1 minor.')
+    expect(defaultSummary(review, {})).toBe('Automated review (Mine). Nothing to report.')
+  })
+
+  it('plans the calls of each forge and mode', () => {
+    const comments = keptComments(review, initialEdits(review.findings)).slice(0, 1)
+    const c = comments[0].comment
+    expect(postPlan('gitlab', false, 'S', comments).map((s) => s.step)).toEqual([{ kind: 'summary', body: 'S' }, { kind: 'comment', comment: c }])
+    expect(postPlan('gitlab', true, '', comments).map((s) => s.label)).toEqual(['a.c:3', 'Publish the draft review'])
+    expect(postPlan('github', false, 'S', comments).map((s) => s.step.kind)).toEqual(['summary', 'comment'])
+    expect(postPlan('github', true, 'S', comments)).toEqual([{ label: 'Pending review (1 comment)', step: { kind: 'review', body: 'S', comments: [c] } }])
+    expect(postPlan('github', true, ' ', [])).toEqual([])
+    expect(postPlan('gitlab', true, '', [])).toEqual([])
+  })
+})
+
+describe('post progress', () => {
+  const st = (state: 'todo' | 'run' | 'done' | 'fail' | 'skip') => ({ label: 'x', step: { kind: 'summary' as const, body: 'x' }, state })
+  it('counts a skipped step as complete, so the publish gate and the end can follow', () => {
+    expect(postStatus([st('done'), st('skip'), st('todo')])).toEqual({ done: 1, skipped: 1, failed: 0, todo: 1, finished: false })
+    expect(postStatus([st('done'), st('skip')])).toMatchObject({ finished: true })
+    expect(postStatus([st('done'), st('fail')])).toMatchObject({ failed: 1, finished: false })
+  })
+
+  it('recognises the moved-request refusal through the IPC wrapper', () => {
+    expect(isMoved(new Error("Error invoking remote method 'postReviewStep': Error: HEAD_MOVED: The request is at abc"))).toBe(true)
+    expect(isMoved(new Error('GitLab refused the data (400)'))).toBe(false)
   })
 })
