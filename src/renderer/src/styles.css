@@ -707,3 +707,13 @@ body.resizing { user-select: none; cursor: col-resize; }
 .sumlist { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .sumlist div { display: flex; align-items: center; gap: 8px; }
 .rp .dialog-field { flex: none; }
+
+/* file editor */
+.editor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.editor-bar { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-bottom: 1px solid var(--line-soft); flex: none; min-height: 41px; }
+.editor-bar .unsaved { display: inline-flex; align-items: center; gap: 6px; color: var(--amber); font-size: 12px; }
+.editor-bar .unsaved .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+.editor-bar .btn-primary { display: flex; align-items: center; gap: 6px; }
+.editor-bar .btn-primary:disabled, .editor-bar .head-btn:disabled { opacity: 0.5; }
+.editor-host { flex: 1; min-height: 0; }
+.seg button:disabled { opacity: 0.45; cursor: default; }

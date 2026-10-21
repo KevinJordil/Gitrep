@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import type { DiffSide, FileDiff, Hunk, LineAction } from '../../shared/types'
 import { api } from './api'
 import { changeGroups, errorText, splitPath } from './format'
+import { FileEditor } from './FileEditor'
 import { langFor } from './fileTypes'
 import type { Token } from './highlight'
 import { Icon } from './icons'
 import type { FileView, RunOp, Selection } from './model'
 import { useToast } from './toast'
+import { useLeaveGuard } from './unsaved'
 
 const MAX_LINES = 4000
 const SIDE_LABEL = { unstaged: 'Unstaged', staged: 'Staged', untracked: 'Untracked' } as const
@@ -17,11 +19,12 @@ interface Props {
   version: number
   onBack: () => void
   run: RunOp
+  onChanged?: () => void // the working tree changed behind the repository watcher (a saved edit): refresh
   hideHead?: boolean // the parent shows its own header (stash view, file history)
   onFile?: (path: string, rev: string | null, view: FileView) => void // opens the file's history or blame (at this commit, or HEAD)
 }
 
-export function DiffView({ repo, selection, version, onBack, run, hideHead = false, onFile }: Props) {
+export function DiffView({ repo, selection, version, onBack, run, onChanged, hideHead = false, onFile }: Props) {
   const notify = useToast()
   const { path } = selection
   const commit = selection.commit ?? null // a file of a commit: read-only
@@ -31,6 +34,30 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
   const [picked, setPicked] = useState<Record<number, number[]>>({})
   const [showAll, setShowAll] = useState(false)
   const colored = useHighlight(diff, path)
+  const { guard, dialog: leaveDialog } = useLeaveGuard()
+  // Edit mode: the working file as opened (a new `n` reloads the editor), and why it cannot be edited, if it cannot.
+  const editable = !commit && !hideHead
+  const [opened, setOpened] = useState<{ text: string; n: number } | null>(null)
+  const [reason, setReason] = useState<string | null>(null)
+  useEffect(() => {
+    if (!editable || opened) return
+    let alive = true
+    api.readWorkingFile(repo, path).then((r) => alive && setReason('reason' in r ? r.reason : null), () => undefined)
+    return () => {
+      alive = false
+    }
+  }, [editable, opened, repo, path, version])
+  const openEditor = async () => {
+    try {
+      const r = await api.readWorkingFile(repo, path)
+      if ('reason' in r) {
+        setReason(r.reason)
+        notify('error', r.reason)
+      } else setOpened((o) => ({ text: r.text, n: (o?.n ?? 0) + 1 }))
+    } catch (e) {
+      notify('error', errorText(e))
+    }
+  }
 
   useEffect(() => {
     let alive = true
@@ -104,6 +131,16 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
             {name}
           </span>
           {commit ? <span className="badge grey">{commit.slice(0, 7)}</span> : <span className={`badge ${side === 'staged' ? 'blue' : 'amber'}`}>{SIDE_LABEL[side]}</span>}
+          {editable && (
+            <div className="seg" role="group" aria-label="Diff or edit">
+              <button aria-pressed={!opened} onClick={() => opened && guard(repo, () => setOpened(null))}>
+                Diff
+              </button>
+              <button aria-pressed={!!opened} disabled={!opened && reason !== null} title={reason ?? undefined} onClick={() => !opened && void openEditor()}>
+                Edit
+              </button>
+            </div>
+          )}
           <div className="grow" />
           {onFile && side !== 'untracked' && (
             <>
@@ -117,6 +154,10 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
           )}
         </div>
       )}
+      {leaveDialog}
+      {opened ? (
+        <FileEditor key={opened.n} repo={repo} path={path} initial={opened.text} diff={diff} onSaved={onChanged} onReload={() => void openEditor()} />
+      ) : (
       <div className="diff-body">
         {diff === undefined && <span className="faint">Loading…</span>}
         {diff === null && <span className="faint">No changes to display.</span>}
@@ -151,7 +192,8 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
           </button>
         )}
       </div>
-      {pickedCount > 0 && (
+      )}
+      {!opened && pickedCount > 0 && (
         <div className="selbar">
           <span>
             <b>

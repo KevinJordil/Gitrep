@@ -30,6 +30,7 @@ import { clampPane } from './panes'
 import { Splitter } from './Splitter'
 import { StashDialog, StashPanel, StashView } from './Stash'
 import { useToast } from './toast'
+import { useLeaveGuard } from './unsaved'
 
 const ALL: GraphScope = { only: null, hidden: [] }
 const WIP = 'WIP' // sha of the work-in-progress graph row (never a real sha)
@@ -235,10 +236,20 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     [notify, refreshAll]
   )
 
-  const focusOn = useCallback((f: Focus) => {
-    setFocus(f)
-    setSelection(null)
-  }, [])
+  // Leaving the open file (another file, another focus) asks about unsaved edits first.
+  const { guard, dialog: leaveDialog } = useLeaveGuard()
+  const focusOn = useCallback(
+    (f: Focus) =>
+      guard(path, () => {
+        setFocus(f)
+        setSelection(null)
+      }),
+    [guard, path]
+  )
+  const select = useCallback(
+    (s: Selection | null) => (s && selection && s.path === selection.path && !s.commit && !selection.commit ? setSelection(s) : guard(path, () => setSelection(s))),
+    [guard, path, selection]
+  )
   const onDraft = useCallback((p: string, d: Draft) => setDrafts((all) => ({ ...all, [p]: d })), [])
 
   // Asks Claude for every conflicted text file and puts the proposals in the drafts, for review. Nothing is written.
@@ -599,7 +610,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
         ) : (
           <section className="center">
             {selection ? (
-              <DiffView key={`${selection.path}:${selection.side ?? selection.commit}`} repo={path} selection={selection} version={version} onBack={() => setSelection(null)} run={run} onFile={openFile} />
+              <DiffView key={`${selection.path}:${selection.commit ?? ''}`} repo={path} selection={selection} version={version} onBack={() => select(null)} run={run} onChanged={() => void refreshAll()} onFile={openFile} />
             ) : stash ? (
               <StashView key={stash.sha} repo={path} stash={stash} version={version} run={run} onBack={() => focusOn({ kind: 'wip' })} />
             ) : inConflicts && info ? (
@@ -632,14 +643,15 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
         {inReview || focus.kind === 'rebase' || focus.kind === 'file' ? null : stash ? (
           <StashPanel key={stash.sha} repo={path} stash={stash} branch={status?.branch ?? null} busy={busy} run={run} runOutcome={runOutcome} onNewBranch={() => stashBranch(stash)} />
         ) : inConflicts && status && info ? (
-          <OperationPanel repo={path} status={status} info={info} path={conflictPath} busy={busy} runOutcome={runOutcome} onPath={(p) => focusOn({ kind: 'conflicts', path: p })} onSelect={setSelection} />
+          <OperationPanel repo={path} status={status} info={info} path={conflictPath} busy={busy} runOutcome={runOutcome} onPath={(p) => focusOn({ kind: 'conflicts', path: p })} onSelect={select} />
         ) : focus.kind === 'commit' ? (
-          <CommitPanel key={`${focus.sha}:${focus.explain ?? ''}`} repo={path} sha={focus.sha} autoExplain={!!focus.explain} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={setSelection} onFocus={focusOn} onFileMenu={openFileMenu} />
+          <CommitPanel key={`${focus.sha}:${focus.explain ?? ''}`} repo={path} sha={focus.sha} autoExplain={!!focus.explain} selection={selection} colors={colors} remoteNames={remoteNames} onSelect={select} onFocus={focusOn} onFileMenu={openFileMenu} />
         ) : (
-          <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={setSelection} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} onFileMenu={openFileMenu} run={run} busy={busy} />
+          <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={select} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} onFileMenu={openFileMenu} run={run} busy={busy} />
         )}
       </div>
       {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions && { name: menu.branchActions.name, items: withRequest(menu.branchActions.name, menu.branchActions.items) }} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} forge={forges[menuTip]} onReview={(mode) => { closeMenu(); openReview(menuTip, mode) }} />} />}
+      {leaveDialog}
       {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
       {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing.branch} mode={reviewing.mode} branches={branches} settings={settings} entry={entry} onStart={startReview} onEditPrompts={() => setEditingPrompts(true)} onSettings={onSettings} accountsVersion={accountsVersion} posting={!!ui?.post.posting} onAccounts={onAccounts} onClose={() => setReviewing(null)} />}

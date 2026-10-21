@@ -8,6 +8,7 @@ import { errorText } from './format'
 import { Icon, Logo } from './icons'
 import { RepoView } from './RepoView'
 import { ToastContext, type Notify, type ToastAction, type ToastKind } from './toast'
+import { useLeaveGuard } from './unsaved'
 
 interface Toast {
   id: number
@@ -73,6 +74,7 @@ export function App() {
     await setTabs((tabs) => (tabs.includes(path) ? tabs : [...tabs, path]))
     setActive(path)
   }
+  const { guard, dialog: leaveDialog } = useLeaveGuard()
   const closeTab = async (path: string) => {
     if (active === path) setActive('dashboard')
     await setTabs((tabs) => tabs.filter((t) => t !== path))
@@ -154,7 +156,7 @@ export function App() {
                   <span>{nameOf(p)}</span>
                   <span className="tab-branch">{branches[p] ?? ''}</span>
                 </button>
-                <button className="tab-close" aria-label={`Close ${nameOf(p)}`} onClick={() => setClosing(p)}>
+                <button className="tab-close" aria-label={`Close ${nameOf(p)}`} onClick={() => guard(p, () => setClosing(p))}>
                   <Icon name="close" size={12} stroke={2} />
                 </button>
               </div>
@@ -188,6 +190,7 @@ export function App() {
           </Dialog>
         )}
         {accounts && <AccountsDialog suggest={accounts.suggest} onChanged={() => setAccountsVersion((n) => n + 1)} onClose={() => setAccounts(null)} />}
+        {leaveDialog}
         {toastList}
       </div>
     </ToastContext.Provider>
