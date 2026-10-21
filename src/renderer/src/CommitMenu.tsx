@@ -122,7 +122,7 @@ export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebas
       {branchActions && (
         <>
           {branchActions.items.map((it) => (
-            <button key={it.label} role="menuitem" className={`menu-item ${it.danger ? 'danger' : ''} ${it.claude ? 'claude' : ''}`} disabled={it.disabled} onMouseEnter={closeSub} onClick={() => actRef(it.run)}>
+            <button key={it.label} role="menuitem" className={`menu-item ${it.danger ? 'danger' : ''} ${it.claude ? 'claude' : ''}`} disabled={it.disabled} title={it.label} onMouseEnter={closeSub} onClick={() => actRef(it.run)}>
               <span>{it.label}</span>
               {it.hint && <span className="hint">{it.hint}</span>}
             </button>
