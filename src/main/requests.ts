@@ -55,6 +55,8 @@ interface GitLabMr {
   sha: string
   author?: { username?: string; name?: string }
   diff_refs?: DiffRefs | null
+  source_project_id?: number
+  target_project_id?: number
 }
 
 interface GitHubPr {
@@ -71,8 +73,9 @@ const segments = (project: string) => project.split('/').map(encodeURIComponent)
 async function lookup(account: AccountInfo, token: string, project: string, name: string): Promise<Pick<Target, 'request' | 'refs'>> {
   if (account.kind === 'gitlab') {
     const base = `/projects/${encodeURIComponent(project)}/merge_requests`
-    const list = await forgeRequest<GitLabMr[]>(account, token, 'GET', `${base}?state=opened&source_branch=${encodeURIComponent(name)}&per_page=20&order_by=updated_at&sort=desc`)
-    // The most recently updated request is the one reviewed.
+    const all = await forgeRequest<GitLabMr[]>(account, token, 'GET', `${base}?state=opened&source_branch=${encodeURIComponent(name)}&per_page=20&order_by=updated_at&sort=desc`)
+    // Merge requests from forks are not looked up; the most recently updated of the others is the one reviewed.
+    const list = all.filter((m) => m.source_project_id === m.target_project_id)
     if (!list.length) return { request: null, refs: null }
     // The list has no diff_refs: they come with the single merge request.
     const mr = await forgeRequest<GitLabMr>(account, token, 'GET', `${base}/${list[0].iid}`)

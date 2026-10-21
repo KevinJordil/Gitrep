@@ -39,6 +39,14 @@ describe('prepareFixes', () => {
     expect(await read(repo)).toContain('line 7-8 merged')
   })
 
+  it('skips a fix already applied, so preparing twice does not repeat an append', async () => {
+    const repo = await setup()
+    const append = fix(1, 10, 10, ['line 10', 'added'])
+    expect((await prepareFixes(repo, 'feature', [append])).applied).toEqual([1])
+    expect((await prepareFixes(repo, 'feature', [append])).skipped).toEqual([{ id: 1, path: 'a.c', reason: 'already applied' }])
+    expect((await read(repo)).match(/added/g)).toHaveLength(1)
+  })
+
   it('skips a fix whose lines changed, keeps the other unstaged changes of the file, keeps CRLF line ends', async () => {
     const repo = await setup()
     await write(repo, 'a.c', lines(10, (i) => (i === 5 ? 'line 5 edited by me' : `line ${i}`)))

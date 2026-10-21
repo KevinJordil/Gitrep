@@ -32,10 +32,10 @@ describe('accounts', () => {
     expect(listAccounts(file)).toEqual([])
   })
 
-  it('refuses an instance URL that is not the host the account is for', async () => {
+  it('accepts an instance URL that differs from the host, like an ssh alias', async () => {
     const file = join(await tempDir(), 'accounts.json')
-    await expect(saveAccount(file, vault, 'gitlab.example.com', 'gitlab', fake.url, FAKE_TOKEN)).rejects.toThrow('127.0.0.1')
-    expect(listAccounts(file)).toEqual([])
+    expect(await saveAccount(file, vault, 'gitlab-work', 'gitlab', fake.url, FAKE_TOKEN)).toMatchObject({ host: 'gitlab-work', url: fake.url })
+    expect(listAccounts(file)).toHaveLength(1)
   })
 
   it('stores nothing when the token does not work or cannot be encrypted', async () => {

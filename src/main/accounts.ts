@@ -56,7 +56,6 @@ export async function saveAccount(file: string, vault: Vault, host: string, kind
   const why = vault.unavailable()
   if (why) throw new Error(why)
   const account: AccountInfo = { host, kind, url: checkUrl(url), user: null }
-  if (new URL(account.url).hostname !== host) throw new Error(`The instance URL (${new URL(account.url).hostname}) is not ${host}`)
   account.user = await currentUser(account, secret)
   save(file, [...load(file).filter((a) => a.host !== host), { ...account, token: vault.encrypt(secret).toString('base64') }])
   return account

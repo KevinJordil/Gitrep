@@ -13,6 +13,7 @@ export interface FakeMr {
   author: string
   sha: string // head sha; diff_refs.head_sha
   base: string // diff_refs base_sha and start_sha
+  fork?: boolean // the source branch lives in a fork
 }
 
 export interface FakePr {
@@ -89,7 +90,7 @@ export async function startFakeForge(): Promise<FakeForge> {
         if ((m = /^\/projects\/([^/]+)\/merge_requests$/.exec(pathname)) && req.method === 'GET') {
           const project = decodeURIComponent(m[1])
           const list = forge.mrs.filter((x) => x.project === project && (!q.get('source_branch') || x.source === q.get('source_branch')))
-          return send(res, 200, list.map((x) => ({ iid: x.iid, title: x.title, source_branch: x.source, target_branch: x.target, author: { username: x.author, name: x.author }, web_url: `http://gitlab.test/${project}/-/merge_requests/${x.iid}` })))
+          return send(res, 200, list.map((x) => ({ iid: x.iid, title: x.title, source_branch: x.source, target_branch: x.target, source_project_id: x.fork ? 2 : 1, target_project_id: 1, author: { username: x.author, name: x.author }, web_url: `http://gitlab.test/${project}/-/merge_requests/${x.iid}` })))
         }
         if ((m = /^\/projects\/([^/]+)\/merge_requests\/(\d+)$/.exec(pathname)) && req.method === 'GET') {
           const x = forge.mrs.find((y) => y.project === decodeURIComponent(m![1]) && y.iid === Number(m![2]))

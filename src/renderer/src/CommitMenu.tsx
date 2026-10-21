@@ -157,7 +157,11 @@ export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebas
         )}
       </div>
       {item('Rebase interactively from here…', 'rebase-i', '', !canRebase)}
-      {extra}
+      {extra && (
+        <div className="contents" onMouseOver={closeSub}>
+          {extra}
+        </div>
+      )}
       <div className="menu-sep" role="separator" />
       {item('Copy SHA', 'copy', 'Ctrl C')}
       {item('Explain with Claude', 'explain')}

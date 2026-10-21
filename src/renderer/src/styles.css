@@ -620,10 +620,11 @@ body.resizing { user-select: none; cursor: col-resize; }
 .sidebar.findings { gap: 10px; }
 .sevbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 4px; }
 .chip.sm { height: 24px; padding: 0 9px; font-size: 12px; gap: 5px; }
-.d { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.d.crit { background: var(--red); }
-.d.imp { background: var(--amber); }
-.d.min { background: var(--accent); }
+.contents { display: contents; }
+.sevdot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.sevdot.crit { background: var(--red); }
+.sevdot.imp { background: var(--amber); }
+.sevdot.min { background: var(--accent); }
 .flist { display: flex; flex-direction: column; gap: 2px; }
 .fitem { display: flex; gap: 9px; padding: 8px; border-radius: 7px; cursor: pointer; }
 .fitem:hover { background: var(--row-hover); }
@@ -696,11 +697,11 @@ body.resizing { user-select: none; cursor: col-resize; }
 .ok { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-size: 12px; white-space: nowrap; }
 .acc .err { display: inline-flex; align-items: center; gap: 5px; color: var(--faint); font-size: 12px; }
 .btnlink { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; }
-.seg { display: flex; gap: 6px; }
-.seg-b { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
-.seg-b b { color: var(--text); font-weight: 500; }
-.seg-b span { font-size: 12px; color: var(--faint); }
-.seg-b.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); box-shadow: inset 0 0 0 1px var(--accent); }
+.modes { display: flex; gap: 6px; }
+.mode-b { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
+.mode-b b { color: var(--text); font-weight: 500; }
+.mode-b span { font-size: 12px; color: var(--faint); }
+.mode-b.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); box-shadow: inset 0 0 0 1px var(--accent); }
 .forge { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); }
 .forge .ok, .forge .lnk { margin-left: auto; }
 .sumlist { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); }

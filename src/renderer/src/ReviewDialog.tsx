@@ -19,12 +19,13 @@ interface Props {
   onEditPrompts: () => void
   onSettings: (patch: Partial<Settings>) => Promise<boolean>
   accountsVersion: number // looks again when an account changes
+  posting: boolean // comments of the open review are being posted: nothing else can start
   onAccounts: (suggest: AccountSuggestion | null) => void
   onClose: () => void
 }
 
 // Start a review: what is compared, with which prompt. Claude runs while the dialog waits.
-export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, settings, entry, onStart, onEditPrompts, onSettings, accountsVersion, onAccounts, onClose }: Props) {
+export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, settings, entry, onStart, onEditPrompts, onSettings, accountsVersion, posting, onAccounts, onClose }: Props) {
   const id = useId()
   const [base, setBase] = useState(() => defaultBase(branches, branch))
   const baseTouched = useRef(false)
@@ -50,6 +51,8 @@ export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, se
   // The forge of the branch's remote and its open request, again when the user names the forge or adds an account.
   const { forgeHosts } = settings
   const forgeHostsKey = JSON.stringify(forgeHosts) // stable across settings saves
+  const branchesRef = useRef(branches) // read when the lookup answers: a refresh of the repository must not restart it
+  branchesRef.current = branches
   useEffect(() => {
     let live = true
     setForge(undefined)
@@ -57,14 +60,14 @@ export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, se
       (f) => {
         if (!live) return
         setForge(f)
-        if (f?.request && !baseTouched.current) setBase(defaultBase(branches, branch, f.request.target))
+        if (f?.request && !baseTouched.current) setBase(defaultBase(branchesRef.current, branch, f.request.target))
       },
       () => live && setForge(null)
     )
     return () => {
       live = false
     }
-  }, [repo, branch, branches, forgeHostsKey, accountsVersion])
+  }, [repo, branch, forgeHostsKey, accountsVersion])
 
   useEffect(() => {
     if (!base) return setScope('No other branch to compare with.')
@@ -96,13 +99,14 @@ export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, se
 
   const others = choices.filter((c) => c.key !== choice?.key)
   const ready = typeof scope === 'object' && scope !== null && scope.commits > 0
+  const behind = mode === 'request' && typeof scope === 'object' && scope !== null && forge?.request && forge.request.head !== scope.head ? forge.request : null // the request is not the branch as it is here
   return (
     <Dialog
       title="Review with Claude"
       submit={busy ? 'Reviewing…' : 'Start review'}
       wide
       busy={busy}
-      canSubmit={ready && !!choice}
+      canSubmit={ready && !!choice && !posting && !behind}
       onSubmit={() => void start()}
       onClose={onClose}
       foot={
@@ -159,12 +163,12 @@ export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, se
       <ForgeBox forge={forge} onKind={(host, kind) => void onSettings({ forgeHosts: { ...forgeHosts, [host]: kind } })} onAccounts={onAccounts} />
       <div className="dialog-field">
         <span>Mode</span>
-        <div className="seg" role="radiogroup" aria-label="Mode">
-          <button type="button" role="radio" aria-checked={mode === 'branch'} className={`seg-b ${mode === 'branch' ? 'on' : ''}`} onClick={() => setPicked('branch')}>
+        <div className="modes" role="radiogroup" aria-label="Mode">
+          <button type="button" role="radio" aria-checked={mode === 'branch'} className={`mode-b ${mode === 'branch' ? 'on' : ''}`} onClick={() => setPicked('branch')}>
             <b>My branch</b>
             <span>Prepare fixes in the working tree</span>
           </button>
-          <button type="button" role="radio" aria-checked={mode === 'request'} className={`seg-b ${mode === 'request' ? 'on' : ''}`} disabled={!forge?.request} onClick={() => setPicked('request')}>
+          <button type="button" role="radio" aria-checked={mode === 'request'} className={`mode-b ${mode === 'request' ? 'on' : ''}`} disabled={!forge?.request} onClick={() => setPicked('request')}>
             <b>{forge ? requestName(forge) : 'Merge request'}</b>
             <span>{forge?.request ? `Post comments to ${requestWord(forge)} ${requestLabel(forge)}` : `No open ${forge?.kind === 'github' ? 'pull' : 'merge'} request`}</span>
           </button>
@@ -192,6 +196,12 @@ export function ReviewDialog({ repo, repoName, branch, mode: asked, branches, se
           </button>
         </div>
       </div>
+      {behind && typeof scope === 'object' && scope && (
+        <div className="note err">
+          The {forge ? requestWord(forge) : 'request'} is at {behind.head.slice(0, 7)}, your copy at {scope.head.slice(0, 7)}: fetch or push first.
+        </div>
+      )}
+      {posting && <div className="note err">Comments are being posted: wait for them to finish before starting another review.</div>}
       {busy && <div className="note">Claude is reading the changes. This can take a minute.</div>}
       {error && <div className="note err">{error}</div>}
     </Dialog>

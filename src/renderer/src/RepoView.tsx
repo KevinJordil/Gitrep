@@ -389,7 +389,13 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     }
   }
 
-  const openReview = (branch: string, mode?: ReviewMode) => (session && session.review.branch === branch ? focusOn({ kind: 'review' }) : setReviewing({ branch, mode }))
+  const openReview = (branch: string, mode?: ReviewMode) => {
+    if (uiRef.current?.post.posting) {
+      focusOn({ kind: 'review' })
+      notify('info', 'Comments are being posted: wait for them to finish before starting another review.')
+    } else if (session && session.review.branch === branch) focusOn({ kind: 'review' })
+    else setReviewing({ branch, mode })
+  }
   const saveReviewPrompts = async (prompts?: ReviewPrompt[], own?: ReviewPrompt | null) =>
     (prompts === undefined || (await onSettings({ reviewPrompts: prompts }))) && (own === undefined || (await onRepoSettings(path, { reviewPrompt: own })))
   // The branch at a commit, for the graph menu: a local one first.
@@ -406,11 +412,20 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     focusOn({ kind: 'wip' })
   }
   // A new account (added from the post panel) or forge choice: the open review looks its request up again, keeping the edits.
+  // A result that arrives after the inputs changed is dropped, and while comments are being posted a failed or empty lookup never replaces the request they go to.
   const reviewBranch = session?.review.branch
+  const forgeHostsKey = JSON.stringify(settings.forgeHosts) // a settings save makes a new object: only a real change starts over
   useEffect(() => {
     if (!reviewBranch) return
-    api.forgeInfo(path, reviewBranch).then((forge) => setSession((s) => (s && s.review.branch === reviewBranch ? { ...s, forge } : s)), () => undefined)
-  }, [path, reviewBranch, accountsVersion, settings.forgeHosts])
+    let live = true
+    api.forgeInfo(path, reviewBranch).then(
+      (forge) => live && setSession((s) => (s && s.review.branch === reviewBranch && !(uiRef.current?.post.steps && !forge?.request) ? { ...s, forge } : s)),
+      () => undefined
+    )
+    return () => {
+      live = false
+    }
+  }, [path, reviewBranch, accountsVersion, forgeHostsKey])
   const rerun = async () => {
     if (!session || uiRef.current?.post.posting) return
     setRerunning(true)
@@ -439,7 +454,6 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     [path]
   )
   const current = status?.branch ?? null
-  const forgeHostsKey = JSON.stringify(settings.forgeHosts) // a settings save makes a new object: only a real change starts over
   useEffect(() => {
     forgeGen.current++
     setForges((all) => (current && all[current] ? { [current]: all[current] } : {})) // the badge stays while the lookup runs
@@ -557,7 +571,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
         <Splitter pane="sidebar" width={sideW} other={rightW} onSave={(w) => onSettings({ sidebarWidth: w })} />
         <Splitter pane="right" width={rightW} other={sideW} onSave={(w) => onSettings({ rightWidth: w })} />
         {inReview && session && ui ? (
-          <ReviewView key={session.started} repo={path} session={session} status={status} undoLabel={undo.undo} ui={ui} setUi={updateUi} current={() => uiRef.current} run={run} onShowChanges={exitReview} onAccounts={onAccounts} />
+          <ReviewView key={session.started} repo={path} session={session} status={status} remote={!!branches.find((b) => b.name === session.review.branch)?.remote} undoLabel={undo.undo} ui={ui} setUi={updateUi} current={() => uiRef.current} run={run} onShowChanges={exitReview} onAccounts={onAccounts} />
         ) : (
         <Sidebar
           branches={branches}
@@ -628,7 +642,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
       {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions && { name: menu.branchActions.name, items: withRequest(menu.branchActions.name, menu.branchActions.items) }} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} forge={forges[menuTip]} onReview={(mode) => { closeMenu(); openReview(menuTip, mode) }} />} />}
       {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
-      {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing.branch} mode={reviewing.mode} branches={branches} settings={settings} entry={entry} onStart={startReview} onEditPrompts={() => setEditingPrompts(true)} onSettings={onSettings} accountsVersion={accountsVersion} onAccounts={onAccounts} onClose={() => setReviewing(null)} />}
+      {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing.branch} mode={reviewing.mode} branches={branches} settings={settings} entry={entry} onStart={startReview} onEditPrompts={() => setEditingPrompts(true)} onSettings={onSettings} accountsVersion={accountsVersion} posting={!!ui?.post.posting} onAccounts={onAccounts} onClose={() => setReviewing(null)} />}
       {editingPrompts && <PromptsDialog repoName={entry?.name ?? path} prompts={settings.reviewPrompts} own={entry?.reviewPrompt ?? null} onSave={saveReviewPrompts} onClose={() => setEditingPrompts(false)} />}
       {dialog}
     </>

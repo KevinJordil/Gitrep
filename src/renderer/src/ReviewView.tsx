@@ -7,7 +7,7 @@ import { FileIcon, StatusBadge } from './FileIcon'
 import { Icon } from './icons'
 import type { RunOp } from './model'
 import type { AccountSuggestion } from './AccountsDialog'
-import { countBy, defaultSummary, isMoved, MOVED_TEXT, postStatus, FORGE_NAME, initialEdits, keptComments, keptFixes, postPlan, requestLabel, requestName, requestWord, SEVERITIES, SEVERITY_CLASS, SEVERITY_LABEL, shortPath, visibleFindings, where, type FindingEdit, type PostState, type PostStepState, type ReviewMode, type ReviewSession, type ReviewUi } from './review'
+import { countBy, defaultSummary, HEAD_MOVED, isMoved, MOVED_TEXT, postStatus, FORGE_NAME, initialEdits, keptComments, keptFixes, postPlan, requestLabel, requestName, requestWord, SEVERITIES, SEVERITY_CLASS, SEVERITY_LABEL, shortPath, visibleFindings, where, type FindingEdit, type PostState, type PostStepState, type ReviewMode, type ReviewSession, type ReviewUi } from './review'
 
 interface BannerProps {
   session: ReviewSession
@@ -61,6 +61,7 @@ interface Props {
   repo: string
   session: ReviewSession
   status: RepoStatus | null
+  remote: boolean // the reviewed branch is a remote-tracking one: it cannot be checked out as is
   undoLabel: string | null // what Undo would revert
   ui: ReviewUi
   setUi: (f: (u: ReviewUi) => ReviewUi) => void
@@ -71,7 +72,7 @@ interface Props {
 }
 
 // The review screen: findings on the left, the branch diff with a card under each finding, what to do with them on the right.
-export function ReviewView({ repo, session, status, undoLabel, ui, setUi, current, run, onShowChanges, onAccounts }: Props) {
+export function ReviewView({ repo, session, status, remote, undoLabel, ui, setUi, current, run, onShowChanges, onAccounts }: Props) {
   const { review } = session
   const { edits, severity, query, allFiles } = ui
   const patch = (p: Partial<ReviewUi>) => setUi((u) => ({ ...u, ...p }))
@@ -124,7 +125,7 @@ export function ReviewView({ repo, session, status, undoLabel, ui, setUi, curren
           </button>
           {SEVERITIES.map((s) => (
             <button key={s} className={`chip sm ${severity === s ? 'on' : ''}`} aria-pressed={severity === s} aria-label={`${SEVERITY_LABEL[s]} (${counts[s]})`} title={SEVERITY_LABEL[s]} onClick={() => patch({ severity: s })}>
-              <i className={`d ${SEVERITY_CLASS[s]}`} /> {counts[s]}
+              <i className={`sevdot ${SEVERITY_CLASS[s]}`} /> {counts[s]}
             </button>
           ))}
         </div>
@@ -198,7 +199,7 @@ export function ReviewView({ repo, session, status, undoLabel, ui, setUi, curren
       {session.mode === 'request' && session.forge?.request ? (
         <PostPanel repo={repo} session={session} edits={edits} post={ui.post} setUi={setUi} current={current} onAccounts={onAccounts} />
       ) : (
-        <FixPanel repo={repo} session={session} edits={edits} status={status} undoLabel={undoLabel} run={run} onShowChanges={onShowChanges} />
+        <FixPanel repo={repo} session={session} edits={edits} status={status} remote={remote} undoLabel={undoLabel} run={run} onShowChanges={onShowChanges} />
       )}
     </>
   )
@@ -325,13 +326,14 @@ interface FixPanelProps {
   session: ReviewSession
   edits: Record<number, FindingEdit>
   status: RepoStatus | null
+  remote: boolean
   undoLabel: string | null
   run: RunOp
   onShowChanges: () => void
 }
 
 // My branch: the kept fixes go into the working files as unstaged changes; nothing is staged or committed.
-function FixPanel({ repo, session, edits, status, undoLabel, run, onShowChanges }: FixPanelProps) {
+function FixPanel({ repo, session, edits, status, remote, undoLabel, run, onShowChanges }: FixPanelProps) {
   const { review } = session
   const [result, setResult] = useState<FixResult | null>(null)
   const [applying, setApplying] = useState(false)
@@ -392,7 +394,7 @@ function FixPanel({ repo, session, edits, status, undoLabel, run, onShowChanges 
         <button className="btn-primary" disabled={!fixes.length || !checkedOut || applying || !!done?.applied.length} onClick={() => void prepare()}>
           <Icon name="wand" size={14} /> Prepare fixes ({fixes.length})
         </button>
-        {!checkedOut ? <div className="note err">Check out {review.branch} to prepare its fixes.</div> : !fixes.length ? <div className="note">No fix is kept: nothing to prepare.</div> : done?.applied.length ? <div className="note">Fixes applied. Undo to prepare them again.</div> : null}
+        {!checkedOut ? <div className="note err">{remote ? `Create a local branch from ${review.branch} and review it to prepare fixes.` : `Check out ${review.branch} to prepare its fixes.`}</div> : !fixes.length ? <div className="note">No fix is kept: nothing to prepare.</div> : done?.applied.length ? <div className="note">Fixes applied. Undo to prepare them again.</div> : null}
         {error && <div className="note err">{error}</div>}
         <div className="explain">
           <b>What happens</b>
@@ -485,7 +487,7 @@ function PostPanel({ repo, session, edits, post, setUi, current, onAccounts }: P
         s.error = undefined
       } catch (e) {
         s.state = 'fail'
-        s.error = errorText(e)
+        s.error = errorText(e).replace(HEAD_MOVED, '').trim()
         if (isMoved(e)) {
           // The forge moved: nothing else would land on the right lines.
           for (const o of next) if (o.state !== 'done' && o.state !== 'skip') Object.assign(o, { state: 'fail', error: 'not sent' })

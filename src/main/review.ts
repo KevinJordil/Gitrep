@@ -9,7 +9,7 @@ const MAX_PARTS = 4 // Limit: Claude calls per review; the files that do not fit
 const MAX_FINDINGS = 50
 const MAX_FIX_LINES = 50
 const REVIEW_TIMEOUT_MS = 300_000
-const DIFF = ['--no-color', '--no-ext-diff', '--no-renames']
+const DIFF = ['--no-color', '--no-ext-diff', '-M']
 const SEVERITIES: readonly Severity[] = ['critical', 'important', 'minor']
 
 // A branch, a tag or a sha that names a commit; never an option.
@@ -96,14 +96,16 @@ interface Section {
   fix: string[] | null
 }
 
-function sections(out: string): { list: Section[]; readable: boolean } {
+function sections(out: string): { list: Section[]; readable: boolean; unfinished: number } {
   const list: Section[] = []
   let readable = /^=== none\s*$/m.test(out)
   let cur: Section | null = null
   let into: 'comment' | 'fix' | null = null
+  let unfinished = 0 // sections that never reached their end line
   for (const raw of out.split('\n')) {
     const line = raw.replace(/\r$/, '')
     if (/^=== finding\s*$/.test(line)) {
+      if (cur) unfinished++
       cur = { fields: {}, comment: null, fix: null }
       into = null
     } else if (!cur) continue
@@ -120,7 +122,7 @@ function sections(out: string): { list: Section[]; readable: boolean } {
       if (field) cur.fields[field[1]] = field[2].trim()
     }
   }
-  return { list, readable }
+  return { list, readable, unfinished: unfinished + (cur ? 1 : 0) }
 }
 
 const trimEnd = (lines: string[]) => {
@@ -141,10 +143,10 @@ function lineAt(file: FileDiff, side: 'new' | 'old', n: number): { hunk: number;
 // Claude's sections mapped onto the reviewed diff. Malformed sections and positions outside the diff are dropped
 // (counted); fixes come without their original lines (filled in by the caller from the reviewed commit).
 export function parseFindings(out: string, files: FileDiff[], firstId = 1): { findings: ReviewFinding[]; dropped: number } {
-  const { list, readable } = sections(out)
+  const { list, readable, unfinished } = sections(out)
   if (!readable) throw new Error("Claude's answer could not be read: try again")
   const findings: ReviewFinding[] = []
-  let dropped = 0
+  let dropped = unfinished
   for (const s of list) {
     const path = (s.fields.file ?? '').replace(/^[ab]\//, '')
     const file = files.find((f) => f.newPath === path || f.oldPath === path)

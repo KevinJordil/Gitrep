@@ -60,7 +60,7 @@ describe('parseFindings', () => {
       '=== finding\nseverity: critical\nfile: a.c\nline: R3\n--- comment\nnever closed'
     ].join('\n')
     const r = parseFindings(out, FILES, 5)
-    expect(r.dropped).toBe(4)
+    expect(r.dropped).toBe(5) // the last section never closed counts too
     expect(r.findings).toMatchObject([{ id: 5, severity: 'minor', line: 2, endLine: 2, anchor: { oldNo: 2, newNo: 2 } }])
   })
 
@@ -87,6 +87,24 @@ describe('parseFindings details', () => {
     const r = parseFindings(out, FILES, 41)
     expect(r.findings).toHaveLength(10)
     expect(r.dropped).toBe(30)
+  })
+})
+
+describe('review diff of a renamed file', () => {
+  it('follows the rename: context stays context, old and new paths are both known', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'old.c', lines(10))
+    await commitAll(repo, 'init')
+    await git(repo, ['switch', '-q', '-c', 'feature'])
+    await git(repo, ['mv', 'old.c', 'new.c'])
+    await write(repo, 'new.c', lines(10, (i) => (i === 5 ? 'line 5 changed' : `line ${i}`)))
+    await commitAll(repo, 'rename and edit')
+    const f = await fakeClaude(finding(['severity: minor', 'file: new.c', 'line: R4', 'title: Ctx']))
+    const r = await startReview(repo, { branch: 'feature', base: 'main', prompt: { name: 'Mine', text: '' } }, f.opts)
+    expect(r.files).toHaveLength(1)
+    expect(r.files[0]).toMatchObject({ oldPath: 'old.c', newPath: 'new.c' })
+    expect(r.files[0].hunks[0].lines.filter((l) => l.kind !== 'context')).toHaveLength(2)
+    expect(r.findings[0]).toMatchObject({ path: 'new.c', line: 4, anchor: { oldNo: 4, newNo: 4 } })
   })
 })
 

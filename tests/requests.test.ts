@@ -62,6 +62,14 @@ describe('merge and pull requests', () => {
     ])
   })
 
+  it('ignores merge requests from a fork', async () => {
+    fake.mrs.unshift({ project: 'team/sub/alpha', iid: 8, title: 'From a fork', source: 'feature', target: 'main', author: 'Lee', sha: head, base: 'b'.repeat(40), fork: true })
+    expect((await forgeInfo(repo, 'feature', ctx))?.request?.number).toBe(7)
+    fake.mrs.shift()
+    await prime(repo, 'feature', ctx) // the next tests post to the primed request
+    fake.calls.length = 0
+  })
+
   it('drafts on GitLab, then publishes all at once', async () => {
     fake.calls.length = 0
     await postStep(repo, 'feature', head, true, { kind: 'comment', comment: ADDED }, ctx)

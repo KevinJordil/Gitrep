@@ -117,6 +117,7 @@ export async function prepareFixes(repo: string, branch: string, fixes: FixReque
       for (const f of mine) {
         if (f.lines.map(noCr).join('\n') === f.original.map(noCr).join('\n')) skip(f, 'nothing to change')
         else if (f.endLine >= floor) skip(f, 'overlaps another fix')
+        else if (f.lines.length && lines.slice(f.line - 1, f.line - 1 + f.lines.length).map(noCr).join('\n') === f.lines.map(noCr).join('\n')) skip(f, 'already applied')
         else if (f.endLine > count || lines.slice(f.line - 1, f.endLine).map(noCr).join('\n') !== f.original.map(noCr).join('\n')) skip(f, 'the lines changed since the review')
         else {
           const cr = lines[f.line - 1].endsWith('\r') ? '\r' : ''
