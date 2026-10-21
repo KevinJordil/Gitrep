@@ -116,6 +116,20 @@ export function ChangesPanel({ repo, name, instructions, onInstructions, status,
           <FileGroup title="Conflicts" files={conflicted} side="unstaged" selection={null} onSelect={(s) => onConflict(s.path)} onMenu={onFileMenu} hint="Click a file to resolve it, or stage it as it is." buttons={stageBtn} />
         )}
         <FileGroup
+          title="Staged"
+          files={staged}
+          side="staged"
+          selection={selection}
+          onSelect={onSelect}
+          onMenu={onFileMenu}
+          action={staged.length ? { label: 'Unstage all', run: () => void run('unstage', () => api.unstage(repo, pathsOf(staged))) } : undefined}
+          buttons={(f) => (
+            <button className="fbtn" aria-label={`Unstage ${f.path}`} title="Unstage" onClick={() => void run('unstage', () => api.unstage(repo, pathsOf([f])))}>
+              <Icon name="minus" size={12} stroke={2.4} />
+            </button>
+          )}
+        />
+        <FileGroup
           title="Unstaged"
           files={unstaged}
           side="unstaged"
@@ -130,20 +144,6 @@ export function ChangesPanel({ repo, name, instructions, onInstructions, status,
               </button>
               {stageBtn(f)}
             </>
-          )}
-        />
-        <FileGroup
-          title="Staged"
-          files={staged}
-          side="staged"
-          selection={selection}
-          onSelect={onSelect}
-          onMenu={onFileMenu}
-          action={staged.length ? { label: 'Unstage all', run: () => void run('unstage', () => api.unstage(repo, pathsOf(staged))) } : undefined}
-          buttons={(f) => (
-            <button className="fbtn" aria-label={`Unstage ${f.path}`} title="Unstage" onClick={() => void run('unstage', () => api.unstage(repo, pathsOf([f])))}>
-              <Icon name="minus" size={12} stroke={2.4} />
-            </button>
           )}
         />
       </div>
