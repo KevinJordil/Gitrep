@@ -5,7 +5,7 @@ import { changeGroups, errorText, splitPath } from './format'
 import { langFor } from './fileTypes'
 import type { Token } from './highlight'
 import { Icon } from './icons'
-import type { RunOp, Selection } from './model'
+import type { FileView, RunOp, Selection } from './model'
 import { useToast } from './toast'
 
 const MAX_LINES = 4000
@@ -18,7 +18,7 @@ interface Props {
   onBack: () => void
   run: RunOp
   hideHead?: boolean // the parent shows its own header (stash view, file history)
-  onFile?: (path: string, rev: string | null) => void // opens the file's history (from this commit, or from HEAD)
+  onFile?: (path: string, rev: string | null, view: FileView) => void // opens the file's history or blame (at this commit, or HEAD)
 }
 
 export function DiffView({ repo, selection, version, onBack, run, hideHead = false, onFile }: Props) {
@@ -106,9 +106,14 @@ export function DiffView({ repo, selection, version, onBack, run, hideHead = fal
           {commit ? <span className="badge grey">{commit.slice(0, 7)}</span> : <span className={`badge ${side === 'staged' ? 'blue' : 'amber'}`}>{SIDE_LABEL[side]}</span>}
           <div className="grow" />
           {onFile && side !== 'untracked' && (
-            <button className="head-btn" onClick={() => onFile(path, commit)}>
-              File history
-            </button>
+            <>
+              <button className="head-btn" onClick={() => onFile(path, commit, 'diff')}>
+                File history
+              </button>
+              <button className="head-btn" onClick={() => onFile(path, commit, 'blame')}>
+                Blame
+              </button>
+            </>
           )}
         </div>
       )}

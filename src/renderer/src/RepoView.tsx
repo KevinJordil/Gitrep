@@ -16,7 +16,7 @@ import { ancestorsOf, layoutGraph, type GraphNode } from './graph'
 import { Icon, type IconName } from './icons'
 import { InteractiveRebase } from './InteractiveRebase'
 import { MergeMenu } from './MergeMenu'
-import type { Focus, RunOp, RunOutcome, Selection } from './model'
+import type { FileView, Focus, RunOp, RunOutcome, Selection } from './model'
 import { OperationBanner } from './OperationBanner'
 import { applySuggestions, blocksOf, hunkOf, newDraft, textOf, type Draft } from './resolve'
 import { toggleHide, toggleOnly } from '../../shared/branches'
@@ -310,7 +310,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const closeMenu = useCallback(() => setMenu(null), [])
   const openFileMenu = useCallback((p: string, rev: string | null, x: number, y: number) => setFileMenu({ path: p, rev, x, y }), [])
   const closeFileMenu = useCallback(() => setFileMenu(null), [])
-  const openFile = useCallback((p: string, rev: string | null) => focusOn({ kind: 'file', path: p, rev }), [focusOn])
+  const openFile = useCallback((p: string, rev: string | null, view: FileView) => focusOn({ kind: 'file', path: p, rev, view }), [focusOn])
   const openDrop = useCallback<DropBranch>((source, target, x, y) => setDrop({ source, target, x, y }), [])
   const closeDrop = useCallback(() => setDrop(null), [])
   // A rebase that stopped on conflicts has already moved to the conflict view: leave it there.
@@ -474,7 +474,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           <InteractiveRebase key={`${focus.branch}:${focus.upstream}`} repo={path} branch={focus.branch} upstream={focus.upstream} status={status} busy={busy} runOutcome={runOutcome} onClose={closeRebase} />
         ) : focus.kind === 'file' ? (
           // Takes the center and the right panel too.
-          <FileHistory key={`${focus.path}:${focus.rev}`} repo={path} path={focus.path} rev={focus.rev} version={version} run={run} onFocus={focusOn} />
+          <FileHistory key={`${focus.path}:${focus.rev}:${focus.view}`} repo={path} path={focus.path} rev={focus.rev} view={focus.view} version={version} run={run} onFocus={focusOn} />
         ) : (
           <section className="center">
             {selection ? (
@@ -519,7 +519,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
         )}
       </div>
       {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} />}
-      {fileMenu && <FileMenu target={fileMenu} onHistory={() => openFile(fileMenu.path, fileMenu.rev)} onClose={closeFileMenu} />}
+      {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
       {dialog}
     </>

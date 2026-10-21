@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react'
+import type { FileView } from './model'
 
 // A file of the Changes panel or of a commit, and where its menu opens. rev: the commit (null: the working tree, from HEAD).
 export interface FileMenuTarget {
@@ -26,11 +27,11 @@ export function fileMenuProps(open: (x: number, y: number) => void) {
 
 interface Props {
   target: FileMenuTarget
-  onHistory: () => void
+  onOpen: (view: FileView) => void
   onClose: () => void // must be stable (useCallback)
 }
 
-export function FileMenu({ target, onHistory, onClose }: Props) {
+export function FileMenu({ target, onOpen, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
   // Keyboard users keep their place: refocus what had focus before the menu opened.
@@ -64,9 +65,9 @@ export function FileMenu({ target, onHistory, onClose }: Props) {
       items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus()
     }
   }
-  const act = (fn: () => void) => () => {
+  const act = (view: FileView) => () => {
     onClose()
-    fn()
+    onOpen(view)
   }
 
   const left = Math.max(8, Math.min(target.x, window.innerWidth - 250))
@@ -74,8 +75,11 @@ export function FileMenu({ target, onHistory, onClose }: Props) {
   return (
     <div ref={ref} className="menu file-menu" role="menu" aria-label={`Actions on ${target.path}`} style={{ left, top }} onKeyDown={onKey} onContextMenu={(e) => e.preventDefault()}>
       <div className="menu-head">{target.path}</div>
-      <button role="menuitem" className="menu-item" onClick={act(onHistory)}>
+      <button role="menuitem" className="menu-item" onClick={act('diff')}>
         File history
+      </button>
+      <button role="menuitem" className="menu-item" onClick={act('blame')}>
+        Blame
       </button>
     </div>
   )
