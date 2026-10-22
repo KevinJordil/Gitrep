@@ -344,7 +344,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     setMenu({ commit, x, y, branchActions: { name: b.name, items } })
   }
   const closeMenu = useCallback(() => setMenu(null), [])
-  const openFileMenu = useCallback((p: string, rev: string | null, x: number, y: number) => setFileMenu({ path: p, rev, x, y }), [])
+  const openFileMenu = useCallback((p: string, rev: string | null, x: number, y: number, folders?: 'stage' | 'unstage', untracked?: boolean) => setFileMenu({ path: p, rev, x, y, folders, untracked }), [])
   const closeFileMenu = useCallback(() => setFileMenu(null), [])
   const openFile = useCallback((p: string, rev: string | null, view: FileView) => focusOn({ kind: 'file', path: p, rev, view }), [focusOn])
   // "Review MR !n" follows "Review with Claude…" once the branch's request is known.
@@ -653,7 +653,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
       </div>
       {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions && { name: menu.branchActions.name, items: withRequest(menu.branchActions.name, menu.branchActions.items) }} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} forge={forges[menuTip]} onReview={(mode) => { closeMenu(); openReview(menuTip, mode) }} />} />}
       {leaveDialog}
-      {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onClose={closeFileMenu} />}
+      {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onFolder={(folder, action) => void run(action, () => (action === 'stage' ? api.stage(path, [folder]) : api.unstage(path, [folder])))} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}
       {reviewing && <ReviewDialog repo={path} repoName={entry?.name ?? path} branch={reviewing.branch} mode={reviewing.mode} branches={branches} settings={settings} entry={entry} onStart={startReview} onEditPrompts={() => setEditingPrompts(true)} onSettings={onSettings} accountsVersion={accountsVersion} posting={!!ui?.post.posting} onAccounts={onAccounts} onClose={() => setReviewing(null)} />}
       {editingPrompts && <PromptsDialog repoName={entry?.name ?? path} prompts={settings.reviewPrompts} own={entry?.reviewPrompt ?? null} onSave={saveReviewPrompts} onClose={() => setEditingPrompts(false)} />}

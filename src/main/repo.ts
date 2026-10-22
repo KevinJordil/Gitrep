@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { rmdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { isActive } from '../shared/branches'
@@ -20,7 +20,7 @@ async function hasHead(repo: string): Promise<boolean> {
 
 export async function getStatus(repo: string): Promise<RepoStatus> {
   const [out, worktree, index, op] = await Promise.all([
-    git(repo, [...RO, 'status', '--porcelain=v2', '--branch', '-z']),
+    git(repo, [...RO, 'status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all']),
     git(repo, [...RO, 'diff', '--numstat', '-z', '--no-renames']),
     git(repo, [...RO, 'diff', '--cached', '--numstat', '-z', '--no-renames']),
     currentOperation(repo)
@@ -150,6 +150,8 @@ export async function discard(repo: string, files: FileChange[]): Promise<boolea
     if (known.length) await git(repo, ['restore', '--worktree', '--', ...known])
     // git clean keeps ignored files inside untracked folders.
     for (const path of untracked) await git(repo, ['clean', '-f', '-d', '--', path])
+    // Every untracked file is listed one by one: drop the folders they leave empty, as discarding the folder did.
+    for (const path of untracked) await removeEmptyParents(repo, path)
     if (!targets.length) return true
     if (!patch?.length) {
       clear(repo)
@@ -248,4 +250,15 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
   return out
+}
+
+async function removeEmptyParents(repo: string, path: string): Promise<void> {
+  const parts = path.split('/').slice(0, -1)
+  for (let i = parts.length; i > 0; i--) {
+    try {
+      await rmdir(join(repo, ...parts.slice(0, i)))
+    } catch {
+      return // not empty (or already gone): stop there
+    }
+  }
 }

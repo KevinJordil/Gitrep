@@ -61,3 +61,11 @@ describe('dashboard filters', () => {
     expect(groups.map((g) => [g.folder, g.items.map((i) => i.name)])).toEqual([['~/a', ['1', '3']], ['~/b', ['2']]])
   })
 })
+
+describe('parentFolders', () => {
+  it('lists the parent folders of a path, deepest first', async () => {
+    const { parentFolders } = await import('../src/renderer/src/FileMenu')
+    expect(parentFolders('a/b/c.txt')).toEqual(['a/b', 'a'])
+    expect(parentFolders('c.txt')).toEqual([])
+  })
+})

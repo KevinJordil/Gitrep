@@ -482,3 +482,32 @@ describe('summary and helpers', () => {
     expect(peak).toBe(2)
   })
 })
+
+describe('untracked folders', () => {
+  it('lists every new file of new nested folders, and stages or unstages a folder at any level', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.txt', 'a\n')
+    await commitAll(repo, 'init')
+    await write(repo, 'new/one.txt', '1\n')
+    await write(repo, 'new/deep/two.txt', '2\n')
+    await write(repo, 'new/deep/deeper/three.txt', '3\n')
+    expect((await getStatus(repo)).unstaged.map((f) => f.path).sort()).toEqual(['new/deep/deeper/three.txt', 'new/deep/two.txt', 'new/one.txt'])
+    await stage(repo, ['new/deep'])
+    const s = await getStatus(repo)
+    expect(s.staged.map((f) => f.path).sort()).toEqual(['new/deep/deeper/three.txt', 'new/deep/two.txt'])
+    expect(s.unstaged.map((f) => f.path)).toEqual(['new/one.txt'])
+    await unstage(repo, ['new/deep/deeper'])
+    expect((await getStatus(repo)).staged.map((f) => f.path)).toEqual(['new/deep/two.txt'])
+  })
+
+  it('drops the folders a discard leaves empty, and keeps the others', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.txt', 'a\n')
+    await commitAll(repo, 'init')
+    await write(repo, 'x/y/z.txt', 'z\n')
+    await write(repo, 'x/keep.txt', 'k\n')
+    await discard(repo, [{ path: 'x/y/z.txt', status: '?' }])
+    expect(existsSync(join(repo, 'x/y'))).toBe(false)
+    expect(existsSync(join(repo, 'x/keep.txt'))).toBe(true)
+  })
+})

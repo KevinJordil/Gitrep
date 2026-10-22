@@ -7,6 +7,14 @@ export interface FileMenuTarget {
   rev: string | null
   x: number
   y: number
+  folders?: 'stage' | 'unstage' // the Changes panel offers to stage (or unstage) each parent folder of the file
+  untracked?: boolean // no history or blame yet
+}
+
+// Parent folders of a path, deepest first: a/b/c.txt → a/b, a.
+export function parentFolders(path: string): string[] {
+  const parts = path.split('/').slice(0, -1)
+  return parts.map((_, i) => parts.slice(0, parts.length - i).join('/'))
 }
 
 // Right-click, the ContextMenu key or Shift+F10 on a file row open its menu at (x, y).
@@ -28,10 +36,11 @@ export function fileMenuProps(open: (x: number, y: number) => void) {
 interface Props {
   target: FileMenuTarget
   onOpen: (view: FileView) => void
+  onFolder?: (folder: string, action: 'stage' | 'unstage') => void
   onClose: () => void // must be stable (useCallback)
 }
 
-export function FileMenu({ target, onOpen, onClose }: Props) {
+export function FileMenu({ target, onOpen, onFolder, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
   // Keyboard users keep their place: refocus what had focus before the menu opened.
@@ -70,17 +79,32 @@ export function FileMenu({ target, onOpen, onClose }: Props) {
     onOpen(view)
   }
 
+  const folders = target.folders ? parentFolders(target.path) : []
   const left = Math.max(8, Math.min(target.x, window.innerWidth - 250))
-  const top = Math.max(8, Math.min(target.y, window.innerHeight - 120))
+  const top = Math.max(8, Math.min(target.y, window.innerHeight - 120 - folders.length * 31))
   return (
     <div ref={ref} className="menu file-menu" role="menu" aria-label={`Actions on ${target.path}`} style={{ left, top }} onKeyDown={onKey} onContextMenu={(e) => e.preventDefault()}>
       <div className="menu-head">{target.path}</div>
-      <button role="menuitem" className="menu-item" onClick={act('diff')}>
-        File history
-      </button>
-      <button role="menuitem" className="menu-item" onClick={act('blame')}>
-        Blame
-      </button>
+      {!target.untracked && (
+        <>
+          <button role="menuitem" className="menu-item" onClick={act('diff')}>
+            File history
+          </button>
+          <button role="menuitem" className="menu-item" onClick={act('blame')}>
+            Blame
+          </button>
+        </>
+      )}
+      {target.folders && onFolder && folders.length > 0 && (
+        <>
+          {!target.untracked && <div className="menu-sep" role="separator" />}
+          {folders.map((f) => (
+            <button key={f} role="menuitem" className="menu-item" title={`${f}/`} onClick={() => { onClose(); onFolder(f, target.folders!) }}>
+              <span>{`${target.folders === 'stage' ? 'Stage' : 'Unstage'} ${f}/`}</span>
+            </button>
+          ))}
+        </>
+      )}
     </div>
   )
 }

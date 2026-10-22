@@ -326,7 +326,7 @@ describe('undo of stashes and discards', () => {
     const repo = await setup()
     await write(repo, 'a.txt', 'changed\n')
     await write(repo, 'dir/n.bin', 'x\0y')
-    await discard(repo, [{ path: 'a.txt', status: 'M' }, { path: 'dir/', status: '?' }])
+    await discard(repo, [{ path: 'a.txt', status: 'M' }, { path: 'dir/n.bin', status: '?' }])
     expect((await getStatus(repo)).unstaged).toEqual([])
     expect(await undo(repo)).toBe('Discard changes to 2 files undone')
     expect(await read(repo, 'a.txt')).toBe('changed\n')

@@ -18,7 +18,7 @@ interface Props {
   selection: Selection | null
   onSelect: (s: Selection) => void
   onConflict: (path: string) => void // opens the conflict view on that file
-  onFileMenu: (path: string, rev: null, x: number, y: number) => void
+  onFileMenu: (path: string, rev: null, x: number, y: number, folders?: 'stage' | 'unstage', untracked?: boolean) => void
   run: RunOp
   busy: string | null
 }
@@ -122,6 +122,7 @@ export function ChangesPanel({ repo, name, instructions, onInstructions, status,
           selection={selection}
           onSelect={onSelect}
           onMenu={onFileMenu}
+          folders="unstage"
           action={staged.length ? { label: 'Unstage all', run: () => void run('unstage', () => api.unstage(repo, pathsOf(staged))) } : undefined}
           buttons={(f) => (
             <button className="fbtn" aria-label={`Unstage ${f.path}`} title="Unstage" onClick={() => void run('unstage', () => api.unstage(repo, pathsOf([f])))}>
@@ -136,6 +137,7 @@ export function ChangesPanel({ repo, name, instructions, onInstructions, status,
           selection={selection}
           onSelect={onSelect}
           onMenu={onFileMenu}
+          folders="stage"
           action={unstaged.length ? { label: 'Stage all', run: () => void run('stage', () => api.stage(repo, pathsOf(unstaged))) } : undefined}
           buttons={(f) => (
             <>
@@ -228,13 +230,14 @@ interface GroupProps {
   side: 'staged' | 'unstaged'
   selection: Selection | null
   onSelect?: (s: Selection) => void
-  onMenu: (path: string, rev: null, x: number, y: number) => void // the file menu (history); not for untracked files
+  onMenu: (path: string, rev: null, x: number, y: number, folders?: 'stage' | 'unstage', untracked?: boolean) => void // the file menu (history, blame, stage a folder)
+  folders?: 'stage' | 'unstage'
   action?: { label: string; run: () => void }
   hint?: string
   buttons: (f: FileChange) => ReactNode
 }
 
-function FileGroup({ title, files, side, selection, onSelect, onMenu, action, hint, buttons }: GroupProps) {
+function FileGroup({ title, files, side, selection, onSelect, onMenu, folders, action, hint, buttons }: GroupProps) {
   return (
     <section className="fgroup">
       <div className="fgroup-head">
@@ -253,7 +256,7 @@ function FileGroup({ title, files, side, selection, onSelect, onMenu, action, hi
         const target: DiffSide = side === 'staged' ? 'staged' : f.status === '?' ? 'untracked' : 'unstaged'
         const selected = selection?.path === f.path && selection.side === target
         return (
-          <div key={`${side}:${f.path}`} className={`file ${selected ? 'sel' : ''}`} title={f.origPath ? `${f.origPath} → ${f.path}` : f.path} {...(f.status === '?' ? {} : fileMenuProps((x, y) => onMenu(f.path, null, x, y)))}>
+          <div key={`${side}:${f.path}`} className={`file ${selected ? 'sel' : ''}`} title={f.origPath ? `${f.origPath} → ${f.path}` : f.path} {...fileMenuProps((x, y) => onMenu(f.path, null, x, y, folders, f.status === '?'))}>
             <StatusBadge status={f.status} />
             <FileIcon path={f.path} />
             <button className="path" disabled={!onSelect} onClick={() => onSelect?.({ path: f.path, side: target })}>
