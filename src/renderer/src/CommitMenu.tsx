@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { Commit, ResetMode } from '../../shared/types'
 
-export type CommitAction = 'checkout' | 'branch' | 'tag' | 'cherry-pick' | 'revert' | 'copy' | 'explain' | 'rebase-i' | `reset-${ResetMode}`
+export type CommitAction = 'checkout' | 'branch' | 'tag' | 'cherry-pick' | 'revert' | 'copy' | 'explain' | 'rebase-i' | 'drop' | `reset-${ResetMode}`
 
 const RESETS: [ResetMode, string, string][] = [
   ['soft', 'Soft', 'Keeps the changes, staged'],
@@ -27,12 +27,13 @@ interface Props {
   branch: string | null // checked-out branch, null when detached
   head: string | null
   canRebase: boolean // a strict ancestor of HEAD on a checked-out branch
+  dropReason: string | null // why the commit cannot be dropped, null when it can
   onAction: (a: CommitAction) => void
   onClose: () => void // must be stable (useCallback)
   extra?: ReactNode // more items before Copy SHA (Review with Claude… on a branch tip)
 }
 
-export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebase, onAction, onClose, extra }: Props) {
+export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebase, dropReason, onAction, onClose, extra }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [sub, setSub] = useState(false)
   const target = branch ?? 'HEAD'
@@ -97,8 +98,8 @@ export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebas
     else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) act('copy')
   }
   // Render helper, not a component: re-renders must keep the focused button.
-  const item = (label: string, action: CommitAction, hint = '', disabled = false) => (
-    <button role="menuitem" className="menu-item" disabled={disabled} onMouseEnter={closeSub} onClick={() => act(action)}>
+  const item = (label: string, action: CommitAction, hint = '', disabled = false, danger = false, title?: string) => (
+    <button role="menuitem" className={`menu-item ${danger ? 'danger' : ''}`} disabled={disabled} title={title} onMouseEnter={closeSub} onClick={() => act(action)}>
       <span>{label}</span>
       {hint && <span className="hint">{hint}</span>}
     </button>
@@ -136,6 +137,7 @@ export function CommitMenu({ commit, branchActions, x, y, branch, head, canRebas
       <div className="menu-sep" role="separator" />
       {item(`Cherry-pick onto ${target}`, 'cherry-pick', '', commit.sha === head)}
       {item('Revert this commit', 'revert')}
+      {item('Drop this commit', 'drop', '', !!dropReason, true, dropReason ?? undefined)}
       <div className="menu-sep" role="separator" />
       <div className="menu-anchor">
         <button role="menuitem" className={`menu-item ${sub ? 'open' : ''}`} aria-haspopup="menu" aria-expanded={sub} onMouseEnter={() => {

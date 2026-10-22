@@ -98,3 +98,26 @@ export function PromptDialog({ title, label, submit, textarea, checkbox, onSubmi
     </Dialog>
   )
 }
+
+interface ConfirmProps {
+  title: string
+  body: string
+  submit: string
+  checkbox?: string // label of an optional checkbox, ticked by default
+  onSubmit: (checked: boolean) => void
+  onClose: () => void
+}
+
+export function ConfirmDialog({ title, body, submit, checkbox, onSubmit, onClose }: ConfirmProps) {
+  const [checked, setChecked] = useState(true)
+  return (
+    <Dialog title={title} submit={submit} onSubmit={() => (onClose(), onSubmit(checked))} onClose={onClose}>
+      <p className="dialog-body">{body}</p>
+      {checkbox && (
+        <label className="check">
+          <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} /> {checkbox}
+        </label>
+      )}
+    </Dialog>
+  )
+}

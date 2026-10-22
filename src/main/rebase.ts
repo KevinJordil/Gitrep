@@ -111,15 +111,37 @@ async function writeTodo(dir: string, commits: RebaseCommit[], items: RebaseItem
   return todo
 }
 
+// Replays plan.commits with the given list (oldest first) as one journaled operation. git runs the sequence editor
+// with its own todo file as argument: ours replaces it.
+async function replay(repo: string, plan: RebasePlan, list: RebaseItem[], label: string, autostash: boolean): Promise<OpOutcome> {
+  const todo = await writeTodo(join(await gitDir(repo), 'gitrep-rebase'), plan.commits, list)
+  const args = ['rebase', '-i', '--empty=drop', autostash ? '--autostash' : '--no-autostash', plan.onto, plan.branch]
+  return tracked(repo, label, 'keep', () => mayConflict(repo, args, { GIT_SEQUENCE_EDITOR: `cp ${quote(todo)}` }))
+}
+
 // Interactive rebase of `branch` onto `upstream` with the user's list (oldest first). Journaled as one operation.
 export async function interactiveRebase(repo: string, req: InteractiveRebaseRequest): Promise<OpOutcome> {
   return serialized(repo, async () => {
     await ensureIdle(repo)
     const plan = await rebaseCommits(repo, String(req?.branch), String(req?.upstream))
-    const list = validateItems(plan.commits, req?.items)
-    const todo = await writeTodo(join(await gitDir(repo), 'gitrep-rebase'), plan.commits, list)
-    const args = ['rebase', '-i', '--empty=drop', req.autostash ? '--autostash' : '--no-autostash', plan.onto, plan.branch]
-    // git runs the sequence editor with its own todo file as argument: ours replaces it.
-    return tracked(repo, `Interactive rebase of ${plan.branch}`, 'keep', () => mayConflict(repo, args, { GIT_SEQUENCE_EDITOR: `cp ${quote(todo)}` }))
+    return replay(repo, plan, validateItems(plan.commits, req?.items), `Interactive rebase of ${plan.branch}`, !!req.autostash)
+  })
+}
+
+// Removes one unpushed, non-merge commit of the checked-out branch: the rebase of its parent..HEAD with that commit dropped.
+export async function dropCommit(repo: string, req: { sha: string; autostash: boolean }): Promise<OpOutcome> {
+  return serialized(repo, async () => {
+    await ensureIdle(repo)
+    const sha = await resolveCommit(repo, String(req?.sha))
+    const branch = (await git(repo, [...RO, 'symbolic-ref', '-q', '--short', 'HEAD'], { okCodes: [1] })).trim()
+    if (!branch) throw new Error('Not on a branch: check one out first')
+    if ((await git(repo, [...RO, 'merge-base', sha, 'HEAD'], { okCodes: [1] })).trim() !== sha) throw new Error('Not on the current branch')
+    const [, ...parents] = (await git(repo, [...RO, 'rev-list', '--parents', '-n', '1', sha])).trim().split(' ')
+    if (parents.length > 1) throw new Error('Merge commits cannot be dropped')
+    if (!parents.length) throw new Error('The first commit cannot be dropped')
+    if ((await git(repo, [...RO, 'branch', '-r', '--contains', sha])).trim()) throw new Error('Already pushed: use Revert instead')
+    const plan = await rebaseCommits(repo, branch, parents[0])
+    const list = plan.commits.map((c) => ({ sha: c.sha, action: (c.sha === sha ? 'drop' : 'pick') as RebaseAction })).reverse()
+    return replay(repo, plan, list, `Drop ${sha.slice(0, 7)}`, !!req.autostash)
   })
 }

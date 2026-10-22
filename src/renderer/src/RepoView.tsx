@@ -5,7 +5,7 @@ import { ChangesPanel } from './ChangesPanel'
 import { CommitMenu, type CommitAction, type RefItem } from './CommitMenu'
 import { CommitPanel } from './CommitPanel'
 import { ConflictView, OperationPanel } from './ConflictView'
-import { PromptDialog } from './Dialog'
+import { ConfirmDialog, PromptDialog } from './Dialog'
 import { DiffView } from './DiffView'
 import type { DropBranch } from './dnd'
 import { FileHistory } from './FileHistory'
@@ -393,7 +393,19 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     else if (a === 'revert') void runOutcome('revert', () => api.revert(path, c.sha), `Reverted ${short}`)
     else if (a === 'copy') api.copyText(c.sha).then(() => notify('info', `Copied ${short}`), (e: unknown) => notify('error', errorText(e)))
     else if (a === 'explain') focusOn({ kind: 'commit', sha: c.sha, explain: Date.now() })
-    else if (a === 'rebase-i') focusOn({ kind: 'rebase', branch: target, upstream: c.sha })
+    else if (a === 'drop') {
+      const dirty = status ? new Set([...status.staged, ...status.unstaged.filter((f) => f.status !== '?')].map((f) => f.path)).size : 0
+      setDialog(
+        <ConfirmDialog
+          title={`Drop ${short} from ${target}?`}
+          body={`${c.subject}\n\nIts changes are removed from the branch. Undo (Ctrl+Z) brings it back.`}
+          submit="Drop commit"
+          checkbox={dirty > 0 ? `Stash the ${dirty} local change${dirty > 1 ? 's' : ''}, then re-apply them after` : undefined}
+          onSubmit={(stash) => void runOutcome('drop', () => api.dropCommit(path, c.sha, dirty > 0 && stash), `Dropped ${short}`)}
+          onClose={closeDialog}
+        />
+      )
+    } else if (a === 'rebase-i') focusOn({ kind: 'rebase', branch: target, upstream: c.sha })
     else {
       const mode = a.slice('reset-'.length) as ResetMode
       if (mode === 'hard' && !window.confirm(`Reset ${target} to ${short} and discard all uncommitted changes? Undo (Ctrl+Z) brings them back while GitRep is open.`)) return
@@ -488,6 +500,14 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   const rows = useMemo(() => layoutGraph(nodes), [nodes])
   const colors = useMemo(() => new Map(nodes.map((n, i) => [n.sha, rows[i].color])), [nodes, rows])
   const ancestors = useMemo(() => ancestorsOf(head, log), [head, log])
+  const dropReason = (c: Commit) =>
+    !status?.branch ? 'Not on a branch'
+    : status.operation || status.conflicted.length > 0 ? 'Finish the operation in progress first'
+    : c.sha !== head && !ancestors.has(c.sha) ? 'Not on the current branch'
+    : c.parents.length > 1 ? 'Merge commits cannot be dropped'
+    : c.parents.length === 0 ? 'The first commit cannot be dropped'
+    : !sync.outgoing.includes(c.sha) ? 'Already pushed: use Revert instead'
+    : null
   const remoteNames = useMemo(() => new Set(branches.filter((b) => b.remote).map((b) => b.name)), [branches])
   const staged = status?.staged.length ?? 0
   const wipLabel = hasWip ? `${changes} modified file${changes === 1 ? '' : 's'}${staged ? ` · ${staged} staged` : ''}` : null
@@ -651,7 +671,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           <ChangesPanel repo={path} name={entry?.name ?? path} instructions={{ global: settings.commitInstructions, repo: entry?.commitInstructions ?? '' }} onInstructions={(g, r) => saveInstructions(g, r)} status={status} selection={selection} onSelect={select} onConflict={(p) => focusOn({ kind: 'conflicts', path: p })} onFileMenu={openFileMenu} run={run} busy={busy} />
         )}
       </div>
-      {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions && { name: menu.branchActions.name, items: withRequest(menu.branchActions.name, menu.branchActions.items) }} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} forge={forges[menuTip]} onReview={(mode) => { closeMenu(); openReview(menuTip, mode) }} />} />}
+      {menu && <CommitMenu commit={menu.commit} branchActions={menu.branchActions && { name: menu.branchActions.name, items: withRequest(menu.branchActions.name, menu.branchActions.items) }} x={menu.x} y={menu.y} branch={status?.branch ?? null} head={head} canRebase={!!status?.branch && ancestors.has(menu.commit.sha)} dropReason={dropReason(menu.commit)} onAction={(a) => onCommitAction(menu.commit, a)} onClose={closeMenu} extra={menuTip && <ReviewMenuItems hint={menuTip} forge={forges[menuTip]} onReview={(mode) => { closeMenu(); openReview(menuTip, mode) }} />} />}
       {leaveDialog}
       {fileMenu && <FileMenu target={fileMenu} onOpen={(view) => openFile(fileMenu.path, fileMenu.rev, view)} onFolder={(folder, action) => void run(action, () => (action === 'stage' ? api.stage(path, [folder]) : api.unstage(path, [folder])))} onClose={closeFileMenu} />}
       {drop && <MergeMenu key={`${drop.source.name}>${drop.target.name}`} repo={path} source={drop.source} target={drop.target} status={status} x={drop.x} y={drop.y} runOutcome={runOutcome} onInteractive={() => focusOn({ kind: 'rebase', branch: drop.target.name, upstream: drop.source.name })} onClose={closeDrop} />}

@@ -97,6 +97,7 @@ export interface Api {
   suggestConflict(repo: string, path: string, hunks: ConflictHunk[]): Promise<(ConflictSuggestion | null)[]>
   rebaseCommits(repo: string, branch: string, upstream: string): Promise<RebasePlan>
   interactiveRebase(repo: string, req: InteractiveRebaseRequest): Promise<OpOutcome>
+  dropCommit(repo: string, sha: string, autostash: boolean): Promise<OpOutcome>
   proposeRebase(repo: string, branch: string, upstream: string): Promise<RebaseProposal>
   mergePreview(repo: string, source: string, target: string): Promise<MergePreview>
   integrate(repo: string, req: MergeRequest): Promise<OpOutcome>
@@ -185,6 +186,7 @@ export const API_METHODS = [
   'suggestConflict',
   'rebaseCommits',
   'interactiveRebase',
+  'dropCommit',
   'proposeRebase',
   'mergePreview',
   'integrate',

@@ -225,6 +225,7 @@ const handlers: Omit<Api, 'onRepoChanged' | 'onCloseRequested'> = {
   suggestConflict: forRepo((p, path: string, hunks: ConflictHunk[]) => assist.suggestConflict(p, path, hunks, claudeOptions())),
   rebaseCommits: forRepo((p, branch: string, upstream: string) => rebase.rebaseCommits(p, String(branch), String(upstream))),
   interactiveRebase: forRepo((p, req: InteractiveRebaseRequest) => rebase.interactiveRebase(p, { ...req, autostash: !!req?.autostash })),
+  dropCommit: forRepo((p, sha: string, autostash: boolean) => rebase.dropCommit(p, { sha: String(sha), autostash: !!autostash })),
   proposeRebase: forRepo((p, branch: string, upstream: string) => assist.proposeRebase(p, branch, upstream, claudeOptions())),
   mergePreview: forRepo(ops.mergePreview),
   integrate: forRepo((p, req: MergeRequest) => ops.integrate(p, { ...req, autostash: !!req?.autostash })),

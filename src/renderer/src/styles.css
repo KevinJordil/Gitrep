@@ -382,6 +382,7 @@ mark.cur { background: var(--amber); color: var(--on-c); }
 .dialog::backdrop { background: var(--backdrop); }
 .dialog form { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 .dialog h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.dialog-body { margin: 0; white-space: pre-wrap; color: var(--muted); }
 .dialog-field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
 .dialog .btn-primary { height: 30px; display: flex; align-items: center; gap: 6px; }
