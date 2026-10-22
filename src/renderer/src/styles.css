@@ -266,6 +266,10 @@ textarea.field { padding: 8px 10px; resize: none; font-size: 12px; line-height: 
 /* diff */
 .diff-body { flex: 1; overflow: auto; padding: 14px 14px 80px; display: flex; flex-direction: column; gap: 14px; }
 .hunk { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel); flex: none; }
+.diff-body.full { gap: 0; }
+.diff-body.full > :not(.hunk) { margin-bottom: 14px; }
+.diff-body.full .hunk { border-radius: 0; }
+.diff-body.full .hunk + .hunk { border-top: 0; }
 .hunk-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; background: var(--raised); border-bottom: 1px solid var(--line); }
 .hunk-head .h { flex: 1; min-width: 0; font: 12px var(--mono); color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lines { font: 12.5px/22px var(--mono); overflow-x: auto; }

@@ -1,4 +1,7 @@
 import { FILE_HISTORY_LIMIT, type Blame, type CommitDetails, type FileCommit, type FileDiff, type Tag } from '../shared/types'
+import { readFile } from 'node:fs/promises'
+import { relative, resolve, sep } from 'node:path'
+import { MAX_FILE, unfit, utf8Text } from './files'
 import { parseDiff } from './diff'
 import { git } from './git'
 import { FILE_LOG_FORMAT, LOG_FORMAT, parseBlame, parseCommitFiles, parseFileLog, parseLog, parseTags, TAG_FORMAT } from './parse'
@@ -67,4 +70,28 @@ export async function getBlame(repo: string, rev: string | null, path: string): 
   if (blame.lines.length > MAX_BLAME_LINES) throw new Error(`This file is too long to blame here (${blame.lines.length} lines).`)
   if (blame.lines.some((l) => l.includes('\0'))) throw new Error(`${path} is a binary file: nothing to blame`)
   return { sha, path, ...blame }
+}
+
+const TOO_BIG = 'This file is too large to show in full (over 2 MB).'
+
+// A file as text on one side of a diff: the work tree, the index (`at` 'worktree' / 'index') or a commit, or why it is not shown whole.
+export async function fileAtSide(repo: string, path: string, at: string): Promise<{ text: string } | { reason: string }> {
+  const rel = relative(resolve(repo), insideRepo(repo, path)).split(sep).join('/')
+  let bytes: Buffer
+  if (at === 'worktree') {
+    const fit = await unfit(resolve(repo), rel.split('/').join(sep))
+    if ('reason' in fit) return { reason: `The file ${fit.reason}.` }
+    if (fit.size > MAX_FILE) return { reason: TOO_BIG }
+    bytes = await readFile(insideRepo(repo, path))
+  } else {
+    const object = at === 'index' ? `:0:${rel}` : `${await resolveCommit(repo, at)}:${rel}` // object names: no pathspec magic
+    try {
+      if (Number(await git(repo, [...RO, 'cat-file', '-s', object])) > MAX_FILE) return { reason: TOO_BIG }
+      bytes = await git(repo, [...RO, 'cat-file', 'blob', object], { raw: true })
+    } catch {
+      return { reason: `${path} is not there to show in full.` }
+    }
+  }
+  const text = utf8Text(bytes)
+  return text === null ? { reason: 'The file is not a UTF-8 text file.' } : { text }
 }

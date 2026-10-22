@@ -1,6 +1,8 @@
+import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { git } from '../src/main/git'
-import { getBlame, getCommitDetails, getCommitDiff, getFileHistory, getTags, resolveCommit } from '../src/main/history'
+import { fileAtSide, getBlame, getCommitDetails, getCommitDiff, getFileHistory, getTags, resolveCommit } from '../src/main/history'
 import { commitAll, lines, makeRepo, write } from './helpers'
 
 describe('resolveCommit', () => {
@@ -205,5 +207,49 @@ describe('getBlame robustness', () => {
     expect((await getBlame(repo, null, 'crlf.txt')).lines).toEqual(['a\r', 'b\r'])
     await expect(getBlame(repo, null, 'big.txt')).rejects.toThrow('too large to blame')
     await expect(getBlame(repo, null, 'nope.txt')).rejects.toThrow('does not exist in')
+  })
+})
+
+describe('fileAtSide', () => {
+  const setup = async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.txt', 'one\ntwo\n')
+    await commitAll(repo, 'init')
+    const sha = (await git(repo, ['rev-parse', 'HEAD'])).trim()
+    await write(repo, 'a.txt', 'one\ntwo\nthree\n')
+    await git(repo, ['add', 'a.txt'])
+    await write(repo, 'a.txt', 'one\ntwo\nthree\nfour\n')
+    return { repo, sha }
+  }
+
+  it('reads the work tree, the index and a commit', async () => {
+    const { repo, sha } = await setup()
+    expect(await fileAtSide(repo, 'a.txt', 'worktree')).toEqual({ text: 'one\ntwo\nthree\nfour\n' })
+    expect(await fileAtSide(repo, 'a.txt', 'index')).toEqual({ text: 'one\ntwo\nthree\n' })
+    expect(await fileAtSide(repo, 'a.txt', sha)).toEqual({ text: 'one\ntwo\n' })
+    expect(await fileAtSide(repo, 'a.txt', 'HEAD')).toEqual({ text: 'one\ntwo\n' })
+  })
+
+  it('treats the path literally and refuses what is outside the repository or not a commit', async () => {
+    const { repo, sha } = await setup()
+    await write(repo, 'x*.txt', 'star')
+    expect(await fileAtSide(repo, 'x*.txt', 'worktree')).toEqual({ text: 'star' })
+    expect(await fileAtSide(repo, '*.txt', sha)).toHaveProperty('reason')
+    await expect(fileAtSide(repo, '../etc/passwd', 'worktree')).rejects.toThrow('outside')
+    await expect(fileAtSide(repo, '.git/config', 'index')).rejects.toThrow('outside')
+    await expect(fileAtSide(repo, 'a.txt', '--output=x')).rejects.toThrow('Invalid revision')
+    await expect(fileAtSide(repo, 'a.txt', 'nope')).rejects.toThrow()
+  })
+
+  it('gives a reason for a missing, binary or too large file', async () => {
+    const { repo } = await setup()
+    await writeFile(join(repo, 'big.txt'), 'x'.repeat(2 * 1024 * 1024 + 1))
+    await writeFile(join(repo, 'bin.dat'), Buffer.from('a\0b'))
+    await git(repo, ['add', 'big.txt', 'bin.dat'])
+    expect(await fileAtSide(repo, 'big.txt', 'worktree')).toEqual({ reason: expect.stringContaining('too large to show in full') })
+    expect(await fileAtSide(repo, 'big.txt', 'index')).toEqual({ reason: expect.stringContaining('too large to show in full') })
+    expect(await fileAtSide(repo, 'bin.dat', 'worktree')).toHaveProperty('reason')
+    expect(await fileAtSide(repo, 'bin.dat', 'index')).toHaveProperty('reason')
+    expect(await fileAtSide(repo, 'gone.txt', 'index')).toHaveProperty('reason')
   })
 })

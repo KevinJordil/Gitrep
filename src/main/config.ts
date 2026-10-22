@@ -7,7 +7,7 @@ export const DEFAULT_REVIEW_PROMPTS: ReviewPrompt[] = [
   { name: 'Default review', text: 'Look for bugs, unhandled errors, security issues, concurrency problems and missing tests. Ignore formatting. Write the comments in English.' }
 ]
 
-export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: DEFAULT_GRAPH_COLUMNS, commitInstructions: '', forgeHosts: {}, reviewPrompts: DEFAULT_REVIEW_PROMPTS } }
+export const DEFAULT_CONFIG: Config = { repos: [], openTabs: [], settings: { claudeModel: 'haiku', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, graphColumns: DEFAULT_GRAPH_COLUMNS, commitInstructions: '', forgeHosts: {}, diffFullFile: false, reviewPrompts: DEFAULT_REVIEW_PROMPTS } }
 
 export function loadConfig(file: string): Config {
   let raw: string
@@ -89,6 +89,7 @@ const EDITABLE: Partial<Record<keyof Settings, (v: unknown) => boolean>> = {
   graphColumns: isColumns,
   commitInstructions: isInstructions,
   forgeHosts: isForgeHosts,
+  diffFullFile: (v) => typeof v === 'boolean',
   reviewPrompts: isPrompts
 }
 

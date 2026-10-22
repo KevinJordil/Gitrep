@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { DiffSide, FileDiff, Hunk, LineAction } from '../../shared/types'
 import { api } from './api'
 import { changeGroups, errorText, splitPath } from './format'
+import { fullListing } from './fullListing'
 import { FileEditor } from './FileEditor'
 import { langFor } from './fileTypes'
 import type { Token } from './highlight'
@@ -11,6 +12,7 @@ import { useToast } from './toast'
 import { useLeaveGuard } from './unsaved'
 
 const MAX_LINES = 4000
+let rememberedFull = false // the setting, kept for the next file
 const SIDE_LABEL = { unstaged: 'Unstaged', staged: 'Staged', untracked: 'Untracked' } as const
 
 interface Props {
@@ -34,7 +36,35 @@ export function DiffView({ repo, selection, version, onBack, run, onChanged, gon
   const [diff, setDiff] = useState<FileDiff | null | undefined>(undefined)
   const [picked, setPicked] = useState<Record<number, number[]>>({})
   const [showAll, setShowAll] = useState(false)
-  const colored = useHighlight(diff, path)
+  const [full, setFull] = useState(rememberedFull)
+  useEffect(() => {
+    api.getConfig().then((c) => setFull((rememberedFull = c.settings.diffFullFile)), () => undefined)
+  }, [])
+  const setFullFile = (on: boolean) => {
+    setFull((rememberedFull = on))
+    api.updateSettings({ diffFullFile: on }).catch((e: unknown) => notify('error', errorText(e)))
+  }
+  // The whole file for Full file: the new side, the old one for a deleted file. `key` tells whose content it is.
+  const wholeKey = `${repo}\0${path}\0${side}\0${commit ?? ''}`
+  const [whole, setWhole] = useState<{ key: string; text?: string; reason?: string } | null>(null)
+  const deleted = !!diff?.isDeleted
+  useEffect(() => {
+    if (!full || !diff || diff.binary) return
+    const deleted = diff.isDeleted
+    let alive = true
+    const at = commit ? (deleted ? `${commit}^` : commit) : deleted ? (side === 'staged' ? 'HEAD' : 'index') : side === 'staged' ? 'index' : 'worktree'
+    api.fileAtSide(repo, path, at).then(
+      (r) => alive && setWhole({ key: wholeKey, ...r }),
+      (e: unknown) => alive && (setWhole({ key: wholeKey, reason: errorText(e) }), notify('error', errorText(e)))
+    )
+    return () => {
+      alive = false
+    }
+  }, [full, diff, repo, path, side, commit, version, wholeKey, notify])
+  const text = full && whole?.key === wholeKey ? whole.text : undefined
+  const segments = useMemo(() => (diff ? (text === undefined ? diff.hunks.map((hunk, index) => ({ index: index as number | null, hunk })) : fullListing(text, diff.hunks, deleted ? 'old' : 'new')) : []), [diff, text, deleted])
+  const listed = useMemo(() => (diff ? { ...diff, hunks: segments.map((s) => s.hunk) } : diff), [diff, segments])
+  const colored = useHighlight(listed, path)
   const { guard, dialog: leaveDialog } = useLeaveGuard()
   // Edit mode: the working file as opened (a new `n` reloads the editor), and why it cannot be edited, if it cannot.
   const editable = !commit && !hideHead
@@ -114,14 +144,20 @@ export function DiffView({ repo, selection, version, onBack, run, onChanged, gon
     })
 
   const pickedCount = Object.values(picked).reduce((n, ls) => n + ls.length, 0)
-  const hunks = diff?.hunks ?? []
   let used = 0
-  const shown = hunks
-    .map((h, i) => ({ h, i }))
-    .filter(({ h, i }) => {
-      used += h.lines.length
-      return showAll || i === 0 || used <= MAX_LINES
+  const shown = segments
+    .map((s, at) => ({ ...s, at }))
+    .filter(({ hunk, at }) => {
+      used += hunk.lines.length
+      return showAll || at === 0 || used <= MAX_LINES
     })
+  const fullToggle = (
+    <div className="seg" role="group" aria-label="Whole file">
+      <button aria-pressed={full} title="Show every line of the file around the changes" onClick={() => setFullFile(!full)}>
+        Full file
+      </button>
+    </div>
+  )
   const [dir, name] = splitPath(path)
 
   return (
@@ -146,6 +182,7 @@ export function DiffView({ repo, selection, version, onBack, run, onChanged, gon
               </button>
             </div>
           )}
+          {!opened && fullToggle}
           <div className="grow" />
           {onFile && side !== 'untracked' && (
             <>
@@ -163,7 +200,9 @@ export function DiffView({ repo, selection, version, onBack, run, onChanged, gon
       {opened ? (
         <FileEditor key={opened.n} repo={repo} path={path} initial={opened.text} version={version} gone={gone} onSaved={onChanged} onReload={() => void openEditor()} />
       ) : (
-      <div className="diff-body">
+      <div className={`diff-body ${text === undefined ? '' : 'full'}`}>
+        {hideHead && <div style={{ alignSelf: 'flex-start' }}>{fullToggle}</div>}
+        {full && whole?.key === wholeKey && whole.reason && <div className="banner">{whole.reason}</div>}
         {diff === undefined && <span className="faint">Loading…</span>}
         {diff === null && <span className="faint">No changes to display.</span>}
         {diff && oldPath && (
@@ -173,27 +212,29 @@ export function DiffView({ repo, selection, version, onBack, run, onChanged, gon
         )}
         {diff?.binary && <div className="banner">Binary file: no preview.</div>}
         {diff && !diff.binary && !partial && !commit && <div className="banner">This file can only be staged as a whole: use the buttons in the right panel.</div>}
-        {shown.map(({ h, i }) => (
-          <section key={`${i}:${h.header}`} className="hunk">
-            <div className="hunk-head">
-              <span className="h">{h.header}</span>
-              {partial && (
-                <button className="btn-claude" onClick={() => void apply(primary, i, null)}>
-                  <Icon name={primary === 'stage' ? 'plus' : 'minus'} size={12} stroke={2.4} /> {primaryVerb} hunk
-                </button>
-              )}
-              {partial && side === 'unstaged' && (
-                <button className="small-btn" onClick={() => void apply('discard', i, null)}>
-                  Discard hunk
-                </button>
-              )}
-            </div>
-            <Lines hunk={h} index={i} tokens={colored?.[i]} partial={partial} verb={primaryVerb} icon={primary === 'stage' ? 'plus' : 'minus'} picked={picked[i] ?? []} onToggle={toggle} onGroup={(lines) => void apply(primary, i, lines)} />
+        {shown.map(({ hunk: h, index: i, at }) => (
+          <section key={`${at}:${h.header}`} className="hunk">
+            {i !== null && (
+              <div className="hunk-head">
+                <span className="h">{h.header}</span>
+                {partial && (
+                  <button className="btn-claude" onClick={() => void apply(primary, i, null)}>
+                    <Icon name={primary === 'stage' ? 'plus' : 'minus'} size={12} stroke={2.4} /> {primaryVerb} hunk
+                  </button>
+                )}
+                {partial && side === 'unstaged' && (
+                  <button className="small-btn" onClick={() => void apply('discard', i, null)}>
+                    Discard hunk
+                  </button>
+                )}
+              </div>
+            )}
+            <Lines hunk={h} index={i ?? -1} tokens={colored?.[at]} partial={partial && i !== null} verb={primaryVerb} icon={primary === 'stage' ? 'plus' : 'minus'} picked={picked[i ?? -1] ?? []} onToggle={toggle} onGroup={(lines) => void apply(primary, i ?? -1, lines)} />
           </section>
         ))}
-        {shown.length < hunks.length && (
+        {shown.length < segments.length && (
           <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => setShowAll(true)}>
-            Show {hunks.length - shown.length} remaining hunks
+            Show {segments.length - shown.length} remaining {text === undefined ? 'hunks' : 'parts of the file'}
           </button>
         )}
       </div>

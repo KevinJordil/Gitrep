@@ -14,13 +14,13 @@ describe('config', () => {
     saveConfig(file, { ...DEFAULT_CONFIG, repos: [{ path: '/r/a', name: 'a' }] })
     expect(loadConfig(file).repos).toEqual([{ path: '/r/a', name: 'a' }])
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {}, reviewPrompts: DEFAULT_REVIEW_PROMPTS })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {}, diffFullFile: false, reviewPrompts: DEFAULT_REVIEW_PROMPTS })
   })
 
   it('resets hand-edited settings that fail validation to their defaults', async () => {
     const file = join(await tempDir(), 'config.json')
     writeFileSync(file, JSON.stringify({ repos: [], openTabs: [], settings: { sidebarWidth: 'abc', activeDays: 'x', rightWidth: 5, claudeModel: 'sonnet' } }))
-    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {}, reviewPrompts: DEFAULT_REVIEW_PROMPTS })
+    expect(loadConfig(file).settings).toEqual({ claudeModel: 'sonnet', claudePath: '', activeDays: 30, sidebarWidth: 232, rightWidth: 360, commitInstructions: '', graphColumns: { graph: 0, author: 150, date: 110, sha: 70 }, forgeHosts: {}, diffFullFile: false, reviewPrompts: DEFAULT_REVIEW_PROMPTS })
   })
 
   it('backs up a corrupt file instead of losing it', async () => {
@@ -45,6 +45,9 @@ describe('config', () => {
     expect(applySettings(DEFAULT_CONFIG, { activeDays: 0 }).settings.activeDays).toBe(0)
     expect(() => applySettings(DEFAULT_CONFIG, { activeDays: -1 })).toThrow('Invalid setting: activeDays')
     expect(() => applySettings(DEFAULT_CONFIG, { activeDays: 1.5 })).toThrow('Invalid setting: activeDays')
+    expect(DEFAULT_CONFIG.settings.diffFullFile).toBe(false)
+    expect(applySettings(DEFAULT_CONFIG, { diffFullFile: true }).settings.diffFullFile).toBe(true)
+    expect(() => applySettings(DEFAULT_CONFIG, { diffFullFile: 'yes' as never })).toThrow('Invalid setting: diffFullFile')
     expect(() => applySettings(DEFAULT_CONFIG, { claudePath: '/bin/sh' })).toThrow('Invalid setting: claudePath')
     expect(applySettings(DEFAULT_CONFIG, { sidebarWidth: 300, rightWidth: 420 }).settings).toMatchObject({ sidebarWidth: 300, rightWidth: 420 })
     expect(() => applySettings(DEFAULT_CONFIG, { rightWidth: 50 })).toThrow('Invalid setting: rightWidth')

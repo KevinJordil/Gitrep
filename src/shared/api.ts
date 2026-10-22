@@ -124,6 +124,7 @@ export interface Api {
   readWorkingFile(repo: string, path: string): Promise<{ text: string } | { reason: string }> // reason: why it cannot be edited
   saveWorkingFile(repo: string, path: string, text: string, base: string): Promise<void> // base: what the editor opened; refused when the disk differs. One undo step
   workingFileReason(repo: string, path: string): Promise<string | null> // null: it can be edited
+  fileAtSide(repo: string, path: string, at: string): Promise<{ text: string } | { reason: string }> // at: 'worktree', 'index' or a commit; reason: why it is not shown whole
   headDiff(repo: string, path: string): Promise<FileDiff | null> // the file's changes against HEAD, whatever is staged
   setUnsavedEdits(has: boolean): Promise<void> // an editor holds unsaved edits: closing the window asks the renderer first
   closeWindow(): Promise<void> // closes the window without asking again
@@ -213,6 +214,7 @@ export const API_METHODS = [
   'readWorkingFile',
   'saveWorkingFile',
   'workingFileReason',
+  'fileAtSide',
   'headDiff',
   'setUnsavedEdits',
   'closeWindow'

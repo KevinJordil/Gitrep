@@ -168,6 +168,7 @@ export interface Settings {
   commitInstructions: string // free text added to the commit message prompt, all repositories
   graphColumns: { graph: number; author: number; date: number; sha: number } // px, resizable in the history header
   forgeHosts: Record<string, ForgeKind> // the forge of a host the app could not recognize, as the user said
+  diffFullFile: boolean // the diff shows the whole file, not only the hunks
   reviewPrompts: ReviewPrompt[] // named review prompts for every repository; the first is the default
 }
 

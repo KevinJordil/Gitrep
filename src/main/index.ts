@@ -251,6 +251,7 @@ const handlers: Omit<Api, 'onRepoChanged' | 'onCloseRequested'> = {
   prepareFixes: forRepo((p, branch: string, list: FixRequest[]) => fixes.prepareFixes(p, String(branch), list)),
   readWorkingFile: forRepo((p, path: string) => edit.readWorkingFile(p, String(path))),
   workingFileReason: forRepo((p, path: string) => edit.workingFileReason(p, String(path))),
+  fileAtSide: forRepo((p, path: string, at: string) => history.fileAtSide(p, String(path), String(at))),
   headDiff: forRepo((p, path: string) => repo.getHeadDiff(p, String(path))),
   setUnsavedEdits: async (has) => void (unsavedEdits = !!has),
   closeWindow: async () => {
