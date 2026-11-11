@@ -52,13 +52,16 @@ export async function checkoutCommit(repo: string, rev: string): Promise<void> {
   })
 }
 
+// A remote branch is checked out as a local tracking branch, or as the local branch of the same name when there is one.
 // Tracked local changes go along: stashed, switched, re-applied with their staged state. A refused switch puts them
 // back; conflicts on the new branch keep the stash in the list (git's pop behaviour).
 export async function switchBranch(repo: string, name: string, remote: boolean): Promise<OpOutcome> {
   if (name.startsWith('-')) throw new Error(`Invalid branch name: ${name}`)
-  const label = `Switch to ${remote ? name.replace(/^[^/]+\//, '') : name}`
-  const args = remote ? ['switch', '--track', name] : ['switch', name]
+  const local = remote ? name.replace(/^[^/]+\//, '') : name
+  const label = `Switch to ${local}`
   return serialized(repo, async () => {
+    const exists = remote && (await getBranches(repo)).some((b) => !b.remote && b.name === local)
+    const args = remote && !exists ? ['switch', '--track', name] : ['switch', local]
     await ensureIdle(repo)
     const s = await getStatus(repo)
     const dirty = s.staged.length > 0 || s.unstaged.some((f) => f.status !== '?')

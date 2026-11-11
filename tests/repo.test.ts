@@ -369,6 +369,8 @@ describe('remote operations', () => {
     expect((await getStatus(b)).branch).toBe('feature')
     await switchBranch(b, 'main', false)
     expect((await getStatus(b)).branch).toBe('main')
+    await switchBranch(b, 'origin/feature', true) // the local branch exists now: switched to, not created again
+    expect((await getStatus(b)).branch).toBe('feature')
   })
 
   it('rejects a branch name starting with a dash', async () => {

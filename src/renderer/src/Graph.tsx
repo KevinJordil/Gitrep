@@ -61,14 +61,22 @@ interface PillProps {
   remoteNames: ReadonlySet<string>
   branches?: Branch[] // with onDrop: branch pills can be dragged, local ones accept drops
   onDrop?: DropBranch
+  onSwitch?: (b: Branch) => void // double-click on a branch pill other than the current one
 }
 
-export function RefPill({ text, color, remoteNames, branches = [], onDrop }: PillProps) {
+export function RefPill({ text, color, remoteNames, branches = [], onDrop, onSwitch }: PillProps) {
   const ref = parseRef(text, remoteNames)
   const branch = onDrop && ref.kind !== 'tag' ? branches.find((b) => b.name === ref.label && b.remote === (ref.kind === 'remote')) : undefined
   const dnd = branch && onDrop ? { ...dragBranch(branch), ...(branch.remote ? {} : dropOnBranch(branch, branches, onDrop)) } : {}
+  const switchable = branch && onSwitch && !branch.current ? branch : undefined
   return (
-    <span className={`ref ${ref.kind}`} style={{ '--c': color } as CSSProperties} title={branch ? 'Drag onto another branch to merge or rebase' : undefined} {...dnd}>
+    <span
+      className={`ref ${ref.kind}`}
+      style={{ '--c': color } as CSSProperties}
+      title={branch ? `${switchable ? 'Double-click to switch to this branch · ' : ''}Drag onto another branch to merge or rebase` : undefined}
+      onDoubleClick={switchable && (() => onSwitch!(switchable))}
+      {...dnd}
+    >
       {ref.kind === 'head' && <Icon name="check" size={11} stroke={2.6} />}
       {ref.kind === 'remote' && <Icon name="cloud" size={12} stroke={2.2} />}
       {ref.kind === 'tag' && <Icon name="tag" size={11} stroke={2.2} />}
@@ -158,9 +166,10 @@ interface RowProps {
   onSelect: (sha: string) => void
   onMenu: (c: Commit, x: number, y: number) => void
   onDrop: DropBranch
+  onSwitch: (b: Branch) => void
 }
 
-const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, branches, match, field, sync, upstream, current, dim, onSelect, onMenu, onDrop }: RowProps) {
+const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selected, remoteNames, branches, match, field, sync, upstream, current, dim, onSelect, onMenu, onDrop, onSwitch }: RowProps) {
   const merge = c.parents.length > 1
   const hl = (f: SearchField) => (field === 'all' || field === f ? match : '')
   return (
@@ -189,7 +198,7 @@ const CommitRow = memo(function CommitRow({ commit: c, row, width, head, selecte
       <Lanes row={row} width={width} dot={head ? 'head' : merge ? 'merge' : 'commit'} selected={selected} sync={sync} />
       <span className="msg">
         {c.refs.map((r) => (
-          <RefPill key={r} text={r} color={laneColor(row.color)} remoteNames={remoteNames} branches={branches} onDrop={onDrop} />
+          <RefPill key={r} text={r} color={laneColor(row.color)} remoteNames={remoteNames} branches={branches} onDrop={onDrop} onSwitch={onSwitch} />
         ))}
         {sync && (
           <span className={`sync-chip ${sync}`} role="img" aria-label={SYNC_TITLE[sync]} title={sync === 'in' && upstream ? `${SYNC_TITLE.in} (on ${upstream})` : SYNC_TITLE[sync]}>
@@ -237,9 +246,10 @@ interface Props {
   onActiveDays: (days: number) => void
   onMenu: (c: Commit, x: number, y: number) => void // must be stable (useCallback)
   onDrop: DropBranch // must be stable (useCallback)
+  onSwitch: (b: Branch) => void // must be stable (useCallback)
 }
 
-export function Graph({ repoName, active, commits, sync, rows, wip, head, focus, branches, scope, activeDays, remoteNames, columns, onColumns, onFocus, onScope, onActiveDays, onMenu, onDrop }: Props) {
+export function Graph({ repoName, active, commits, sync, rows, wip, head, focus, branches, scope, activeDays, remoteNames, columns, onColumns, onFocus, onScope, onActiveDays, onMenu, onDrop, onSwitch }: Props) {
   const list = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
@@ -440,6 +450,7 @@ export function Graph({ repoName, active, commits, sync, rows, wip, head, focus,
             onSelect={select}
             onMenu={onMenu}
             onDrop={onDrop}
+            onSwitch={onSwitch}
           />
         ))}
         {commits.length === 0 && <span className="faint" style={{ padding: 14 }}>No commits yet.</span>}

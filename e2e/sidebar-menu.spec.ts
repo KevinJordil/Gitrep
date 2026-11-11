@@ -68,3 +68,9 @@ test('a short window keeps the whole menu on screen', async () => {
   expect(m.y).toBeGreaterThanOrEqual(0)
   expect(m.y + m.height).toBeLessThanOrEqual(height)
 })
+
+test('double-click a branch pill in the graph switches to that branch', async () => {
+  await page.keyboard.press('Escape')
+  await v.locator('.row .ref.local', { hasText: /^feature\/y$/ }).dblclick()
+  await expect(branchRow('feature/y')).toHaveClass(/current/)
+})
