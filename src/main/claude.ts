@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { accessSync, constants, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import type { Explanation, GeneratedMessage, MergeAdvice } from '../shared/types'
@@ -108,6 +108,21 @@ export function pickWindowsClaude(whereOutput: string): string {
   return found
 }
 
+export function findOnPath(path: string, name: string): string | undefined {
+  return path
+    .split(':')
+    .filter((dir) => isAbsolute(dir))
+    .map((dir) => join(dir, name))
+    .find((file) => {
+      try {
+        accessSync(file, constants.X_OK)
+        return statSync(file).isFile()
+      } catch {
+        return false
+      }
+    })
+}
+
 // Apps started from the GNOME launcher do not inherit the nvm PATH: ask the login shell once.
 export async function resolveClaude(override?: string): Promise<string> {
   if (override) {
@@ -120,12 +135,9 @@ export async function resolveClaude(override?: string): Promise<string> {
     return (cachedPath = pickWindowsClaude(out))
   }
   const shell = process.env.SHELL || '/bin/bash'
-  const out = await new Promise<string>((res) => execFile(shell, ['-lic', 'command -v claude'], { timeout: 10_000 }, (_e, stdout) => res(String(stdout ?? ''))))
-  const found = out
-    .split('\n')
-    .map((l) => l.trim())
-    .reverse()
-    .find((l) => l.startsWith('/'))
+  // Not `command -v claude`: a shell function or alias named claude answers with its name, not a file.
+  const out = await new Promise<string>((res) => execFile(shell, ['-lic', 'printf "%s\\n" "$PATH"'], { timeout: 10_000 }, (_e, stdout) => res(String(stdout ?? ''))))
+  const found = findOnPath(out.trim().split('\n').at(-1) ?? '', 'claude') // rc files may print first: PATH is the last line
   if (!found) throw new Error('Command "claude" not found. Install Claude Code or set claudePath in the config.')
   cachedPath = found
   return found

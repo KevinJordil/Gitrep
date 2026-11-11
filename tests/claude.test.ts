@@ -1,7 +1,7 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { adviseMerge, cleanMessage, COMMIT_SYSTEM_PROMPT, commitSystemPrompt, explainCommit, filterDiff, filterNumstat, generateCommitMessage, generateMergeMessage, generateStashMessage, MAX_DIFF_CHARS, pickWindowsClaude, resolveClaude } from '../src/main/claude'
+import { adviseMerge, cleanMessage, COMMIT_SYSTEM_PROMPT, commitSystemPrompt, explainCommit, filterDiff, filterNumstat, findOnPath, generateCommitMessage, generateMergeMessage, generateStashMessage, MAX_DIFF_CHARS, pickWindowsClaude, resolveClaude } from '../src/main/claude'
 import { git } from '../src/main/git'
 import { stage } from '../src/main/repo'
 import { commitAll, makeRepo, tempDir, write } from './helpers'
@@ -64,6 +64,16 @@ describe('cleanMessage', () => {
 describe('resolveClaude', () => {
   it('rejects a relative claudePath', async () => {
     await expect(resolveClaude('claude')).rejects.toThrow('claudePath must be an absolute path: claude')
+  })
+
+  it('finds the first executable file on a PATH, skipping folders, plain files and relative entries', async () => {
+    const [dir, plain, exe] = await Promise.all([tempDir(), tempDir(), tempDir()])
+    await mkdir(join(dir, 'claude'))
+    await write(plain, 'claude', '')
+    await write(exe, 'claude', '#!/bin/sh\n')
+    await chmod(join(exe, 'claude'), 0o755)
+    expect(findOnPath(['relative', dir, plain, exe].join(':'), 'claude')).toBe(join(exe, 'claude'))
+    expect(findOnPath(dir, 'claude')).toBeUndefined()
   })
 })
 
