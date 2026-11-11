@@ -21,9 +21,9 @@ import {
   push,
   stage,
   summary,
-  switchBranch,
   unstage
 } from '../src/main/repo'
+import { switchBranch } from '../src/main/ops'
 import { commitAll, commitAt, lines, makeRepo, tempDir, write } from './helpers'
 
 describe('getStatus', () => {

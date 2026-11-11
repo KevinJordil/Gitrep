@@ -205,12 +205,6 @@ export async function push(repo: string, force = false): Promise<void> {
   await serialized(repo, () => git(repo, s.upstream ? ['push', ...lease] : ['push', ...lease, '-u', 'origin', s.branch!]))
 }
 
-export async function switchBranch(repo: string, name: string, remote: boolean): Promise<void> {
-  if (name.startsWith('-')) throw new Error(`Invalid branch name: ${name}`)
-  const label = `Switch to ${remote ? name.replace(/^[^/]+\//, '') : name}`
-  await serialized(repo, () => tracked(repo, label, 'keep', () => git(repo, remote ? ['switch', '--track', name] : ['switch', name])))
-}
-
 export function displayFolder(path: string, home = homedir()): string {
   const dir = dirname(path)
   if (dir === home) return '~'

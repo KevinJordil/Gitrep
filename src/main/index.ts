@@ -206,7 +206,7 @@ const handlers: Omit<Api, 'onRepoChanged' | 'onCloseRequested'> = {
   fetchAll,
   pull: forRepo(repo.pull),
   push: forRepo((p, force: boolean) => repo.push(p, !!force)),
-  switchBranch: forRepo(repo.switchBranch),
+  switchBranch: forRepo(ops.switchBranch),
   checkoutCommit: forRepo(ops.checkoutCommit),
   createBranch: forRepo((p, name: string, at: string, checkout: boolean) => ops.createBranch(p, name, at, !!checkout)),
   deleteBranch: forRepo((p, name: string, force: boolean) => ops.deleteBranch(p, name, !!force)),

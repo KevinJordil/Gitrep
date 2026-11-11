@@ -3,6 +3,7 @@ import { git, serialized } from './git'
 import { resolveCommit } from './history'
 import { aborted, record, resumed, tracked } from './journal'
 import { getBranches, getStatus, RO } from './repo'
+import { pushStash } from './stash'
 
 // Conflict hunks keep the common ancestor: easier to resolve by hand.
 export const DIFF3 = ['-c', 'merge.conflictStyle=diff3']
@@ -48,6 +49,32 @@ export async function checkoutCommit(repo: string, rev: string): Promise<void> {
   await serialized(repo, async () => {
     await ensureIdle(repo)
     await tracked(repo, `Check out ${sha.slice(0, 7)}`, 'keep', () => git(repo, ['switch', '--detach', sha]))
+  })
+}
+
+// Tracked local changes go along: stashed, switched, re-applied with their staged state. A refused switch puts them
+// back; conflicts on the new branch keep the stash in the list (git's pop behaviour).
+export async function switchBranch(repo: string, name: string, remote: boolean): Promise<OpOutcome> {
+  if (name.startsWith('-')) throw new Error(`Invalid branch name: ${name}`)
+  const label = `Switch to ${remote ? name.replace(/^[^/]+\//, '') : name}`
+  const args = remote ? ['switch', '--track', name] : ['switch', name]
+  return serialized(repo, async () => {
+    await ensureIdle(repo)
+    const s = await getStatus(repo)
+    const dirty = s.staged.length > 0 || s.unstaged.some((f) => f.status !== '?')
+    return tracked(repo, label, 'keep', async () => {
+      // '' when git saved nothing (a submodule change): popping then would take an older stash.
+      const stashed = dirty ? await pushStash(repo, '', false) : ''
+      try {
+        await git(repo, args)
+      } catch (e) {
+        if (stashed) await git(repo, ['stash', 'pop', '--index'])
+        throw e
+      }
+      if (!stashed) return 'done'
+      // --index refuses when the staged changes do not apply there: they come back unstaged.
+      return mayConflict(repo, ['stash', 'pop', '--index']).catch(() => mayConflict(repo, ['stash', 'pop']))
+    })
   })
 }
 

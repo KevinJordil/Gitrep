@@ -325,7 +325,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
   }, [active, busy, undo, replay, focus.kind])
 
   const openMenu = useCallback((commit: Commit, x: number, y: number) => setMenu({ commit, x, y }), [])
-  const switchTo = (b: Branch) => void run('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)
+  const switchTo = (b: Branch) => void runOutcome('switch', () => api.switchBranch(path, b.name, b.remote), `Switched to branch ${b.remote ? b.name.replace(/^[^/]+\//, '') : b.name}`)
   // The graph's commit menu on the tip of a sidebar branch, with the branch actions of its row on top.
   const openBranchMenu = (b: Branch, x: number, y: number) => {
     const current = branches.find((o) => o.current && !o.remote)

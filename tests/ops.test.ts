@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { git } from '../src/main/git'
-import { abortOperation, checkoutCommit, cherryPick, continueOperation, createBranch, createTag, integrate, mergePreview, resetTo, revert } from '../src/main/ops'
+import { abortOperation, checkoutCommit, cherryPick, continueOperation, createBranch, createTag, integrate, mergePreview, resetTo, revert, switchBranch } from '../src/main/ops'
 import { getStatus } from '../src/main/repo'
-import { commitAll, makeRepo, write } from './helpers'
+import { commitAll, lines, makeRepo, write } from './helpers'
 
 const rev = async (repo: string, r: string) => (await git(repo, ['rev-parse', r])).trim()
 const subject = async (repo: string, r = 'HEAD') => (await git(repo, ['log', '-1', '--format=%s', r])).trim()
@@ -58,6 +58,51 @@ describe('checkout, branch, tag', () => {
     expect((await git(repo, ['cat-file', '-t', 'v2'])).trim()).toBe('tag')
     expect((await git(repo, ['tag', '-l', '--format=%(contents)', 'v2'])).trim()).toBe('Release 2')
     await expect(createTag(repo, 'bad tag', 'HEAD', '')).rejects.toThrow('Invalid tag name')
+  })
+})
+
+describe('switchBranch with local changes', () => {
+  const stashes = async (repo: string) => (await git(repo, ['stash', 'list'])).trim()
+
+  it('carries staged and unstaged changes git would refuse to switch over', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.txt', lines(10))
+    await write(repo, 'b.txt', 'b\n')
+    await commitAll(repo, 'base')
+    await git(repo, ['branch', 'feature'])
+    await write(repo, 'a.txt', lines(10).replace('line 1\n', 'main 1\n'))
+    await commitAll(repo, 'm1')
+    await write(repo, 'a.txt', lines(10).replace('line 1\n', 'main 1\n').replace('line 9', 'staged 9'))
+    await git(repo, ['add', 'a.txt'])
+    await write(repo, 'b.txt', 'unstaged\n')
+    expect(await switchBranch(repo, 'feature', false)).toBe('done')
+    const s = await getStatus(repo)
+    expect(s.branch).toBe('feature')
+    expect(s.staged.map((f) => f.path)).toEqual(['a.txt'])
+    expect(s.unstaged.map((f) => f.path)).toEqual(['b.txt'])
+    expect(await readFile(join(repo, 'a.txt'), 'utf8')).toBe(lines(10).replace('line 9', 'staged 9'))
+    expect(await stashes(repo)).toBe('')
+  })
+
+  it('stops on conflicts with the changes kept in the stash list', async () => {
+    const repo = await setup(true)
+    await write(repo, 'a.txt', 'mine\n')
+    expect(await switchBranch(repo, 'feature', false)).toBe('conflicts')
+    expect((await getStatus(repo)).branch).toBe('feature')
+    expect((await getStatus(repo)).conflicted.map((f) => f.path)).toEqual(['a.txt'])
+    expect(await stashes(repo)).not.toBe('')
+  })
+
+  it('puts the changes back when the switch is refused', async () => {
+    const repo = await setup()
+    await write(repo, 'a.txt', 'staged\n')
+    await git(repo, ['add', 'a.txt'])
+    await write(repo, 'f.txt', 'untracked\n') // feature tracks f.txt
+    await expect(switchBranch(repo, 'feature', false)).rejects.toThrow('would be overwritten')
+    const s = await getStatus(repo)
+    expect(s.branch).toBe('main')
+    expect(s.staged.map((f) => f.path)).toEqual(['a.txt'])
+    expect(await stashes(repo)).toBe('')
   })
 })
 

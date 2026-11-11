@@ -78,7 +78,7 @@ export interface Api {
   fetchAll(): Promise<void>
   pull(repo: string): Promise<OpOutcome>
   push(repo: string, force?: boolean): Promise<void> // force: --force-with-lease --force-if-includes
-  switchBranch(repo: string, name: string, remote: boolean): Promise<void>
+  switchBranch(repo: string, name: string, remote: boolean): Promise<OpOutcome>
   checkoutCommit(repo: string, sha: string): Promise<void>
   createBranch(repo: string, name: string, at: string, checkout: boolean): Promise<void>
   deleteBranch(repo: string, name: string, force: boolean): Promise<void>
