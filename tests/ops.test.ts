@@ -148,6 +148,21 @@ describe('cherry-pick, revert, reset', () => {
     expect(await readFile(join(repo, 'a.txt'), 'utf8')).toContain('||||||| ') // diff3 style
     await expect(revert(repo, 'HEAD')).rejects.toThrow('cherry-pick is in progress')
     await abortOperation(repo)
+  })
+
+  it('leaves the lines both sides added out of the conflict block (zdiff3)', async () => {
+    const repo = await makeRepo()
+    await write(repo, 'a.txt', 'base\n')
+    await commitAll(repo, 'base')
+    await git(repo, ['switch', '-q', '-c', 'feature'])
+    await write(repo, 'a.txt', 'shared\nfeature\n')
+    await commitAll(repo, 'f1')
+    await git(repo, ['switch', '-q', 'main'])
+    await write(repo, 'a.txt', 'shared\nmain\n')
+    await commitAll(repo, 'm1')
+    expect(await cherryPick(repo, 'feature')).toBe('conflicts')
+    expect(await readFile(join(repo, 'a.txt'), 'utf8')).toMatch(/^shared\n<{7} /)
+    await abortOperation(repo)
     expect((await getStatus(repo)).operation).toBeNull()
     expect(await subject(repo)).toBe('m1')
   })

@@ -35,6 +35,7 @@ import { unsavedOf, useLeaveGuard } from './unsaved'
 const ALL: GraphScope = { only: null, hidden: [] }
 const WIP = 'WIP' // sha of the work-in-progress graph row (never a real sha)
 const CONFLICTS = 'Stopped on conflicts: resolve each file, then click Continue'
+const CLAUDE_PARALLEL = 4 // Limit: conflicted files sent to Claude at once
 
 interface Props {
   path: string
@@ -257,22 +258,29 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
     const failed: string[] = []
     let proposed = 0
     try {
-      for (const f of (await api.status(path)).conflicted) {
-        try {
-          const file = await api.conflictFile(path, f.path)
-          if (file.kind !== 'text') continue
-          const old = draftsRef.current[f.path]
-          const d = old?.source === file.text ? old : newDraft(file.text)
-          const blocks = blocksOf(d)
-          if (!blocks.length) continue
-          const proposals = await api.suggestConflict(path, f.path, blocks.map((b) => hunkOf(d, b)))
-          // Edited while Claude was thinking: keep the user's version.
-          setDrafts((all) => (all[f.path] && textOf(all[f.path]) !== textOf(d) ? all : { ...all, [f.path]: applySuggestions(d, proposals) }))
-          proposed++
-        } catch (e) {
-          failed.push(errorText(e))
+      // A few files at a time: each one is a separate Claude process, mostly waiting.
+      const files = (await api.status(path)).conflicted
+      let next = 0
+      const worker = async () => {
+        while (next < files.length) {
+          const f = files[next++]
+          try {
+            const file = await api.conflictFile(path, f.path)
+            if (file.kind !== 'text') continue
+            const old = draftsRef.current[f.path]
+            const d = old?.source === file.text ? old : newDraft(file.text)
+            const blocks = blocksOf(d)
+            if (!blocks.length) continue
+            const proposals = await api.suggestConflict(path, f.path, blocks.map((b) => hunkOf(d, b)))
+            // Edited while Claude was thinking: keep the user's version.
+            setDrafts((all) => (all[f.path] && textOf(all[f.path]) !== textOf(d) ? all : { ...all, [f.path]: applySuggestions(d, proposals) }))
+            proposed++
+          } catch (e) {
+            failed.push(errorText(e))
+          }
         }
       }
+      await Promise.all(Array.from({ length: CLAUDE_PARALLEL }, worker))
     } catch (e) {
       failed.push(errorText(e))
     } finally {

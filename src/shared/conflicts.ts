@@ -1,4 +1,4 @@
-// Conflict markers as git writes them with merge.conflictStyle=diff3; the base section is optional.
+// Conflict markers as git writes them with merge.conflictStyle=diff3 or zdiff3; the base section is optional.
 export interface ConflictBlock {
   start: number // index of the <<<<<<< line
   end: number // index after the >>>>>>> line
