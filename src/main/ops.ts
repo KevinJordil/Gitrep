@@ -97,6 +97,25 @@ export async function deleteBranch(repo: string, name: string, force: boolean): 
   await serialized(repo, () => tracked(repo, `Delete branch ${name}`, 'keep', () => git(repo, ['branch', force ? '-D' : '-d', name])))
 }
 
+// Local branches whose remote branch was deleted, usually once their merge request was merged. -D: a squash or rebase
+// merge leaves them unmerged for git. One journal step: Ctrl+Z restores them all. Returns the deleted names.
+export async function deleteGoneBranches(repo: string, names: string[]): Promise<string[]> {
+  return serialized(repo, async () => {
+    const wanted = new Set(Array.isArray(names) ? names.map(String) : [])
+    // git refuses a branch checked out in any worktree, after deleting the others: leave those out up front.
+    const used = new Set(
+      (await git(repo, [...RO, 'for-each-ref', '--format=%(refname:strip=2)%1f%(worktreepath)', 'refs/heads']))
+        .split('\n')
+        .filter((l) => l.split('\x1f')[1])
+        .map((l) => l.split('\x1f')[0])
+    )
+    const gone = (await getBranches(repo)).filter((b) => !b.remote && b.gone && wanted.has(b.name) && !used.has(b.name)).map((b) => b.name)
+    if (!gone.length) throw new Error('No branch to clean up: refresh the list')
+    await tracked(repo, `Delete ${gone.length} gone branch${gone.length === 1 ? '' : 'es'}`, 'keep', () => git(repo, ['branch', '-D', '--', ...gone]))
+    return gone
+  })
+}
+
 // A message makes an annotated tag.
 export async function createTag(repo: string, name: string, rev: string, message: string): Promise<void> {
   const invalid = new Error(`Invalid tag name: ${name}`)

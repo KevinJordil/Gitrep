@@ -82,6 +82,7 @@ export interface Api {
   checkoutCommit(repo: string, sha: string): Promise<void>
   createBranch(repo: string, name: string, at: string, checkout: boolean): Promise<void>
   deleteBranch(repo: string, name: string, force: boolean): Promise<void>
+  deleteGoneBranches(repo: string, names: string[]): Promise<string[]>
   createTag(repo: string, name: string, at: string, message: string): Promise<void>
   cherryPick(repo: string, sha: string): Promise<OpOutcome>
   revert(repo: string, sha: string): Promise<OpOutcome>
@@ -171,6 +172,7 @@ export const API_METHODS = [
   'checkoutCommit',
   'createBranch',
   'deleteBranch',
+  'deleteGoneBranches',
   'createTag',
   'cherryPick',
   'revert',

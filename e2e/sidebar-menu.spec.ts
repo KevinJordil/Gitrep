@@ -74,3 +74,16 @@ test('double-click a branch pill in the graph switches to that branch', async ()
   await v.locator('.row .ref.local', { hasText: /^feature\/y$/ }).dblclick()
   await expect(branchRow('feature/y')).toHaveClass(/current/)
 })
+
+test('Clean up deletes the local branches whose remote branch was deleted', async () => {
+  fx.git(fx.alpha, 'branch', 'old', 'main')
+  fx.git(fx.alpha, 'push', '-q', '-u', 'origin', 'old')
+  fx.git(fx.alpha, 'push', '-q', 'origin', '--delete', 'old') // the upstream is now gone
+  await expect(v.getByRole('button', { name: 'Clean up 1' })).toBeVisible()
+  await page.screenshot({ path: 'e2e-artifacts/sidebar-clean-up.png' })
+  await v.getByRole('button', { name: 'Clean up 1' }).click()
+  await page.screenshot({ path: 'e2e-artifacts/sidebar-clean-up-dialog.png' })
+  await page.getByRole('button', { name: 'Delete branches' }).click()
+  await expect(branchRow('old')).toHaveCount(0)
+  await expect(v.getByRole('button', { name: /^Clean up/ })).toHaveCount(0)
+})

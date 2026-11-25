@@ -169,7 +169,8 @@ export function parseBranches(out: string): Branch[] {
       if (remote && name.endsWith('/HEAD')) return []
       const ahead = /ahead (\d+)/.exec(track ?? '')?.[1]
       const behind = /behind (\d+)/.exec(track ?? '')?.[1]
-      return [{ name, remote, current: head === '*', upstream: upstream || null, ahead: ahead ? Number(ahead) : 0, behind: behind ? Number(behind) : 0, sha, date: Number(date) }]
+      const gone = track === '[gone]' ? { gone: true as const } : {}
+      return [{ name, remote, current: head === '*', upstream: upstream || null, ahead: ahead ? Number(ahead) : 0, behind: behind ? Number(behind) : 0, sha, date: Number(date), ...gone }]
     })
 }
 

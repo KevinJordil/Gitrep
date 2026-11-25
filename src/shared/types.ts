@@ -49,6 +49,7 @@ export interface Branch {
   behind: number
   sha: string // tip commit
   date: number // committer date of the tip, unix seconds
+  gone?: true // local branch whose upstream was deleted on the remote (seen after a fetch --prune)
 }
 
 // Most commits the graph loads (`git log -n`).

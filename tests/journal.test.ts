@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { git } from '../src/main/git'
 import { undoState } from '../src/main/journal'
-import { abortOperation, checkoutCommit, cherryPick, continueOperation, createBranch, createTag, deleteBranch, integrate, resetTo, switchBranch } from '../src/main/ops'
+import { abortOperation, checkoutCommit, cherryPick, continueOperation, createBranch, createTag, deleteBranch, integrate, deleteGoneBranches, resetTo, switchBranch } from '../src/main/ops'
 import { applyLines, commit, discard, getDiff, getStatus, pull, stage } from '../src/main/repo'
 import { getStashes, stashApply, stashDrop, stashPush } from '../src/main/stash'
 import { redo, undo } from '../src/main/undo'
@@ -190,6 +190,26 @@ describe('undo of checkouts, branches and tags', () => {
     expect((await git(repo, ['branch', '--list', 'feature'])).trim()).toBe('')
     await redo(repo)
     expect((await git(repo, ['rev-parse', '--abbrev-ref', 'feature@{upstream}'])).trim()).toBe('origin/feature')
+  })
+
+  it('cleans up the branches deleted on the remote, never the checked-out one, and undo restores them', async () => {
+    const origin = await setup()
+    for (const b of ['done', 'kept', 'elsewhere']) await git(origin, ['branch', b, 'feature'])
+    const repo = await tempDir()
+    await git(repo, ['clone', '-q', origin, '.'])
+    for (const b of ['feature', 'done', 'kept', 'elsewhere']) await git(repo, ['branch', '-q', '--track', b, `origin/${b}`])
+    await git(repo, ['switch', '-q', 'done'])
+    await git(repo, ['worktree', 'add', '-q', join(await tempDir(), 'wt'), 'elsewhere']) // checked out in another worktree
+    await git(origin, ['branch', '-D', 'feature', 'done', 'elsewhere'])
+    await git(repo, ['fetch', '-q', '--prune'])
+    const sha = await rev(repo, 'feature')
+    expect(await deleteGoneBranches(repo, ['feature', 'done', 'kept', 'elsewhere'])).toEqual(['feature'])
+    expect((await git(repo, ['branch', '--list', 'feature'])).trim()).toBe('')
+    expect(await rev(repo, 'kept')).toBe(sha)
+    await expect(deleteGoneBranches(repo, ['feature'])).rejects.toThrow('No branch to clean up')
+    expect(undoState(repo).undo).toBe('Delete 1 gone branch')
+    await undo(repo)
+    expect(await rev(repo, 'feature')).toBe(sha)
   })
 
   it('deletes a branch only when merged unless forced, and undo restores it with its upstream', async () => {

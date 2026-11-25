@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { isActive, toggleHide, toggleOnly } from '../../shared/branches'
 import type { Branch, GraphScope, Stash, Tag } from '../../shared/types'
 import { dragBranch, dropOnBranch, type DropBranch } from './dnd'
@@ -19,20 +19,22 @@ interface Props {
   onScope: (s: GraphScope) => void
   onDrop: DropBranch
   onDelete: (b: Branch) => void
+  onCleanUp: (gone: Branch[]) => void // local branches deleted on the remote, the checked-out one excepted
   requests?: Record<string, string> // the open merge / pull request of a branch: "!12", "#45"
   onMenu: (b: Branch, x: number, y: number) => void
 }
 
-function Title({ title, count }: { title: string; count: number }) {
+function Title({ title, count, action }: { title: string; count: number; action?: ReactNode }) {
   return (
     <div className="side-title">
       <span>{title}</span>
+      {action}
       <span className="mono">{count}</span>
     </div>
   )
 }
 
-export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeDays, onSwitch, onFocus, onScope, onDrop, onDelete, onMenu, requests = {} }: Props) {
+export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeDays, onSwitch, onFocus, onScope, onDrop, onDelete, onCleanUp, onMenu, requests = {} }: Props) {
   const [unfolded, setUnfolded] = useState<string[]>([]) // titles of the sections showing their older branches
   const dot = (sha: string, fallback: string) => {
     const c = colors.get(sha)
@@ -43,6 +45,12 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeD
     ['Local branches', branches.filter((b) => !b.remote)],
     ['Remote', branches.filter((b) => b.remote)]
   ]
+  const gone = branches.filter((b) => b.gone && !b.current)
+  const cleanUp = gone.length > 0 && (
+    <button className="side-clean" title="Delete the local branches whose remote branch was deleted" onClick={() => onCleanUp(gone)}>
+      Clean up {gone.length}
+    </button>
+  )
   const isRecent = isActive(branches, activeDays)
   const active = (b: Branch) => isRecent(b) || scope.only === b.name // an isolated branch is never folded
   const branchItem = (b: Branch) => {
@@ -74,7 +82,13 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeD
           {b.name}
         </button>
         {requests[b.name] && <span className="mrtag">{requests[b.name]}</span>}
-        <span className="faint">{[b.ahead ? `↑${b.ahead}` : '', b.behind ? `↓${b.behind}` : ''].join(' ').trim()}</span>
+        {b.gone ? (
+          <span className="faint" title={`${b.upstream} was deleted on the remote`}>
+            gone
+          </span>
+        ) : (
+          <span className="faint">{[b.ahead ? `↑${b.ahead}` : '', b.behind ? `↓${b.behind}` : ''].join(' ').trim()}</span>
+        )}
         {/* Over the end of the row, not beside the name: shown on hover and keyboard focus, or while a toggle is on. */}
         <span className="side-actions">
           <button
@@ -112,7 +126,7 @@ export function Sidebar({ branches, tags, stashes, colors, focus, scope, activeD
         const open = unfolded.includes(title)
         return (
           <section key={title}>
-            <Title title={title} count={list.length} />
+            <Title title={title} count={list.length} action={title === 'Local branches' ? cleanUp : undefined} />
             {list.filter(active).map(branchItem)}
             {older.length > 0 && (
               <button className="side-more" aria-expanded={open} onClick={() => setUnfolded(open ? unfolded.filter((t) => t !== title) : [...unfolded, title])}>

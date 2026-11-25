@@ -210,6 +210,7 @@ const handlers: Omit<Api, 'onRepoChanged' | 'onCloseRequested'> = {
   checkoutCommit: forRepo(ops.checkoutCommit),
   createBranch: forRepo((p, name: string, at: string, checkout: boolean) => ops.createBranch(p, name, at, !!checkout)),
   deleteBranch: forRepo((p, name: string, force: boolean) => ops.deleteBranch(p, name, !!force)),
+  deleteGoneBranches: forRepo(ops.deleteGoneBranches),
   createTag: forRepo(ops.createTag),
   cherryPick: forRepo(ops.cherryPick),
   revert: forRepo(ops.revert),

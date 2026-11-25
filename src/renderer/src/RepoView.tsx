@@ -551,6 +551,24 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
       }
       notify('info', `Branch ${b.name} deleted`)
     })
+  const cleanUp = (gone: Branch[]) => {
+    const names = gone.map((b) => b.name)
+    const left = branches.find((b) => b.current && b.gone)
+    setDialog(
+      <ConfirmDialog
+        title={`Delete ${names.length} branch${names.length === 1 ? '' : 'es'} gone from the remote?`}
+        body={`${names.join('\n')}\n\nTheir remote branch was deleted, usually once merged. Commits only on them go too. Undo (Ctrl+Z) restores them while GitRep is open.${left ? `\n\n${left.name} is checked out: switch to another branch to clean it up.` : ''}`}
+        submit="Delete branches"
+        onSubmit={() =>
+          void run('delete', async () => {
+            const deleted = await api.deleteGoneBranches(path, names)
+            notify('info', `Deleted ${deleted.length} branch${deleted.length === 1 ? '' : 'es'}`)
+          })
+        }
+        onClose={closeDialog}
+      />
+    )
+  }
   // After a rewrite (interactive rebase, amend) git rejects the push as non-fast-forward: ask, then push with a lease.
   const push = () =>
     void run('push', async () => {
@@ -628,6 +646,7 @@ export function RepoView({ path, active, settings, entry, onSettings, onRepoSett
           onScope={setScope}
           onDrop={openDrop}
           onDelete={deleteBranch}
+          onCleanUp={cleanUp}
           requests={requests}
           onMenu={openBranchMenu}
           onSwitch={switchTo}

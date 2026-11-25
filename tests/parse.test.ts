@@ -78,6 +78,11 @@ describe('parseBranches', () => {
       { name: 'origin/main', remote: true, current: false, upstream: null, ahead: 0, behind: 0, sha: 'm1', date: 1700000200 }
     ])
   })
+
+  it('flags a local branch whose upstream is gone', () => {
+    const out = ['refs/heads/old', ' ', 'origin/old', '[gone]', 'o1', '1700000300'].join('\x1f')
+    expect(parseBranches(out)).toEqual([{ name: 'old', remote: false, current: false, upstream: 'origin/old', ahead: 0, behind: 0, sha: 'o1', date: 1700000300, gone: true }])
+  })
 })
 
 describe('parseTags', () => {
